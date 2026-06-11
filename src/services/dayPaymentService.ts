@@ -1,4 +1,5 @@
 import { PaymentRecord, PaymentTransaction, DayPayment, PaymentStatus } from '../types/dayPayment';
+import { Payment } from '../types/payment';
 import {
   collection,
   doc,
@@ -15,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
 import { tuteeService } from './tuteeService';
+import { paymentService } from './paymentService';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
 
 class DayPaymentService {
@@ -138,6 +140,8 @@ class DayPaymentService {
         createdAt: Timestamp.fromDate(new Date()),
         lastUpdated: Timestamp.fromDate(new Date()),
       });
+
+      await this.syncTuteeTotals(tuteeId);
 
       return {
         id: recordId,
@@ -333,7 +337,19 @@ class DayPaymentService {
         lastUpdated: Timestamp.fromDate(new Date()),
       });
 
-      // Create transaction record
+      // Create transaction record in the central 'payments' collection
+      await paymentService.create({
+        tuteeId,
+        tuteeName: `${tutee.firstName} ${tutee.surname}`,
+        amount,
+        sessionsCovered: 0, // monthly record itself acts as 1 session
+        paymentMethod: paymentMethod as any,
+        paymentDate: new Date().toISOString().split('T')[0],
+        notes: notes || `Payment for ${month}`,
+        month,
+      } as any);
+
+      // Create transaction record in the subcollection for backward compatibility
       const transaction: Omit<PaymentTransaction, 'id'> = {
         tuteeId,
         tuteeName: `${tutee.firstName} ${tutee.surname}`,
@@ -350,6 +366,9 @@ class DayPaymentService {
         ...transaction,
         createdAt: Timestamp.fromDate(new Date()),
       });
+
+      // Sync overall totals
+      await this.syncTuteeTotals(tuteeId, userId);
 
       const updatedRecord: PaymentRecord = {
         ...record,
@@ -423,6 +442,167 @@ class DayPaymentService {
       } as PaymentRecord));
     } catch (error) {
       console.error('Error getting records:', error);
+      throw error;
+    }
+  }
+
+  async syncTuteeTotals(tuteeId: string, tutorId?: string): Promise<void> {
+    try {
+      const userId = tutorId || this.getUserId();
+      const records = await this.getRecordsByTutee(tuteeId, userId);
+      const tutee = await tuteeService.getById(tuteeId, userId);
+      if (!tutee) return;
+
+      const totalSessions = records.length;
+
+      // Fetch all payments for this tutee
+      const payments = await paymentService.getByTuteeId(tuteeId, userId);
+      const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+      const totalDue = totalSessions * tutee.ratePerSession;
+      const balance = totalDue - totalPaid;
+
+      // Find latest payment date
+      let lastPaymentDate = null;
+      if (payments.length > 0) {
+        const sorted = [...payments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
+        lastPaymentDate = sorted[0].paymentDate;
+      }
+
+      await tuteeService.update(tuteeId, {
+        totalSessions,
+        totalPaid,
+        balance,
+        lastPaymentDate,
+      });
+    } catch (error) {
+      console.error('Error syncing tutee totals:', error);
+    }
+  }
+
+  async toggleMonthPaymentStatus(tuteeId: string, month: string): Promise<PaymentRecord> {
+    try {
+      const record = await this.getMonthlyRecord(tuteeId, month);
+      const tutee = await tuteeService.getById(tuteeId);
+      if (!tutee) {
+        throw new Error('Tutee not found');
+      }
+
+      const isCurrentlyPaid = record.totalPaid > 0 && record.totalBalance <= 0;
+      const userId = this.getUserId();
+      const recordId = `${tuteeId}_${month}`;
+      const docRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+
+      if (!isCurrentlyPaid) {
+        // Mark as Fully Paid
+        const remainingBalance = record.totalBalance;
+        if (remainingBalance > 0) {
+          // Create a payment transaction in central 'payments' collection
+          await paymentService.create({
+            tuteeId,
+            tuteeName: `${tutee.firstName} ${tutee.surname}`,
+            amount: remainingBalance,
+            sessionsCovered: 0, // monthly record itself acts as 1 session
+            paymentMethod: 'Cash',
+            paymentDate: new Date().toISOString().split('T')[0],
+            notes: `Marked as Paid via monthly checkbox for ${month}`,
+            month, // link to this month
+          } as any);
+        }
+
+        // Update monthly record to show fully paid
+        await updateDoc(docRef, {
+          totalPaid: record.totalDue,
+          totalBalance: 0,
+          lastUpdated: Timestamp.fromDate(new Date()),
+        });
+      } else {
+        // Mark as Unpaid
+        // Fetch and delete matching payments from central 'payments' collection
+        const payments = await paymentService.getByTuteeId(tuteeId, userId);
+        const paymentsToDelete = payments.filter((p: any) => p.month === month);
+        for (const p of paymentsToDelete) {
+          await paymentService.delete(p.id);
+        }
+
+        // Reset the monthly record to unpaid
+        await updateDoc(docRef, {
+          totalPaid: 0,
+          totalBalance: record.totalDue,
+          lastUpdated: Timestamp.fromDate(new Date()),
+        });
+      }
+
+      // Sync the overall totals
+      await this.syncTuteeTotals(tuteeId, userId);
+
+      // Retrieve updated record to return
+      const updatedSnap = await getDoc(docRef);
+      return {
+        id: recordId,
+        ...updatedSnap.data(),
+        lastUpdated: new Date().toISOString(),
+      } as PaymentRecord;
+    } catch (error) {
+      console.error('Error toggling month payment status:', error);
+      throw error;
+    }
+  }
+
+  async verifyPendingPayment(payment: Payment): Promise<void> {
+    try {
+      const userId = this.getUserId();
+      const recordId = `${payment.tuteeId}_${payment.month}`;
+      const recordDocRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+      const recordSnap = await getDoc(recordDocRef);
+
+      if (recordSnap.exists()) {
+        const recordData = recordSnap.data();
+        const totalPaid = (recordData.totalPaid || 0) + payment.amount;
+        const totalBalance = (recordData.totalDue || 0) - totalPaid;
+
+        await updateDoc(recordDocRef, {
+          totalPaid,
+          totalBalance,
+          lastUpdated: Timestamp.fromDate(new Date()),
+        });
+      }
+
+      // Update payment status to verified in payments collection
+      const paymentDocRef = doc(db, 'users', userId, 'payments', payment.id);
+      await updateDoc(paymentDocRef, {
+        status: 'verified',
+        updatedAt: Timestamp.fromDate(new Date()),
+      });
+
+      // Sync overall student totals
+      await this.syncTuteeTotals(payment.tuteeId, userId);
+    } catch (error) {
+      console.error('Error verifying pending payment:', error);
+      throw error;
+    }
+  }
+
+  async rejectPendingPayment(paymentId: string, rejectionReason?: string): Promise<void> {
+    try {
+      const userId = this.getUserId();
+      const paymentDocRef = doc(db, 'users', userId, 'payments', paymentId);
+      const paymentSnap = await getDoc(paymentDocRef);
+      
+      let newNotes = rejectionReason ? `Rejected: ${rejectionReason}` : 'Rejected by tutor';
+      if (paymentSnap.exists()) {
+        const currentNotes = paymentSnap.data().notes || '';
+        if (currentNotes) {
+          newNotes = `${currentNotes} | Rejected: ${rejectionReason || 'No reason specified'}`;
+        }
+      }
+
+      await updateDoc(paymentDocRef, {
+        status: 'rejected',
+        notes: newNotes,
+        updatedAt: Timestamp.fromDate(new Date()),
+      });
+    } catch (error) {
+      console.error('Error rejecting pending payment:', error);
       throw error;
     }
   }

@@ -10,7 +10,8 @@ import {
   query,
   where,
   orderBy,
-  Timestamp
+  Timestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
 import { tuteeService } from './tuteeService';
@@ -90,9 +91,65 @@ class PaymentService {
     }
   }
 
-  async create(payment: Omit<Payment, 'id' | 'createdAt'>): Promise<Payment> {
+  subscribeAll(callback: (payments: Payment[]) => void, tutorId?: string): () => void {
     try {
-      const collectionRef = this.getCollectionRef();
+      const userId = tutorId || this.getUserId();
+      if (!userId) {
+        return () => {};
+      }
+      const collectionRef = collection(db, 'users', userId, 'payments');
+      const q = query(collectionRef, orderBy('paymentDate', 'desc'));
+
+      return onSnapshot(q, (querySnapshot) => {
+        const list = querySnapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+          paymentDate: docSnap.data().paymentDate,
+          createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        } as Payment));
+        callback(list);
+      }, (error) => {
+        console.error('Error in payments subscription:', error);
+      });
+    } catch (error) {
+      console.error('Error setting up payments subscription:', error);
+      return () => {};
+    }
+  }
+
+  subscribeByTuteeId(tuteeId: string, callback: (payments: Payment[]) => void, tutorId?: string): () => void {
+    try {
+      const userId = tutorId || this.getUserId();
+      if (!userId) {
+        return () => {};
+      }
+      const collectionRef = collection(db, 'users', userId, 'payments');
+      const q = query(
+        collectionRef, 
+        where('tuteeId', '==', tuteeId),
+        orderBy('paymentDate', 'desc')
+      );
+
+      return onSnapshot(q, (querySnapshot) => {
+        const list = querySnapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+          paymentDate: docSnap.data().paymentDate,
+          createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        } as Payment));
+        callback(list);
+      }, (error) => {
+        console.error('Error in payments subscription by tutee:', error);
+      });
+    } catch (error) {
+      console.error('Error setting up payments subscription by tutee:', error);
+      return () => {};
+    }
+  }
+
+  async create(payment: Omit<Payment, 'id' | 'createdAt'>, tutorId?: string): Promise<Payment> {
+    try {
+      const collectionRef = this.getCollectionRef(tutorId);
       const now = new Date();
 
       // Strip undefined values — Firestore rejects them
@@ -107,20 +164,22 @@ class PaymentService {
 
       const docRef = await addDoc(collectionRef, paymentData);
       
-      // Update tutee totals
-      const tutee = await tuteeService.getById(payment.tuteeId);
-      if (tutee) {
-        const newTotalPaid = tutee.totalPaid + payment.amount;
-        const newTotalSessions = tutee.totalSessions + payment.sessionsCovered;
-        const totalDue = newTotalSessions * tutee.ratePerSession;
-        const newBalance = totalDue - newTotalPaid;
+      // Update tutee totals only if this is not a pending payment proof submission
+      if (payment.status !== 'pending') {
+        const tutee = await tuteeService.getById(payment.tuteeId, tutorId);
+        if (tutee) {
+          const newTotalPaid = tutee.totalPaid + payment.amount;
+          const newTotalSessions = tutee.totalSessions + payment.sessionsCovered;
+          const totalDue = newTotalSessions * tutee.ratePerSession;
+          const newBalance = totalDue - newTotalPaid;
 
-        await tuteeService.update(payment.tuteeId, {
-          totalSessions: newTotalSessions,
-          totalPaid: newTotalPaid,
-          balance: newBalance,
-          lastPaymentDate: payment.paymentDate,
-        });
+          await tuteeService.update(payment.tuteeId, {
+            totalSessions: newTotalSessions,
+            totalPaid: newTotalPaid,
+            balance: newBalance,
+            lastPaymentDate: payment.paymentDate,
+          }, tutorId);
+        }
       }
       
       return {

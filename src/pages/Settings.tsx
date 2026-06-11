@@ -1,19 +1,77 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useSubjects } from '../hooks/useSubjects';
-import { User, Bell, Database, Info, BookOpen, Plus, Trash2 } from 'lucide-react';
+import { User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { ImageUpload } from '../components/ui/ImageUpload';
 
 export const Settings = () => {
-  const { user } = useAuth();
+  const { user, updateProfilePhoto, updatePaymentMethods } = useAuth();
   const { subjects, addSubject, deleteSubject, isLoading: subjectsLoading } = useSubjects();
   const [notifications, setNotifications] = useState(true);
   const [emailReminders, setEmailReminders] = useState(true);
   const [isClearing, setIsClearing] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [isAddingSubject, setIsAddingSubject] = useState(false);
+
+  // Payment methods local states
+  const [isSavingPayments, setIsSavingPayments] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState({
+    gcash: { enabled: false, accountName: '', accountNumber: '', qrUrl: '' },
+    maya: { enabled: false, accountName: '', accountNumber: '', qrUrl: '' },
+    bank: { enabled: false, accountName: '', accountNumber: '', bankName: '', qrUrl: '' },
+    other: { enabled: false, accountName: '', accountNumber: '', bankName: '', instructions: '', qrUrl: '' },
+  });
+
+  // Sync state with user data
+  useEffect(() => {
+    if (user?.paymentMethods) {
+      setPaymentMethods({
+        gcash: {
+          enabled: user.paymentMethods.gcash?.enabled ?? false,
+          accountName: user.paymentMethods.gcash?.accountName ?? '',
+          accountNumber: user.paymentMethods.gcash?.accountNumber ?? '',
+          qrUrl: user.paymentMethods.gcash?.qrUrl ?? '',
+        },
+        maya: {
+          enabled: user.paymentMethods.maya?.enabled ?? false,
+          accountName: user.paymentMethods.maya?.accountName ?? '',
+          accountNumber: user.paymentMethods.maya?.accountNumber ?? '',
+          qrUrl: user.paymentMethods.maya?.qrUrl ?? '',
+        },
+        bank: {
+          enabled: user.paymentMethods.bank?.enabled ?? false,
+          accountName: user.paymentMethods.bank?.accountName ?? '',
+          accountNumber: user.paymentMethods.bank?.accountNumber ?? '',
+          bankName: user.paymentMethods.bank?.bankName ?? '',
+          qrUrl: user.paymentMethods.bank?.qrUrl ?? '',
+        },
+        other: {
+          enabled: user.paymentMethods.other?.enabled ?? false,
+          accountName: user.paymentMethods.other?.accountName ?? '',
+          accountNumber: user.paymentMethods.other?.accountNumber ?? '',
+          bankName: user.paymentMethods.other?.bankName ?? '',
+          instructions: user.paymentMethods.other?.instructions ?? '',
+          qrUrl: user.paymentMethods.other?.qrUrl ?? '',
+        },
+      });
+    }
+  }, [user]);
+
+  const handleSavePaymentSettings = async () => {
+    setIsSavingPayments(true);
+    try {
+      await updatePaymentMethods(paymentMethods);
+      toast.success('Payment settings saved successfully');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to save payment settings');
+    } finally {
+      setIsSavingPayments(false);
+    }
+  };
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,11 +160,38 @@ export const Settings = () => {
         <p className="text-gray-600 mt-1">Manage your account and preferences</p>
       </div>
 
-      <div className="bg-white rounded-lg border p-6">
+      <div className="bg-white rounded-2xl border p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
           <User size={24} className="text-gray-600" />
           <h2 className="text-xl font-semibold">Account Information</h2>
         </div>
+
+        {/* Profile Photo Upload */}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-6 pb-6 border-b border-gray-100">
+          <ImageUpload
+            currentUrl={user?.photoUrl}
+            onUpload={async (url) => {
+              try {
+                await updateProfilePhoto(url);
+              } catch {
+                toast.error('Failed to save profile photo');
+              }
+            }}
+            folder="tuteepay/profiles"
+            shape="circle"
+            size="lg"
+            label="Change Photo"
+          />
+          <div className="flex-1 text-center sm:text-left">
+            <p className="font-bold text-gray-900 text-lg">{user?.name}</p>
+            <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1 justify-center sm:justify-start">
+              <Camera size={13} className="text-gray-400" />
+              Click the photo to upload a new profile picture
+            </p>
+            <p className="text-xs text-gray-400 mt-1">Accepted: JPG, PNG, WEBP — max 5 MB</p>
+          </div>
+        </div>
+
         <div className="space-y-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">Name</label>
@@ -183,6 +268,147 @@ export const Settings = () => {
           </div>
         </div>
       </div>
+
+      {user?.role === 'tutor' && (
+        <div className="bg-white rounded-lg border p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <CreditCard size={24} className="text-gray-600" />
+            <div>
+              <h2 className="text-xl font-semibold">Payment Settings</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Configure GCash, Maya, or Bank Transfer payment details for parents</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {(['gcash', 'maya', 'bank', 'other'] as const).map((method) => {
+              const config = paymentMethods[method];
+              const label = method === 'gcash' ? 'GCash' :
+                            method === 'maya' ? 'Maya' :
+                            method === 'bank' ? 'Bank Transfer' : 'Other Payment Method';
+              
+              return (
+                <div key={method} className="p-4 border rounded-xl bg-gray-50/50 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Smartphone size={20} className="text-gray-600" />
+                      <span className="font-bold text-gray-900">{label}</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={config.enabled}
+                        onChange={(e) => setPaymentMethods(prev => ({
+                          ...prev,
+                          [method]: { ...prev[method], enabled: e.target.checked }
+                        }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-700"></div>
+                    </label>
+                  </div>
+
+                  {config.enabled && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                      <div className="md:col-span-2 space-y-3">
+                        {(method === 'bank' || method === 'other') && (
+                          <div>
+                            <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+                              Bank / Provider Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={(config as any).bankName || ''}
+                              onChange={(e) => setPaymentMethods(prev => ({
+                                ...prev,
+                                [method]: { ...prev[method], bankName: e.target.value }
+                              }))}
+                              placeholder={method === 'bank' ? "e.g., BDO, BPI, Metrobank" : "e.g., PayPal, GrabPay"}
+                              className="w-full px-4 py-2 border border-gray-200 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-semibold"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+                            Account Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={config.accountName}
+                            onChange={(e) => setPaymentMethods(prev => ({
+                              ...prev,
+                              [method]: { ...prev[method], accountName: e.target.value }
+                            }))}
+                            placeholder="e.g., Juan Dela Cruz"
+                            className="w-full px-4 py-2 border border-gray-200 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-semibold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+                            Account Number *
+                          </label>
+                          <input
+                            type="text"
+                            value={config.accountNumber}
+                            onChange={(e) => setPaymentMethods(prev => ({
+                              ...prev,
+                              [method]: { ...prev[method], accountNumber: e.target.value }
+                            }))}
+                            placeholder={method === 'bank' ? "e.g., 1234-5678-9012" : "e.g., 0917-123-4567"}
+                            className="w-full px-4 py-2 border border-gray-200 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-semibold"
+                          />
+                        </div>
+                        {method === 'other' && (
+                          <div>
+                            <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+                              Custom Instructions / Notes (Optional)
+                            </label>
+                            <textarea
+                              value={(config as any).instructions || ''}
+                              onChange={(e) => setPaymentMethods(prev => ({
+                                ...prev,
+                                [method]: { ...prev[method], instructions: e.target.value }
+                              }))}
+                              placeholder="Add any extra details or steps for this payment method..."
+                              rows={2}
+                              className="w-full px-4 py-2 border border-gray-200 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-semibold"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="md:col-span-1 flex flex-col items-center">
+                        <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-2 text-center w-full">
+                          QR Code Image
+                        </label>
+                        <ImageUpload
+                          currentUrl={config.qrUrl}
+                          onUpload={(url) => setPaymentMethods(prev => ({
+                            ...prev,
+                            [method]: { ...prev[method], qrUrl: url }
+                          }))}
+                          folder={`tuteepay/qrs/${user?.id}`}
+                          shape="square"
+                          size="md"
+                          label="Upload QR Code"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="flex justify-end pt-4 border-t">
+              <button
+                onClick={handleSavePaymentSettings}
+                disabled={isSavingPayments}
+                className="bg-green-700 text-white px-6 py-2.5 rounded-xl hover:bg-green-800 disabled:bg-gray-400 font-bold transition-all text-sm shadow-sm"
+              >
+                {isSavingPayments ? 'Saving...' : 'Save Payment Settings'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg border p-6">
         <div className="flex items-center gap-3 mb-6">

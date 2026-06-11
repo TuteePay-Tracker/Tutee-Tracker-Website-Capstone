@@ -61,9 +61,25 @@ const ParentDashboard = () => {
                   <p className="text-2xl font-bold text-green-700">₱{tutee.totalPaid.toFixed(0)}</p>
                   <p className="text-xs text-gray-500 mt-1">Total Paid</p>
                 </div>
-                <div className={`rounded-xl p-3 text-center ${tutee.balance > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
-                  <p className={`text-2xl font-bold ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                    {tutee.balance > 0 ? `₱${tutee.balance.toFixed(0)}` : 'Paid'}
+                <div className={`rounded-xl p-3 text-center ${
+                  tutee.totalPaid > 0 && tutee.balance <= 0
+                    ? 'bg-green-50'
+                    : tutee.totalPaid > 0 && tutee.balance > 0
+                    ? 'bg-orange-50'
+                    : 'bg-gray-50'
+                }`}>
+                  <p className={`text-2xl font-bold ${
+                    tutee.totalPaid > 0 && tutee.balance <= 0
+                      ? 'text-green-600'
+                      : tutee.totalPaid > 0 && tutee.balance > 0
+                      ? 'text-orange-600'
+                      : 'text-gray-400'
+                  }`}>
+                    {tutee.totalPaid > 0 && tutee.balance <= 0
+                      ? 'Paid'
+                      : tutee.totalPaid > 0 && tutee.balance > 0
+                      ? `₱${tutee.balance.toFixed(0)}`
+                      : 'Unpaid'}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">Balance</p>
                 </div>

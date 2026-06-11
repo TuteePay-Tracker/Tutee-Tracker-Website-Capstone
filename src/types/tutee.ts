@@ -18,6 +18,7 @@ export interface Tutee {
   guardianEmail?: string;
   address?: string;
   parentId?: string;
+  photoUrl?: string;
   totalSessions: number;
   totalPaid: number;
   balance: number;
@@ -39,6 +40,7 @@ export interface TuteeFormData {
   guardianEmail?: string;
   address?: string;
   parentId?: string;
+  photoUrl?: string;
 }
 
 export const GRADE_LEVELS = [

@@ -225,9 +225,17 @@ export const MainLayout = () => {
         {/* User Card & Logout at bottom */}
         <div className="p-4 border-t border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm shadow-inner uppercase">
-              {user?.name?.slice(0, 2)}
-            </div>
+            {user?.photoUrl ? (
+              <img
+                src={user.photoUrl}
+                alt={user.name}
+                className="w-10 h-10 rounded-full object-cover shadow-inner border border-gray-200"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm shadow-inner uppercase">
+                {user?.name?.slice(0, 2)}
+              </div>
+            )}
             <div className="overflow-hidden flex-1">
               <p className="text-xs font-semibold text-gray-900 truncate">{user?.name}</p>
               <p className="text-[10px] text-gray-500 truncate">
@@ -421,9 +429,17 @@ export const MainLayout = () => {
         {/* Mobile footer area */}
         <div className="p-4 border-t border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs shadow-inner">
-              {user?.name?.slice(0, 2).toUpperCase()}
-            </div>
+            {user?.photoUrl ? (
+              <img
+                src={user.photoUrl}
+                alt={user.name}
+                className="w-9 h-9 rounded-full object-cover shadow-inner border border-gray-200"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs shadow-inner">
+                {user?.name?.slice(0, 2).toUpperCase()}
+              </div>
+            )}
             <div className="overflow-hidden flex-1">
               <p className="text-xs font-semibold text-gray-900 truncate">{user?.name}</p>
             </div>

@@ -5,10 +5,12 @@ import { usePayments } from '../hooks/usePayments';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate } from '../utils/formatDate';
-import { 
-  ArrowLeft, Mail, Phone, Calendar, DollarSign, BookOpen, Users, 
-  X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock 
+import {
+  ArrowLeft, Mail, Phone, Calendar, DollarSign, BookOpen, Users,
+  X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
+  Download, Upload, Smartphone
 } from 'lucide-react';
+import { ImageUpload } from '../components/ui/ImageUpload';
 import { PaymentHistory } from '../components/payments/PaymentHistory';
 import { ScheduleItem } from '../types/tutee';
 import { PaymentRecord } from '../types/dayPayment';
@@ -21,10 +23,10 @@ import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 
 export const TuteeDetails = () => {
-  const { id } = useParams<{ id: string }>(); 
+  const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { getTuteeById, tutees, isLoading: loadingTutees } = useTutees();
-  const { getPaymentsByTuteeId, deletePayment, loadPaymentsForTutee, isLoading: loadingPayments } = usePayments();
+  const { getPaymentsByTuteeId, deletePayment, loadPaymentsForTutee, addPayment, isLoading: loadingPayments } = usePayments();
 
   const tutee = id ? getTuteeById(id) : undefined;
   const payments = id ? getPaymentsByTuteeId(id) : [];
@@ -33,6 +35,32 @@ export const TuteeDetails = () => {
   const [showParentModal, setShowParentModal] = useState(false);
   const [parentData, setParentData] = useState<any>(null);
   const [loadingParent, setLoadingParent] = useState(false);
+
+  // Parent payment states
+  const [tutorPaymentMethods, setTutorPaymentMethods] = useState<any>(null);
+  const [loadingTutorPayment, setLoadingTutorPayment] = useState(false);
+  const [payingRecord, setPayingRecord] = useState<PaymentRecord | null>(null);
+
+  // Load tutor payment settings if parent role
+  useEffect(() => {
+    const loadTutorDetails = async () => {
+      if (user?.role === 'parent' && user.createdByTutorId) {
+        setLoadingTutorPayment(true);
+        try {
+          const tutorDoc = await getDoc(doc(db, 'users', user.createdByTutorId));
+          if (tutorDoc.exists()) {
+            setTutorPaymentMethods(tutorDoc.data().paymentMethods || {});
+          }
+        } catch (error) {
+          console.error('Error fetching tutor payment details:', error);
+        } finally {
+          setLoadingTutorPayment(false);
+        }
+      }
+    };
+
+    loadTutorDetails();
+  }, [user]);
 
   // Attendance states
   const [attendanceRecords, setAttendanceRecords] = useState<PaymentRecord[]>([]);
@@ -56,13 +84,14 @@ export const TuteeDetails = () => {
   // Load progress reports, payments, and attendance when tutee changes
   useEffect(() => {
     let unsubscribeAttendance: (() => void) | undefined;
+    let unsubscribePayments: (() => void) | undefined;
 
     if (tutee) {
       loadProgressReports();
       // For parent users, load payments and subscribe to attendance scoped to this tutee
       if (user?.role === 'parent') {
         if (user.createdByTutorId) {
-          loadPaymentsForTutee(tutee.id, user.createdByTutorId);
+          unsubscribePayments = loadPaymentsForTutee(tutee.id, user.createdByTutorId);
         }
         unsubscribeAttendance = loadAttendance();
       }
@@ -74,6 +103,7 @@ export const TuteeDetails = () => {
 
     return () => {
       unsubscribeAttendance?.();
+      unsubscribePayments?.();
     };
   }, [tutee]);
 
@@ -237,11 +267,10 @@ export const TuteeDetails = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab.id
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
                   ? 'border-green-700 text-green-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               {tab.name}
             </button>
@@ -336,9 +365,29 @@ export const TuteeDetails = () => {
                   </div>
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="font-medium text-gray-600">Remaining Balance</span>
-                    <span className={`font-bold text-lg ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    <span className={`font-bold text-lg ${tutee.totalPaid > 0 && tutee.balance <= 0
+                        ? 'text-green-600'
+                        : tutee.totalPaid > 0 && tutee.balance > 0
+                          ? 'text-orange-600'
+                          : 'text-gray-500'
+                      }`}>
                       ₱{tutee.balance.toLocaleString()}
                     </span>
+                  </div>
+                  <div className="flex justify-end mt-2">
+                    {tutee.totalPaid > 0 && tutee.balance <= 0 ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-100 border border-green-200 px-3 py-1 rounded-full">
+                        <CheckCircle2 size={12} /> Fully Paid
+                      </span>
+                    ) : tutee.totalPaid > 0 && tutee.balance > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 bg-orange-100 border border-orange-200 px-3 py-1 rounded-full">
+                        <AlertCircle size={12} /> Partial Payment
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full">
+                        <AlertCircle size={12} /> Unpaid
+                      </span>
+                    )}
                   </div>
                   {tutee.lastPaymentDate && (
                     <div className="text-xs text-gray-500 bg-gray-50 rounded-xl p-3 border border-gray-100 mt-2">
@@ -456,28 +505,93 @@ export const TuteeDetails = () => {
 
       {/* Payments Tab */}
       {activeTab === 'payments' && (
-        <div className="bg-white rounded-2xl border p-6 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-lg font-bold text-gray-950">Payment History</h2>
-              <p className="text-gray-500 text-sm mt-0.5">Summary of tuition payments received</p>
+        <div className="space-y-6">
+          {user?.role === 'parent' && (
+            <div className="bg-white rounded-2xl border p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-gray-950 mb-4">Unpaid Balances</h2>
+              {attendanceRecords.filter(r => r.totalBalance > 0).length === 0 ? (
+                <div className="bg-green-50/50 border border-green-100 rounded-xl p-4 text-center">
+                  <p className="text-green-800 font-semibold text-sm">All invoices are settled! No unpaid balances.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {attendanceRecords.filter(r => r.totalBalance > 0).map(record => {
+                    const pendingPayment = payments.find(p => p.month === record.month && p.status === 'pending');
+                    const rejectedPayment = payments.find(p => p.month === record.month && p.status === 'rejected');
+
+                    return (
+                      <div key={record.id} className="border border-gray-200 rounded-2xl p-4 flex flex-col justify-between gap-4 bg-gray-50/50 shadow-sm">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-bold text-gray-900 text-base capitalize">
+                              {format(parseISO(record.month + '-01'), 'MMMM yyyy')}
+                            </h3>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {pendingPayment ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                  Verification Pending
+                                </span>
+                              ) : rejectedPayment ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                                  Rejected
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+                                  Unpaid Balance
+                                </span>
+                              )}
+                            </div>
+                            {rejectedPayment && (
+                              <p className="text-xs text-red-600 mt-2 italic font-semibold">
+                                Reason: {rejectedPayment.notes?.split(' | Rejected: ')[1] || rejectedPayment.notes || 'Incorrect payment details'}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-gray-400 font-medium">Balance Due</p>
+                            <p className="font-extrabold text-gray-900 text-lg">{formatCurrency(record.totalBalance)}</p>
+                          </div>
+                        </div>
+
+                        {!pendingPayment && (
+                          <button
+                            onClick={() => setPayingRecord(record)}
+                            className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2 rounded-xl text-sm transition-colors shadow-sm"
+                          >
+                            Pay Now
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            {user?.role !== 'parent' && (
-              <div className="flex gap-2">
-                <Link
-                  to={`/payments?tuteeId=${tutee.id}`}
-                  className="bg-green-700 text-white px-4 py-2 rounded-xl hover:bg-green-800 text-sm font-semibold transition-colors"
-                >
-                  Monthly Payment Tracker
-                </Link>
+          )}
+
+          <div className="bg-white rounded-2xl border p-6 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-gray-955">Payment History</h2>
+                <p className="text-gray-500 text-sm mt-0.5">Summary of tuition payments received</p>
               </div>
-            )}
+              {user?.role !== 'parent' && (
+                <div className="flex gap-2">
+                  <Link
+                    to={`/payments?tuteeId=${tutee.id}`}
+                    className="bg-green-700 text-white px-4 py-2 rounded-xl hover:bg-green-800 text-sm font-semibold transition-colors"
+                  >
+                    Monthly Payment Tracker
+                  </Link>
+                </div>
+              )}
+            </div>
+            <PaymentHistory
+              payments={payments}
+              onDelete={user?.role !== 'parent' ? deletePayment : undefined}
+              showTuteeName={false}
+            />
           </div>
-          <PaymentHistory
-            payments={payments}
-            onDelete={user?.role !== 'parent' ? deletePayment : undefined}
-            showTuteeName={false}
-          />
         </div>
       )}
 
@@ -528,20 +642,18 @@ export const TuteeDetails = () => {
                       <p className="text-gray-500 text-xs font-medium mt-0.5">Date: {formatDate(report.date)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                        report.performance === 'excellent' ? 'bg-green-50 border-green-200 text-green-800' :
-                        report.performance === 'very-good' ? 'bg-blue-50 border-blue-200 text-blue-800' :
-                        report.performance === 'good' ? 'bg-orange-50 border-orange-200 text-orange-800' :
-                        'bg-red-50 border-red-200 text-red-800'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${report.performance === 'excellent' ? 'bg-green-50 border-green-200 text-green-800' :
+                          report.performance === 'very-good' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+                            report.performance === 'good' ? 'bg-orange-50 border-orange-200 text-orange-800' :
+                              'bg-red-50 border-red-200 text-red-800'
+                        }`}>
                         Performance: {report.performance.replace('-', ' ')}
                       </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                        report.behavior === 'excellent' ? 'bg-green-50 border-green-200 text-green-800' :
-                        report.behavior === 'very-good' ? 'bg-blue-50 border-blue-200 text-blue-800' :
-                        report.behavior === 'good' ? 'bg-orange-50 border-orange-200 text-orange-800' :
-                        'bg-red-50 border-red-200 text-red-800'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${report.behavior === 'excellent' ? 'bg-green-50 border-green-200 text-green-800' :
+                          report.behavior === 'very-good' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+                            report.behavior === 'good' ? 'bg-orange-50 border-orange-200 text-orange-800' :
+                              'bg-red-50 border-red-200 text-red-800'
+                        }`}>
                         Behavior: {report.behavior.replace('-', ' ')}
                       </span>
                     </div>
@@ -580,6 +692,38 @@ export const TuteeDetails = () => {
           parent={parentData}
           linkedStudentNames={parentData.linkedStudentIds?.map(getStudentName) || []}
           onClose={() => setShowParentModal(false)}
+        />
+      )}
+
+      {payingRecord && (
+        <ParentPaymentModal
+          record={payingRecord}
+          tutorPaymentMethods={tutorPaymentMethods}
+          tutee={tutee}
+          user={user}
+          onClose={() => setPayingRecord(null)}
+          onSubmit={async (payAmount, selectedMethodLabel, refNotes, proofUrl) => {
+            try {
+              await addPayment({
+                tuteeId: tutee.id,
+                tuteeName: `${tutee.firstName} ${tutee.surname}`,
+                amount: payAmount,
+                sessionsCovered: 0,
+                paymentMethod: selectedMethodLabel,
+                paymentDate: new Date().toISOString().split('T')[0],
+                notes: refNotes,
+                month: payingRecord.month,
+                status: 'pending',
+                proofUrl: proofUrl
+              }, user?.createdByTutorId);
+
+              toast.success('Payment proof submitted successfully! The tutor will verify it.');
+              setPayingRecord(null);
+            } catch (err: any) {
+              console.error(err);
+              toast.error(err.message || 'Failed to submit payment proof');
+            }
+          }}
         />
       )}
 
@@ -772,10 +916,10 @@ const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModal
 
           {(() => {
             const isPhoneUsername = parent.email.endsWith('@tuteepay.local');
-            const displayUsername = isPhoneUsername 
-              ? parent.email.split('@')[0] 
+            const displayUsername = isPhoneUsername
+              ? parent.email.split('@')[0]
               : parent.email;
-            
+
             return (
               <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
                 <div className="flex-1">
@@ -848,6 +992,280 @@ const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModal
             Close
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+interface ParentPaymentModalProps {
+  record: PaymentRecord;
+  tutorPaymentMethods: any;
+  tutee: any;
+  user: any;
+  onClose: () => void;
+  onSubmit: (payAmount: number, methodLabel: string, notes: string, proofUrl: string) => Promise<void>;
+}
+
+const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose, onSubmit }: ParentPaymentModalProps) => {
+  const [selectedMethod, setSelectedMethod] = useState<'gcash' | 'maya' | 'bank' | 'other' | ''>('');
+  const [payAmount, setPayAmount] = useState(record.totalBalance.toString());
+  const [refNotes, setRefNotes] = useState('');
+  const [proofUrl, setProofUrl] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Find enabled methods
+  const enabledMethods = tutorPaymentMethods
+    ? (['gcash', 'maya', 'bank', 'other'] as const).filter(m => tutorPaymentMethods[m]?.enabled)
+    : [];
+
+  // Automatically select first enabled method
+  useEffect(() => {
+    if (enabledMethods.length > 0 && !selectedMethod) {
+      setSelectedMethod(enabledMethods[0]);
+    }
+  }, [enabledMethods, selectedMethod]);
+
+  const methodLabelMap = {
+    gcash: 'GCash',
+    maya: 'Maya',
+    bank: 'Bank Transfer',
+    other: 'Other',
+  };
+
+  const handleDownloadQR = async (qrUrl: string, methodLabel: string) => {
+    try {
+      const response = await fetch(qrUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${tutee.firstName}_${methodLabel}_QR.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      toast.success('QR code download started');
+    } catch (err) {
+      console.error(err);
+      // Fallback: open in new window
+      window.open(qrUrl, '_blank');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountVal = parseFloat(payAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      toast.error('Please enter a valid payment amount');
+      return;
+    }
+    if (!selectedMethod) {
+      toast.error('Please select a payment method');
+      return;
+    }
+    if (!proofUrl) {
+      toast.error('Please upload proof of payment');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onSubmit(amountVal, methodLabelMap[selectedMethod], refNotes, proofUrl);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const activeMethodConfig = selectedMethod ? tutorPaymentMethods?.[selectedMethod] : null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 flex flex-col my-8">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-green-700 to-green-950 p-6 flex justify-between items-start text-white">
+          <div>
+            <h3 className="font-bold text-lg">Submit Payment</h3>
+            <p className="text-green-100 text-xs mt-0.5">
+              Billing Month: <span className="capitalize">{format(parseISO(record.month + '-01'), 'MMMM yyyy')}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/70 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {enabledMethods.length === 0 ? (
+          <div className="p-6 text-center space-y-4">
+            <AlertCircle size={48} className="text-amber-500 mx-auto" />
+            <p className="text-gray-600 font-medium text-sm">
+              The tutor has not configured online payment methods.
+            </p>
+            <p className="text-gray-400 text-xs">
+              Please contact your tutor directly to arrange Cash payment or get details.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-xl text-sm font-semibold transition-colors w-full"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto max-h-[75vh]">
+            {/* Amount Due Info */}
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4 flex justify-between items-center">
+              <span className="text-sm text-green-800 font-bold">Remaining Balance:</span>
+              <span className="text-xl font-extrabold text-green-900">{formatCurrency(record.totalBalance)}</span>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div>
+              <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-2">
+                Choose Payment Method
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {enabledMethods.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setSelectedMethod(m)}
+                    className={`px-4 py-3 rounded-xl border-2 text-sm font-bold text-center transition-all ${selectedMethod === m
+                        ? 'border-green-600 bg-green-50/50 text-green-800'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                  >
+                    {methodLabelMap[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tutor Details & QR */}
+            {activeMethodConfig && (
+              <div className="border border-gray-150 rounded-xl p-4 bg-gray-50/50 space-y-4">
+                <h4 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                  <Smartphone size={16} className="text-green-700" />
+                  {methodLabelMap[selectedMethod!]} Payment Instructions
+                </h4>
+
+                <div className="p-3 bg-white border border-gray-100 rounded-lg text-sm text-gray-700 font-medium leading-relaxed shadow-sm space-y-2">
+                  {activeMethodConfig.bankName && (
+                    <div className="flex justify-between py-1 border-b border-gray-50 text-xs">
+                      <span className="text-gray-400 font-bold uppercase">Bank / Provider</span>
+                      <span className="font-extrabold text-gray-800">{activeMethodConfig.bankName}</span>
+                    </div>
+                  )}
+                  {activeMethodConfig.accountName && (
+                    <div className="flex justify-between py-1 border-b border-gray-50 text-xs">
+                      <span className="text-gray-400 font-bold uppercase">Account Name</span>
+                      <span className="font-bold text-gray-800">{activeMethodConfig.accountName}</span>
+                    </div>
+                  )}
+                  {activeMethodConfig.accountNumber && (
+                    <div className="flex justify-between py-1 border-b border-gray-50 text-xs">
+                      <span className="text-gray-400 font-bold uppercase">Account Number</span>
+                      <span className="font-bold text-gray-900 font-mono tracking-wider">{activeMethodConfig.accountNumber}</span>
+                    </div>
+                  )}
+                  {activeMethodConfig.instructions && (
+                    <div className="pt-2 text-xs text-gray-500 italic">
+                      <span className="font-bold block not-italic text-gray-400 uppercase tracking-widest text-[9px] mb-0.5">Instructions</span>
+                      {activeMethodConfig.instructions}
+                    </div>
+                  )}
+                </div>
+
+                {activeMethodConfig.qrUrl && (
+                  <div className="flex flex-col items-center gap-3 pt-2">
+                    <div className="w-48 h-48 bg-white border border-gray-200 rounded-xl p-2 shadow-sm flex items-center justify-center overflow-hidden">
+                      <img
+                        src={activeMethodConfig.qrUrl}
+                        alt={`${methodLabelMap[selectedMethod!]} QR Code`}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadQR(activeMethodConfig.qrUrl, methodLabelMap[selectedMethod!])}
+                      className="inline-flex items-center gap-2 text-xs font-bold text-green-700 hover:underline"
+                    >
+                      <Download size={14} /> Download QR Code Image
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Payment Details Input */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+                  Amount Sent (₱) *
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
+                  placeholder="Enter sent amount"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-2">
+                  Upload Receipt / Proof of Payment (Image) *
+                </label>
+                <ImageUpload
+                  currentUrl={proofUrl}
+                  onUpload={(url) => setProofUrl(url)}
+                  folder={`tuteepay/proofs/${user?.id}`}
+                  shape="square"
+                  size="md"
+                  label="Select Image Screenshot"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+                  Reference Code / Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={refNotes}
+                  onChange={(e) => setRefNotes(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm"
+                  placeholder="e.g. Reference No. 123456"
+                />
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex gap-3 pt-4 border-t">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold text-sm transition-colors text-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || !proofUrl}
+                className="flex-1 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold text-sm transition-colors text-center shadow-lg shadow-green-700/10"
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Payment Proof'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

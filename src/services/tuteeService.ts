@@ -11,7 +11,8 @@ import {
   where,
   orderBy,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
 
@@ -63,6 +64,49 @@ class TuteeService {
     } catch (error) {
       console.error('Error fetching tutees:', error);
       throw error;
+    }
+  }
+
+  subscribeAll(callback: (tutees: Tutee[]) => void, tutorId?: string): () => void {
+    try {
+      const userId = tutorId || auth.currentUser?.uid;
+      if (!userId) {
+        console.warn('subscribeAll called without authenticated user');
+        return () => {};
+      }
+      const collectionRef = collection(db, 'users', userId, 'tutees');
+      let q;
+      if (tutorId) {
+        const parentUid = auth.currentUser?.uid;
+        if (!parentUid) {
+          return () => {};
+        }
+        // If we are a parent, we filter by parentId to comply with rules
+        q = query(collectionRef, where('parentId', '==', parentUid));
+      } else {
+        q = query(collectionRef, orderBy('createdAt', 'desc'));
+      }
+
+      return onSnapshot(q, (querySnapshot) => {
+        const docs = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          lastPaymentDate: doc.data().lastPaymentDate || null,
+        } as Tutee));
+
+        if (tutorId) {
+          // Sort in memory to avoid index requirement
+          docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }
+        callback(docs);
+      }, (error) => {
+        console.error('Error in tutees subscription:', error);
+      });
+    } catch (error) {
+      console.error('Error setting up tutees subscription:', error);
+      return () => {};
     }
   }
 
@@ -126,9 +170,9 @@ class TuteeService {
     }
   }
 
-  async update(id: string, updates: Partial<Tutee>): Promise<Tutee> {
+  async update(id: string, updates: Partial<Tutee>, tutorId?: string): Promise<Tutee> {
     try {
-      const userId = this.getUserId();
+      const userId = this.getUserId(tutorId);
       const docRef = doc(db, 'users', userId, 'tutees', id);
 
       // Filter out undefined values to avoid Firestore errors
@@ -147,7 +191,7 @@ class TuteeService {
 
       await updateDoc(docRef, updateData);
 
-      const updatedDoc = await this.getById(id);
+      const updatedDoc = await this.getById(id, tutorId);
       if (!updatedDoc) {
         throw new Error('Tutee not found after update');
       }

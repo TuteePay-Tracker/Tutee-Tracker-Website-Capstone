@@ -87,7 +87,8 @@ service cloud.firestore {
 
       // Users update their own profile
       allow update: if isAuthenticated() && isOwner(userId) && (
-        resource.data.role == 'tutor'
+        !resource.data.keys().hasAny(['role'])
+        || resource.data.role == 'tutor'
         || (resource.data.role == 'parent' && isValidParentUserUpdateByOwner())
       );
 
@@ -132,7 +133,7 @@ service cloud.firestore {
         allow update: if isAuthenticated() && isOwner(userId) && (isValidTutee() || isLinkingParentOnly());
       }
       
-      // PAYMENTS subcollection (Legacy)
+      // PAYMENTS subcollection
       match /payments/{paymentId} {
         // Validate payment data structure
         function isValidPayment() {
@@ -141,11 +142,14 @@ service cloud.firestore {
             && data.tuteeId is string && data.tuteeId.size() > 0
             && data.tuteeName is string && data.tuteeName.size() > 0
             && data.amount is number && data.amount >= 0
-            && data.sessionsCovered is number && data.sessionsCovered > 0
+            && data.sessionsCovered is number && data.sessionsCovered >= 0
             && data.paymentMethod is string
             && data.paymentDate is string
             && data.createdAt is timestamp
-            && data.updatedAt is timestamp;
+            && data.updatedAt is timestamp
+            && (!data.keys().hasAny(['status']) || data.status is string)
+            && (!data.keys().hasAny(['proofUrl']) || data.proofUrl is string)
+            && (!data.keys().hasAny(['month']) || data.month is string);
         }
 
         // Tutor reads own payments; linked parent can read too (if parentId matches)
@@ -155,8 +159,11 @@ service cloud.firestore {
         );
         allow delete: if isAuthenticated() && isOwner(userId);
 
-        // Users can create payments with valid data
-        allow create: if isAuthenticated() && isOwner(userId) && isValidPayment();
+        // Users can create payments with valid data (tutors, or parent portal for tutee)
+        allow create: if isAuthenticated() && (
+          isOwner(userId) || 
+          isParentOfTutee(userId, request.resource.data.tuteeId)
+        ) && isValidPayment();
 
         // Users can update payments with valid data
         allow update: if isAuthenticated() && isOwner(userId) && isValidPayment();

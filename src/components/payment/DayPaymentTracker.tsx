@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { PaymentRecord, DayPayment, ReceiptData } from '../../types/dayPayment';
+import { PaymentRecord, ReceiptData } from '../../types/dayPayment';
 import { dayPaymentService } from '../../services/dayPaymentService';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { format, parseISO } from 'date-fns';
 import { Receipt } from '../receipt/Receipt';
-import { Calendar, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DayPaymentTrackerProps {
@@ -14,8 +14,9 @@ interface DayPaymentTrackerProps {
 }
 
 export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTrackerProps) => {
-  const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM'));
-  const [record, setRecord] = useState<PaymentRecord | null>(null);
+  const [allRecords, setAllRecords] = useState<PaymentRecord[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [monthToAdd, setMonthToAdd] = useState(format(new Date(), 'yyyy-MM'));
   const [paymentAmount, setPaymentAmount] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -23,32 +24,64 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
 
+  // Subscribe to real-time updates for all records of this tutee
   useEffect(() => {
-    loadMonthlyRecord();
-  }, [tuteeId, currentMonth]);
+    let unsubscribe: (() => void) | null = null;
+    setIsLoading(true);
 
-  const loadMonthlyRecord = async () => {
-    try {
-      setIsLoading(true);
-      const data = await dayPaymentService.getMonthlyRecord(tuteeId, currentMonth);
-      setRecord(data);
-      setPaymentAmount(data.totalBalance.toString());
-    } catch (error) {
-      console.error('Error loading record:', error);
-      toast.error('Failed to load payment record');
-    } finally {
+    unsubscribe = dayPaymentService.subscribeToRecordsByTutee(tuteeId, (records) => {
+      setAllRecords(records);
+      
+      const currentMonthStr = format(new Date(), 'yyyy-MM');
+      const hasCurrentMonth = records.some(r => r.month === currentMonthStr);
+      
+      if (records.length === 0 || !hasCurrentMonth) {
+        // Auto-create current month record if it doesn't exist
+        dayPaymentService.getMonthlyRecord(tuteeId, currentMonthStr)
+          .catch(err => console.error("Error auto-creating month:", err));
+      }
       setIsLoading(false);
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [tuteeId]);
+
+  // Sync the form pre-fill and selected month validity when records update
+  useEffect(() => {
+    if (allRecords.length > 0) {
+      const activeRecord = allRecords.find(r => r.month === selectedMonth) || allRecords[0];
+      if (activeRecord && activeRecord.month !== selectedMonth) {
+        setSelectedMonth(activeRecord.month);
+      }
+      if (activeRecord) {
+        setPaymentAmount(activeRecord.totalBalance.toString());
+      }
+    }
+  }, [selectedMonth, allRecords]);
+
+  const toggleMonthPayment = async (month: string) => {
+    try {
+      await dayPaymentService.toggleMonthPaymentStatus(tuteeId, month);
+      toast.success('Payment status updated');
+    } catch (error) {
+      console.error('Error toggling month payment status:', error);
+      toast.error('Failed to update payment status');
     }
   };
 
-  const toggleDay = async (date: string) => {
+  const handleAddMonth = async () => {
     try {
-      const updated = await dayPaymentService.toggleDayStatus(tuteeId, currentMonth, date);
-      setRecord(updated);
-      toast.success('Attendance status updated');
+      setIsLoading(true);
+      await dayPaymentService.getMonthlyRecord(tuteeId, monthToAdd);
+      setSelectedMonth(monthToAdd);
+      toast.success(`Billing for ${format(parseISO(monthToAdd + '-01'), 'MMMM yyyy')} initialized`);
+      setIsLoading(false);
     } catch (error) {
-      console.error('Error toggling attendance status:', error);
-      toast.error('Failed to update attendance');
+      console.error('Error adding month billing:', error);
+      toast.error('Failed to initialize billing month');
+      setIsLoading(false);
     }
   };
 
@@ -62,7 +95,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
     try {
       const result = await dayPaymentService.recordMonthlyPayment(
         tuteeId,
-        currentMonth,
+        selectedMonth,
         amountVal,
         paymentMethod,
         notes
@@ -82,31 +115,11 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
 
       setReceiptData(receipt);
       setShowReceipt(true);
-      setRecord(result.updatedRecord);
-      setPaymentAmount(result.updatedRecord.totalBalance.toString());
       setNotes('');
       toast.success('Payment recorded successfully!');
     } catch (error) {
       console.error('Error recording payment:', error);
       toast.error('Failed to record payment');
-    }
-  };
-
-  const getDayStatus = (day: DayPayment) => {
-    if (day.status === 'paid') {
-      return {
-        icon: <CheckCircle2 size={18} className="text-green-600" />,
-        label: 'Completed',
-        color: 'bg-green-50 border-green-200',
-        textColor: 'text-green-700',
-      };
-    } else {
-      return {
-        icon: <Calendar size={18} className="text-gray-400" />,
-        label: 'Scheduled',
-        color: 'bg-white border-gray-200',
-        textColor: 'text-gray-600',
-      };
     }
   };
 
@@ -118,6 +131,8 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
     );
   }
 
+  const record = allRecords.find(r => r.month === selectedMonth) || allRecords[0] || null;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -127,9 +142,11 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
             <Calendar className="text-green-700" size={28} />
             Payment Tracker - {tuteeName}
           </h2>
-          <p className="text-gray-500 mt-1">
-            {format(parseISO(currentMonth + '-01'), 'MMMM yyyy')}
-          </p>
+          {record && (
+            <p className="text-gray-500 mt-1">
+              Active Month: {format(parseISO(record.month + '-01'), 'MMMM yyyy')}
+            </p>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -139,14 +156,27 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
         </button>
       </div>
 
-      {/* Month Selector */}
-      <div className="flex gap-3">
-        <input
-          type="month"
-          value={currentMonth}
-          onChange={(e) => setCurrentMonth(e.target.value)}
-          className="px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
-        />
+      {/* Month Selector / Generator */}
+      <div className="flex items-center gap-3 bg-gray-50 p-4 border border-gray-200 rounded-xl">
+        <div className="flex-1">
+          <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">
+            Initialize New Month Billing
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="month"
+              value={monthToAdd}
+              onChange={(e) => setMonthToAdd(e.target.value)}
+              className="px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-semibold flex-1"
+            />
+            <button
+              onClick={handleAddMonth}
+              className="bg-green-700 text-white px-4 py-2 rounded-xl hover:bg-green-800 transition-colors text-sm font-bold shadow-sm"
+            >
+              + Add Month
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Summary */}
@@ -167,36 +197,67 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
         </div>
       )}
 
-      {/* Days Grid */}
-      {record && (
+      {/* Months Checklist */}
+      {allRecords.length > 0 && (
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          {record.dayPayments.map(day => {
-            const status = getDayStatus(day);
+          {allRecords.map(monthRecord => {
+            const isSelected = monthRecord.month === selectedMonth;
+            const isPaid = monthRecord.totalPaid > 0 && monthRecord.totalBalance <= 0;
+            const isPartial = monthRecord.totalPaid > 0 && monthRecord.totalBalance > 0;
+            
+            let colorClass = 'bg-white border-gray-200';
+            let textColorClass = 'text-gray-600';
+            let statusLabel = 'Unpaid';
+            let icon = <AlertCircle size={18} className="text-gray-400" />;
+
+            if (isPaid) {
+              colorClass = 'bg-green-50 border-green-200';
+              textColorClass = 'text-green-700';
+              statusLabel = 'Fully Paid';
+              icon = <CheckCircle2 size={18} className="text-green-600" />;
+            } else if (isPartial) {
+              colorClass = 'bg-orange-50 border-orange-200';
+              textColorClass = 'text-orange-700';
+              statusLabel = 'Partial Payment';
+              icon = <AlertCircle size={18} className="text-orange-600" />;
+            }
+
+            if (isSelected) {
+              colorClass = `${colorClass.split(' ')[0]} border-green-600 ring-2 ring-green-600/20`;
+            }
 
             return (
               <div
-                key={day.date}
-                className={`border-2 rounded-xl p-4 transition-all ${status.color}`}
+                key={monthRecord.id}
+                onClick={() => setSelectedMonth(monthRecord.month)}
+                className={`border-2 rounded-xl p-4 transition-all cursor-pointer hover:shadow-sm ${colorClass}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <input
                       type="checkbox"
-                      checked={day.status === 'paid'}
-                      onChange={() => toggleDay(day.date)}
-                      className="w-5 h-5 text-green-700 rounded focus:ring-green-500 cursor-pointer"
+                      checked={isPaid}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggleMonthPayment(monthRecord.month);
+                      }}
+                      className="w-5 h-5 text-green-700 rounded focus:ring-green-500 cursor-pointer animate-none"
                     />
                     <div>
-                      <p className="font-semibold text-gray-900">
-                        {format(parseISO(day.date), 'EEE, MMM dd')}
+                      <p className="font-bold text-gray-900 text-base">
+                        {format(parseISO(monthRecord.month + '-01'), 'MMMM yyyy')}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
-                        {status.icon}
-                        <span className={`text-sm font-medium ${status.textColor}`}>
-                          {status.label}
+                        {icon}
+                        <span className={`text-sm font-semibold ${textColorClass}`}>
+                          {statusLabel}
                         </span>
                       </div>
                     </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400 font-medium">Remaining Balance</p>
+                    <p className="font-bold text-gray-800 text-lg">{formatCurrency(monthRecord.totalBalance)}</p>
                   </div>
                 </div>
               </div>
@@ -208,7 +269,9 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
       {/* Payment Form */}
       {record && (
         <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 space-y-4">
-          <h3 className="font-semibold text-lg text-gray-900">Record Payment</h3>
+          <h3 className="font-semibold text-lg text-gray-900">
+            Record Payment for {format(parseISO(record.month + '-01'), 'MMMM yyyy')}
+          </h3>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Payment Amount (₱)</label>

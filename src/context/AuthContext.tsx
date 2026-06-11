@@ -13,6 +13,13 @@ interface User {
   linkedStudentIds?: string[];
   createdByTutorId?: string;
   contactNumber?: string;
+  photoUrl?: string;
+  paymentMethods?: {
+    gcash?: { qrUrl?: string; accountName?: string; accountNumber?: string; enabled: boolean };
+    maya?: { qrUrl?: string; accountName?: string; accountNumber?: string; enabled: boolean };
+    bank?: { qrUrl?: string; accountName?: string; accountNumber?: string; bankName?: string; enabled: boolean };
+    other?: { qrUrl?: string; accountName?: string; accountNumber?: string; bankName?: string; instructions?: string; enabled: boolean };
+  };
 }
 
 interface AuthContextType {
@@ -23,6 +30,8 @@ interface AuthContextType {
   logout: () => void;
   resetPassword: (email: string) => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfilePhoto: (photoUrl: string) => Promise<void>;
+  updatePaymentMethods: (paymentMethods: User['paymentMethods']) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,6 +68,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             linkedStudentIds: userData.linkedStudentIds || [],
             createdByTutorId: userData.createdByTutorId,
             contactNumber: userData.contactNumber,
+            photoUrl: userData.photoUrl || null,
+            paymentMethods: userData.paymentMethods || {},
           });
         } else {
           const userData: User = {
@@ -156,8 +167,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         linkedStudentIds: userData.linkedStudentIds || [],
         createdByTutorId: userData.createdByTutorId,
         contactNumber: userData.contactNumber,
+        photoUrl: userData.photoUrl || null,
+        paymentMethods: userData.paymentMethods || {},
       });
     }
+  };
+
+  const updateProfilePhoto = async (photoUrl: string) => {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) return;
+    const { updateDoc, doc: fsDoc } = await import('firebase/firestore');
+    await updateDoc(fsDoc(db, 'users', firebaseUser.uid), { photoUrl });
+    setUser(prev => prev ? { ...prev, photoUrl } : prev);
+  };
+
+  const updatePaymentMethods = async (paymentMethods: User['paymentMethods']) => {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) return;
+    const { updateDoc, doc: fsDoc } = await import('firebase/firestore');
+    
+    // Safely remove any undefined properties recursively before sending to Firestore
+    const sanitizedMethods = JSON.parse(JSON.stringify(paymentMethods || {}));
+    
+    await updateDoc(fsDoc(db, 'users', firebaseUser.uid), { paymentMethods: sanitizedMethods });
+    setUser(prev => prev ? { ...prev, paymentMethods: sanitizedMethods } : prev);
   };
 
   const logout = async () => {
@@ -189,6 +222,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         logout,
         resetPassword,
         refreshUser,
+        updateProfilePhoto,
+        updatePaymentMethods,
       }}
     >
       {children}

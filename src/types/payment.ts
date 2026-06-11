@@ -10,6 +10,9 @@ export interface Payment {
   paymentDate: string;
   notes?: string;
   createdAt: string;
+  month?: string;
+  status?: 'pending' | 'verified' | 'rejected';
+  proofUrl?: string;
 }
 
 export interface PaymentFormData {

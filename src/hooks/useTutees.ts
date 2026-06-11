@@ -12,7 +12,34 @@ export const useTutees = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user !== undefined) loadTutees();
+    if (user === undefined) return;
+    
+    setIsLoading(true);
+    let unsubscribe: () => void = () => {};
+
+    if (user?.role === 'parent') {
+      if (user.createdByTutorId) {
+        unsubscribe = tuteeService.subscribeAll((data) => {
+          setTutees(data);
+          setIsLoading(false);
+          setError(null);
+        }, user.createdByTutorId);
+      } else {
+        setTutees([]);
+        setIsLoading(false);
+      }
+    } else if (user) {
+      unsubscribe = tuteeService.subscribeAll((data) => {
+        setTutees(data);
+        setIsLoading(false);
+        setError(null);
+      });
+    } else {
+      setTutees([]);
+      setIsLoading(false);
+    }
+
+    return () => unsubscribe();
   }, [user]);
 
   const loadTutees = async () => {

@@ -11,14 +11,20 @@ export const usePayments = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user !== undefined) {
-      if (user?.role === 'parent') {
-        // Parents don't bulk-load all tutor payments.
-        // They load per-tutee on demand via loadPaymentsForTutee().
+    if (user === undefined) return;
+
+    if (user?.role === 'parent') {
+      // Parents don't bulk-load all tutor payments.
+      // They load per-tutee on demand via loadPaymentsForTutee().
+      setIsLoading(false);
+    } else if (user) {
+      setIsLoading(true);
+      const unsubscribe = paymentService.subscribeAll((data) => {
+        setPayments(data);
         setIsLoading(false);
-      } else {
-        loadPayments();
-      }
+        setError(null);
+      });
+      return () => unsubscribe();
     }
   }, [user]);
 
@@ -41,24 +47,22 @@ export const usePayments = () => {
   };
 
   // Load payments for a specific tutee (used by parent portal)
-  const loadPaymentsForTutee = async (tuteeId: string, tutorId?: string) => {
-    try {
-      setIsLoading(true);
-      const data = await paymentService.getByTuteeId(tuteeId, tutorId);
-      setPayments(data);
-      setError(null);
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to load payments';
-      setError(errorMessage);
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+  const loadPaymentsForTutee = (tuteeId: string, tutorId?: string) => {
+    setIsLoading(true);
+    return paymentService.subscribeByTuteeId(
+      tuteeId,
+      (data) => {
+        setPayments(data);
+        setIsLoading(false);
+        setError(null);
+      },
+      tutorId
+    );
   };
 
-  const addPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>) => {
+  const addPayment = async (payment: Omit<Payment, 'id' | 'createdAt'>, tutorId?: string) => {
     try {
-      const newPayment = await paymentService.create(payment);
+      const newPayment = await paymentService.create(payment, tutorId);
       setPayments(prev => [newPayment, ...prev]);
       return newPayment;
     } catch (err: any) {
