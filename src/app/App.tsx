@@ -1,9 +1,9 @@
 import { RouterProvider } from 'react-router';
-import { AuthProvider } from '../context/AuthContext';
-import { router } from '../routes/AppRoutes';
+import { AuthProvider } from '@/features/auth/context/AuthContext';
+import { router } from '@/app/routes/AppRoutes';
 import { Toaster } from 'sonner';
 // Import migration utility to make it available in browser console
-import '../utils/migrateTutees';
+import '@/shared/utils/migrateTutees';
 
 export default function App() {
   return (
