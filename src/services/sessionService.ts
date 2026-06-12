@@ -118,7 +118,7 @@ class SessionService {
       const userId = this.getUserId();
       const docRef = doc(db, 'users', userId, 'sessions', id);
 
-      const updateData = {
+      const updateData: any = {
         ...updates,
         updatedAt: Timestamp.fromDate(new Date()),
       };

@@ -13,15 +13,72 @@ import {
   Calendar,
   ChevronDown,
   ChevronRight,
-  CheckSquare
+  CheckSquare,
+  MessageSquare
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { chatService } from '../services/chatService';
+import { toast } from 'sonner';
 
 export const MainLayout = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const prevThreadsRef = useRef<Record<string, { lastMsgText?: string; unreadCount: number }>>({});
+
+  // Listen to threads for unread count & notifications
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const unsubscribe = chatService.subscribeToThreads(user.id, user.role, (threads) => {
+      // Sum up total unread messages
+      const total = threads.reduce((sum, thread) => sum + (thread.unreadCount[user.id] || 0), 0);
+      setTotalUnreadCount(total);
+
+      // Check if any thread received a new unread message from the other party
+      threads.forEach(thread => {
+        const threadId = thread.id;
+        const prev = prevThreadsRef.current[threadId];
+        const currentUnread = thread.unreadCount[user.id] || 0;
+        const prevUnread = prev ? prev.unreadCount : 0;
+
+        if (currentUnread > prevUnread && thread.lastMessageSenderId !== user.id) {
+          const senderName = user.role === 'tutor' ? thread.parentName : thread.tutorName;
+          
+          // Toast notification if user is not on the chat screen
+          if (location.pathname !== '/chat') {
+            toast(`New message from ${senderName}`, {
+              description: thread.lastMessageText || '',
+              action: {
+                label: 'View',
+                onClick: () => navigate('/chat')
+              }
+            });
+          }
+        }
+
+        // Cache current thread stats
+        prevThreadsRef.current[threadId] = {
+          lastMsgText: thread.lastMessageText,
+          unreadCount: currentUnread
+        };
+      });
+
+      // Populate initial values for newly loaded threads
+      threads.forEach(thread => {
+        if (!prevThreadsRef.current[thread.id]) {
+          prevThreadsRef.current[thread.id] = {
+            lastMsgText: thread.lastMessageText,
+            unreadCount: thread.unreadCount[user.id] || 0
+          };
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user?.id, user?.role, location.pathname, navigate]);
 
   // Collapsible state for Tutee Management
   const isTuteePath = 
@@ -101,11 +158,29 @@ export const MainLayout = () => {
                 <span>My Children</span>
               </Link>
               <Link
+                to="/chat"
+                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
+                  isActive('/chat')
+                    ? 'bg-green-55 text-green-700 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare size={20} />
+                  <span>Chat</span>
+                </div>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm mr-1">
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </Link>
+              <Link
                 to="/settings"
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
                   isActive('/settings')
                     ? 'bg-green-55 text-green-700 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-55 hover:text-gray-900'
                 }`}
               >
                 <Settings size={20} />
@@ -206,6 +281,26 @@ export const MainLayout = () => {
                 <span>Reports</span>
               </Link>
 
+              {/* Chat */}
+              <Link
+                to="/chat"
+                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
+                  isActive('/chat')
+                    ? 'bg-green-50 text-green-700 font-bold border-l-4 border-green-700 pl-3'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare size={20} />
+                  <span>Chat</span>
+                </div>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm mr-1">
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </Link>
+
               {/* Settings */}
               <Link
                 to="/settings"
@@ -301,12 +396,31 @@ export const MainLayout = () => {
                 <span>My Children</span>
               </Link>
               <Link
+                to="/chat"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
+                  isActive('/chat')
+                    ? 'bg-green-50 text-green-700 font-bold'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare size={20} />
+                  <span>Chat</span>
+                </div>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </Link>
+              <Link
                 to="/settings"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
                   isActive('/settings')
                     ? 'bg-green-50 text-green-700 font-bold'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    : 'text-gray-600 hover:bg-gray-55'
                 }`}
               >
                 <Settings size={20} />
@@ -408,6 +522,26 @@ export const MainLayout = () => {
               >
                 <BarChart3 size={20} />
                 <span>Reports</span>
+              </Link>
+
+              <Link
+                to="/chat"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
+                  isActive('/chat')
+                    ? 'bg-green-50 text-green-700 font-bold'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare size={20} />
+                  <span>Chat</span>
+                </div>
+                {totalUnreadCount > 0 && (
+                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                    {totalUnreadCount}
+                  </span>
+                )}
               </Link>
 
               <Link

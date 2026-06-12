@@ -462,7 +462,7 @@ class DayPaymentService {
       const balance = totalDue - totalPaid;
 
       // Find latest payment date
-      let lastPaymentDate = null;
+      let lastPaymentDate = undefined;
       if (payments.length > 0) {
         const sorted = [...payments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
         lastPaymentDate = sorted[0].paymentDate;

@@ -1,4 +1,4 @@
-export type PaymentMethod = 'Cash' | 'GCash' | 'Bank Transfer' | 'PayMaya';
+export type PaymentMethod = 'Cash' | 'GCash' | 'Bank Transfer' | 'PayMaya' | 'Other';
 
 export interface Payment {
   id: string;

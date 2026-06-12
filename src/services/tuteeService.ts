@@ -147,7 +147,7 @@ class TuteeService {
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
         balance: tutee.balance || 0,
-        lastPaymentDate: tutee.lastPaymentDate || null,
+        lastPaymentDate: tutee.lastPaymentDate || undefined,
         createdAt: Timestamp.fromDate(now),
         updatedAt: Timestamp.fromDate(now),
       };
@@ -160,7 +160,7 @@ class TuteeService {
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
         balance: tutee.balance || 0,
-        lastPaymentDate: tutee.lastPaymentDate || null,
+        lastPaymentDate: tutee.lastPaymentDate || undefined,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
@@ -180,7 +180,7 @@ class TuteeService {
         Object.entries(updates).filter(([_, value]) => value !== undefined)
       );
 
-      const updateData = {
+      const updateData: any = {
         ...cleanedUpdates,
         updatedAt: Timestamp.fromDate(new Date()),
       };

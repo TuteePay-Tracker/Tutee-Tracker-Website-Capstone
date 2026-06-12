@@ -10,6 +10,7 @@ import { QuickPayment } from '../pages/QuickPayment';
 import { Reports } from '../pages/Reports';
 import { Settings } from '../pages/Settings';
 import { Schedule } from '../pages/Schedule';
+import { Chat } from '../pages/Chat';
 import { Login } from '../pages/auth/Login';
 import { Signup } from '../pages/auth/Signup';
 import { ForgotPassword } from '../pages/auth/ForgotPassword';
@@ -153,6 +154,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: <Settings />,
+      },
+      {
+        path: 'chat',
+        element: <Chat />,
       },
     ],
   },

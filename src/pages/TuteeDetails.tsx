@@ -14,6 +14,7 @@ import { ImageUpload } from '../components/ui/ImageUpload';
 import { PaymentHistory } from '../components/payments/PaymentHistory';
 import { ScheduleItem } from '../types/tutee';
 import { PaymentRecord } from '../types/dayPayment';
+import { PaymentMethod } from '../types/payment';
 import { ProgressReport, ProgressReportFormData } from '../types/progressReport';
 import { dayPaymentService } from '../services/dayPaymentService';
 import { progressReportService } from '../services/progressReportService';
@@ -1003,7 +1004,7 @@ interface ParentPaymentModalProps {
   tutee: any;
   user: any;
   onClose: () => void;
-  onSubmit: (payAmount: number, methodLabel: string, notes: string, proofUrl: string) => Promise<void>;
+  onSubmit: (payAmount: number, methodLabel: PaymentMethod, notes: string, proofUrl: string) => Promise<void>;
 }
 
 const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose, onSubmit }: ParentPaymentModalProps) => {
@@ -1025,9 +1026,9 @@ const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose,
     }
   }, [enabledMethods, selectedMethod]);
 
-  const methodLabelMap = {
+  const methodLabelMap: Record<string, string> = {
     gcash: 'GCash',
-    maya: 'Maya',
+    maya: 'PayMaya',
     bank: 'Bank Transfer',
     other: 'Other',
   };
@@ -1070,7 +1071,7 @@ const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose,
 
     setIsSubmitting(true);
     try {
-      await onSubmit(amountVal, methodLabelMap[selectedMethod], refNotes, proofUrl);
+      await onSubmit(amountVal, methodLabelMap[selectedMethod] as PaymentMethod, refNotes, proofUrl);
     } finally {
       setIsSubmitting(false);
     }

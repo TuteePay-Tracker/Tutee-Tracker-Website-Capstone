@@ -284,5 +284,41 @@ service cloud.firestore {
         allow create, update: if isAuthenticated() && isOwner(userId) && isValidSubject();
       }
     }
+
+    // CHAT THREADS and MESSAGES
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        resource.data.tutorId == request.auth.uid ||
+        resource.data.parentId == request.auth.uid
+      );
+
+      allow update: if isAuthenticated() && (
+        resource.data.tutorId == request.auth.uid ||
+        resource.data.parentId == request.auth.uid
+      );
+
+      allow create: if isAuthenticated() && (
+        request.resource.data.tutorId == request.auth.uid ||
+        request.resource.data.parentId == request.auth.uid
+      );
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.tutorId == request.auth.uid ||
+          get(/databases/$(database)/documents/chats/$(chatId)).data.parentId == request.auth.uid
+        );
+
+        allow create: if isAuthenticated() && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.tutorId == request.auth.uid ||
+          get(/databases/$(database)/documents/chats/$(chatId)).data.parentId == request.auth.uid
+        ) && request.resource.data.senderId == request.auth.uid;
+
+        allow update: if isAuthenticated() && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.tutorId == request.auth.uid ||
+          get(/databases/$(database)/documents/chats/$(chatId)).data.parentId == request.auth.uid
+        );
+      }
+    }
   }
 }

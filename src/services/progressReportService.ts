@@ -107,7 +107,7 @@ class ProgressReportService {
         Object.entries(updates).filter(([_, value]) => value !== undefined)
       );
 
-      const updateData = {
+      const updateData: any = {
         ...cleanedUpdates,
         updatedAt: Timestamp.fromDate(new Date()),
       };
