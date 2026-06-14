@@ -4,7 +4,7 @@ import { dayPaymentService } from '@/features/attendance/services/dayPaymentServ
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { format, parseISO } from 'date-fns';
 import { Receipt } from '@/features/payments/components/Receipt';
-import { Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Calendar, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DayPaymentTrackerProps {
@@ -81,6 +81,27 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
     } catch (error) {
       console.error('Error adding month billing:', error);
       toast.error('Failed to initialize billing month');
+      setIsLoading(false);
+    }
+  };
+
+  const handleRemoveMonth = async (monthRecord: PaymentRecord) => {
+    const monthLabel = format(parseISO(monthRecord.month + '-01'), 'MMMM yyyy');
+    const confirmed = window.confirm(
+      `Remove billing for ${monthLabel}? This will delete the monthly record and related payments for this month.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setIsLoading(true);
+      await dayPaymentService.removeMonthlyRecord(tuteeId, monthRecord.month);
+      setSelectedMonth(format(new Date(), 'yyyy-MM'));
+      toast.success(`Billing for ${monthLabel} removed`);
+    } catch (error) {
+      console.error('Error removing month billing:', error);
+      toast.error('Failed to remove billing month');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -255,10 +276,21 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="flex items-center gap-2 text-right">
                     <p className="text-xs text-gray-400 font-medium">Remaining Balance</p>
                     <p className="font-bold text-gray-800 text-lg">{formatCurrency(monthRecord.totalBalance)}</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveMonth(monthRecord);
+                    }}
+                    className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                    title="Remove month"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
             );

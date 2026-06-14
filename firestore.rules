@@ -112,7 +112,9 @@ service cloud.firestore {
             && data.totalPaid is number && data.totalPaid >= 0
             && data.balance is number
             && data.createdAt is timestamp
-            && data.updatedAt is timestamp;
+            && data.updatedAt is timestamp
+            // Custom modification: Safely handles optional, null, timestamp, or string variants of lastPaymentDate
+            && (!data.keys().hasAny(['lastPaymentDate']) || data.lastPaymentDate == null || data.lastPaymentDate is timestamp || data.lastPaymentDate is string);
         }
 
         function isLinkingParentOnly() {
@@ -221,7 +223,8 @@ service cloud.firestore {
           isParentOfTutee(userId, resource.data.tuteeId) ||
           (resource != null && resource.data.keys().hasAny(['parentId']) && resource.data.parentId == request.auth.uid)
         );
-        allow write: if isAuthenticated() && isOwner(userId) && isValidPaymentRecord();
+        allow create, update: if isAuthenticated() && isOwner(userId) && isValidPaymentRecord();
+        allow delete: if isAuthenticated() && isOwner(userId);
       }
 
       // PAYMENT TRANSACTIONS subcollection
@@ -235,7 +238,8 @@ service cloud.firestore {
             && data.daysPaid is list
             && data.totalAmount is number
             && data.paymentMethod is string
-            && data.createdAt is timestamp;
+            && data.createdAt is timestamp
+            && (!data.keys().hasAny(['month']) || data.month is string);
         }
         // Allow read if tutor owner OR parent of tutee
         allow read: if isAuthenticated() && (
@@ -258,6 +262,7 @@ service cloud.firestore {
             && data.topicsCovered is string
             && data.performance is string
             && data.behavior is string
+            && (!data.keys().hasAny(['assessmentScores']) || data.assessmentScores is list)
             && data.notes is string
             && data.createdAt is timestamp;
         }
@@ -268,6 +273,29 @@ service cloud.firestore {
           isParentOfTutee(userId, resource.data.tuteeId)
         );
         allow create, update: if isAuthenticated() && isOwner(userId) && isValidProgressReport();
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // ANNOUNCEMENTS subcollection
+      match /announcements/{announcementId} {
+        function isValidAnnouncement() {
+          let data = request.resource.data;
+          return data.keys().hasAll(['title', 'content', 'priority', 'tutorId', 'createdAt', 'updatedAt'])
+            && data.title is string && data.title.size() > 0
+            && data.content is string && data.content.size() > 0
+            && data.priority in ['low', 'medium', 'high']
+            && data.tutorId == userId
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp;
+        }
+
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+        );
+
+        allow create, update: if isAuthenticated() && isOwner(userId) && isValidAnnouncement();
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 

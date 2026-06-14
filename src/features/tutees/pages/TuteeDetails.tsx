@@ -15,7 +15,7 @@ import { PaymentHistory } from '@/features/payments/components/PaymentHistory';
 import { ScheduleItem } from '@/features/tutees/types/tutee';
 import { PaymentRecord } from '@/features/attendance/types/dayPayment';
 import { PaymentMethod } from '@/features/payments/types/payment';
-import { ProgressReport, ProgressReportFormData } from '@/features/progress-reports/types/progressReport';
+import { ProgressReport, ProgressReportFormData, AssessmentScore } from '@/features/progress-reports/types/progressReport';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { progressReportService } from '@/features/progress-reports/services/progressReportService';
 import { doc, getDoc } from 'firebase/firestore';
@@ -78,6 +78,7 @@ export const TuteeDetails = () => {
     topicsCovered: '',
     performance: 'good',
     behavior: 'good',
+    assessmentScores: [{ name: '', score: 0 }],
     notes: '',
     recommendations: '',
   });
@@ -89,12 +90,13 @@ export const TuteeDetails = () => {
 
     if (tutee) {
       loadProgressReports();
-      // For parent users, load payments and subscribe to attendance scoped to this tutee
+      // Always subscribe to attendance and payments to ensure accurate financial summary
+      unsubscribeAttendance = loadAttendance();
+
       if (user?.role === 'parent') {
         if (user.createdByTutorId) {
           unsubscribePayments = loadPaymentsForTutee(tutee.id, user.createdByTutorId);
         }
-        unsubscribeAttendance = loadAttendance();
       }
       setReportForm(prev => ({
         ...prev,
@@ -163,6 +165,32 @@ export const TuteeDetails = () => {
     return s ? `${s.firstName} ${s.surname}` : studentId;
   };
 
+  const updateAssessmentScore = (index: number, field: keyof AssessmentScore, value: string | number) => {
+    setReportForm(prev => ({
+      ...prev,
+      assessmentScores: prev.assessmentScores.map((score, scoreIndex) => {
+        if (scoreIndex !== index) return score;
+        return { ...score, [field]: value };
+      }),
+    }));
+  };
+
+  const addAssessmentScore = () => {
+    setReportForm(prev => ({
+      ...prev,
+      assessmentScores: [...prev.assessmentScores, { name: '', score: 0 }],
+    }));
+  };
+
+  const removeAssessmentScore = (index: number) => {
+    setReportForm(prev => ({
+      ...prev,
+      assessmentScores: prev.assessmentScores.length === 1
+        ? [{ name: '', score: 0 }]
+        : prev.assessmentScores.filter((_, scoreIndex) => scoreIndex !== index),
+    }));
+  };
+
   // Helper to render schedule (handles both old string and new array format)
   const renderSchedule = (schedule: string | ScheduleItem[]) => {
     if (Array.isArray(schedule)) {
@@ -192,6 +220,10 @@ export const TuteeDetails = () => {
       toast.error('Please fill out all required fields');
       return;
     }
+    if (!reportForm.assessmentScores.some(score => score.score > 0)) {
+      toast.error('Please add at least one assessment score');
+      return;
+    }
 
     try {
       setSubmittingReport(true);
@@ -209,6 +241,7 @@ export const TuteeDetails = () => {
         topicsCovered: '',
         performance: 'good',
         behavior: 'good',
+        assessmentScores: [{ name: '', score: 0 }],
         notes: '',
         recommendations: '',
       });
@@ -241,7 +274,22 @@ export const TuteeDetails = () => {
     );
   }
 
-  const totalDue = tutee.totalSessions * tutee.ratePerSession;
+  // Calculate accurate totals from source records instead of relying on aggregate counters
+  // Total Paid: Sum only verified payments.
+  const totalPaid = payments
+    .filter(p => p.status === 'verified' || !p.status)
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  // Remaining Balance: Sum of all monthly balances from attendance records.
+  // If attendance hasn't loaded yet, fall back to the document calculation.
+  const remainingBalance = attendanceRecords.length > 0
+    ? attendanceRecords.reduce((sum, r) => sum + Math.max(r.totalBalance || 0, 0), 0)
+    : Math.max(0, ((tutee.totalSessions || 0) * (tutee.ratePerSession || 0)) - (tutee.totalPaid || 0));
+  const remainingBalanceCents = Math.round(remainingBalance * 100);
+  const hasOutstandingBalance = remainingBalanceCents > 0;
+  const totalDue = Math.round((totalPaid + remainingBalance) * 100) / 100;
+  const isFull = (tutee.totalSessions || 0) > 0 && !hasOutstandingBalance;
+  const isPartial = hasOutstandingBalance && totalPaid > 0;
   const backLink = user?.role === 'parent' ? '/' : '/tutees';
 
   return (
@@ -362,25 +410,25 @@ export const TuteeDetails = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between pb-3 border-b border-gray-100 text-sm text-gray-600">
                     <span>Total Paid</span>
-                    <span className="font-semibold text-green-700">₱{tutee.totalPaid.toLocaleString()}</span>
+                    <span className="font-semibold text-green-700">₱{totalPaid.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="font-medium text-gray-600">Remaining Balance</span>
-                    <span className={`font-bold text-lg ${tutee.totalPaid > 0 && tutee.balance <= 0
+                    <span className={`font-bold text-lg ${isFull
                         ? 'text-green-600'
-                        : tutee.totalPaid > 0 && tutee.balance > 0
+                        : isPartial
                           ? 'text-orange-600'
                           : 'text-gray-500'
                       }`}>
-                      ₱{tutee.balance.toLocaleString()}
+                      ₱{remainingBalance.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-end mt-2">
-                    {tutee.totalPaid > 0 && tutee.balance <= 0 ? (
+                    {isFull ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-100 border border-green-200 px-3 py-1 rounded-full">
-                        <CheckCircle2 size={12} /> Fully Paid
+                        <CheckCircle2 size={12} /> Full Payment
                       </span>
-                    ) : tutee.totalPaid > 0 && tutee.balance > 0 ? (
+                    ) : isPartial ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 bg-orange-100 border border-orange-200 px-3 py-1 rounded-full">
                         <AlertCircle size={12} /> Partial Payment
                       </span>
@@ -591,6 +639,7 @@ export const TuteeDetails = () => {
               payments={payments}
               onDelete={user?.role !== 'parent' ? deletePayment : undefined}
               showTuteeName={false}
+              tuteeRate={tutee.ratePerSession}
             />
           </div>
         </div>
@@ -660,6 +709,21 @@ export const TuteeDetails = () => {
                     </div>
                   </div>
 
+                  {(report.assessmentScores?.length || 0) > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {report.assessmentScores.map((score, index) => (
+                        <div key={`${score.name}-${index}`} className="bg-green-50 border border-green-100 rounded-xl p-3">
+                          <p className="text-xs uppercase font-extrabold text-green-700 tracking-wider">
+                            {score.name || `Assessment ${index + 1}`}
+                          </p>
+                          <p className="text-2xl font-bold text-green-800 mt-1">
+                            {score.score}{score.maxScore ? `/${score.maxScore}` : '%'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
                     <div>
                       <h4 className="text-xs uppercase font-extrabold text-gray-400 tracking-wider">Topics Covered</h4>
@@ -709,7 +773,7 @@ export const TuteeDetails = () => {
                 tuteeId: tutee.id,
                 tuteeName: `${tutee.firstName} ${tutee.surname}`,
                 amount: payAmount,
-                sessionsCovered: 0,
+                sessionsCovered: tutee.ratePerSession > 0 ? parseFloat((payAmount / tutee.ratePerSession).toFixed(2)) : 1,
                 paymentMethod: selectedMethodLabel,
                 paymentDate: new Date().toISOString().split('T')[0],
                 notes: refNotes,
@@ -804,6 +868,56 @@ export const TuteeDetails = () => {
                     <option value="good">Good</option>
                     <option value="needs-improvement">Needs Improvement</option>
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider">
+                    Assessment Scores *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addAssessmentScore}
+                    className="text-xs font-semibold text-green-700 hover:text-green-800"
+                  >
+                    + Add Score
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {reportForm.assessmentScores.map((score, index) => (
+                    <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <input
+                        type="text"
+                        value={score.name}
+                        onChange={(e) => updateAssessmentScore(index, 'name', e.target.value)}
+                        placeholder="Assessment name"
+                        className="sm:col-span-7 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                      />
+                      <div className="sm:col-span-4 flex gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={score.score}
+                          onChange={(e) => updateAssessmentScore(index, 'score', Number(e.target.value))}
+                          placeholder="Score"
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
+                        />
+                        <span className="flex items-center px-3 text-gray-500 border border-gray-200 rounded-xl bg-gray-50">%</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAssessmentScore(index)}
+                        className="sm:col-span-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                        title="Remove assessment score"
+                      >
+                        <X size={18} className="mx-auto" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 

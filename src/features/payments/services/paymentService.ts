@@ -169,12 +169,11 @@ class PaymentService {
         const tutee = await tuteeService.getById(payment.tuteeId, tutorId);
         if (tutee) {
           const newTotalPaid = tutee.totalPaid + payment.amount;
-          const newTotalSessions = tutee.totalSessions + payment.sessionsCovered;
-          const totalDue = newTotalSessions * tutee.ratePerSession;
+          const totalDue = tutee.totalSessions * tutee.ratePerSession;
           const newBalance = totalDue - newTotalPaid;
 
           await tuteeService.update(payment.tuteeId, {
-            totalSessions: newTotalSessions,
+            totalSessions: tutee.totalSessions,
             totalPaid: newTotalPaid,
             balance: newBalance,
             lastPaymentDate: payment.paymentDate,

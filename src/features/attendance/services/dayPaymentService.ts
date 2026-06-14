@@ -12,6 +12,7 @@ import {
   orderBy,
   Timestamp,
   updateDoc,
+  deleteDoc,
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
@@ -218,6 +219,7 @@ class DayPaymentService {
         }),
         totalAmount,
         paymentMethod,
+        month,
         notes,
         createdAt: new Date().toISOString(),
       };
@@ -357,6 +359,7 @@ class DayPaymentService {
         daysPaid: [], // Flat rate doesn't track specific days paid
         totalAmount: amount,
         paymentMethod,
+        month,
         notes,
         createdAt: new Date().toISOString(),
       };
@@ -446,6 +449,41 @@ class DayPaymentService {
     }
   }
 
+  async removeMonthlyRecord(tuteeId: string, month: string): Promise<void> {
+    try {
+      const userId = this.getUserId();
+      const record = await this.getMonthlyRecord(tuteeId, month);
+      const recordId = `${tuteeId}_${month}`;
+      const recordDocRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+
+      const payments = await paymentService.getByTuteeId(tuteeId, userId);
+      const paymentsToDelete = payments.filter((payment: any) => payment.month === month);
+
+      for (const payment of paymentsToDelete) {
+        await paymentService.delete(payment.id);
+      }
+
+      const transactionsRef = this.getTransactionsRef(userId);
+      const transactionsQuery = query(transactionsRef, where('tuteeId', '==', tuteeId));
+      const transactionsSnapshot = await getDocs(transactionsQuery);
+
+      for (const transactionDoc of transactionsSnapshot.docs) {
+        const data = transactionDoc.data();
+        if (data.month === month) {
+          await deleteDoc(transactionDoc.ref);
+        }
+      }
+
+      await deleteDoc(recordDocRef);
+      await this.syncTuteeTotals(tuteeId, userId);
+
+      console.info(`Removed monthly billing record ${recordId}`, record);
+    } catch (error) {
+      console.error('Error removing monthly record:', error);
+      throw error;
+    }
+  }
+
   async syncTuteeTotals(tuteeId: string, tutorId?: string): Promise<void> {
     try {
       const userId = tutorId || this.getUserId();
@@ -455,8 +493,8 @@ class DayPaymentService {
 
       const totalSessions = records.length;
 
-      // Fetch all payments for this tutee
-      const payments = await paymentService.getByTuteeId(tuteeId, userId);
+      // Fetch all verified payments for this tutee
+      const payments = (await paymentService.getByTuteeId(tuteeId, userId)).filter(p => p.status !== 'pending');
       const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
       const totalDue = totalSessions * tutee.ratePerSession;
       const balance = totalDue - totalPaid;

@@ -129,7 +129,7 @@ export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPayment
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Student Selection */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
             <User size={16} />
             Select Student <span className="text-red-500">*</span>
           </label>
@@ -182,7 +182,7 @@ export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPayment
         {/* Payment Amount */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
               <DollarSign size={16} />
               Payment Amount (₱) <span className="text-red-500">*</span>
             </label>
@@ -218,7 +218,7 @@ export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPayment
 
         {/* Payment Date */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
             <Calendar size={16} />
             Payment Date <span className="text-red-500">*</span>
           </label>
@@ -234,7 +234,7 @@ export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPayment
 
         {/* Payment Method */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
             <CreditCard size={16} />
             Payment Method <span className="text-red-500">*</span>
           </label>
@@ -253,7 +253,7 @@ export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPayment
 
         {/* Notes */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <label className="flex text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
             <FileText size={16} />
             Notes (Optional)
           </label>

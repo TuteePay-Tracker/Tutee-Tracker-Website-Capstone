@@ -88,13 +88,16 @@ class ReportService {
 
     // Unpaid balances
     const unpaidBalances = tutees
+      .map(tutee => {
+        const balance = Math.round(((tutee.totalSessions || 0) * (tutee.ratePerSession || 0) - (tutee.totalPaid || 0)) * 100) / 100;
+        return {
+          tuteeId: tutee.id,
+          tuteeName: `${tutee.firstName} ${tutee.surname}`,
+          balance,
+          lastPaymentDate: tutee.lastPaymentDate,
+        };
+      })
       .filter(t => t.balance > 0)
-      .map(t => ({
-        tuteeId: t.id,
-        tuteeName: `${t.firstName} ${t.surname}`,
-        balance: t.balance,
-        lastPaymentDate: t.lastPaymentDate,
-      }))
       .sort((a, b) => b.balance - a.balance);
 
     // Summary stats
@@ -106,7 +109,10 @@ class ReportService {
     const totalEarningsThisMonth = currentMonthPayments.reduce((sum, p) => sum + p.amount, 0);
     const totalSessions = tutees.reduce((sum, t) => sum + t.totalSessions, 0);
     const totalTutees = tutees.length;
-    const totalPendingBalance = tutees.reduce((sum, t) => sum + t.balance, 0);
+    const totalPendingBalance = tutees.reduce((sum, t) => {
+      const balance = Math.round(((t.totalSessions || 0) * (t.ratePerSession || 0) - (t.totalPaid || 0)) * 100) / 100;
+      return sum + Math.max(balance, 0);
+    }, 0);
 
     return {
       monthlyEarnings,

@@ -16,6 +16,11 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
 
+const calculateBalance = (totalSessions: number, ratePerSession: number, totalPaid: number, existingBalance?: number): number => {
+  if (existingBalance !== undefined) return existingBalance;
+  return Math.round(((totalSessions || 0) * (ratePerSession || 0) - (totalPaid || 0)) * 100) / 100;
+};
+
 class TuteeService {
   private getUserId(providedId?: string): string {
     const userId = providedId || auth.currentUser?.uid;
@@ -37,27 +42,35 @@ class TuteeService {
       if (tutorId) {
         const parentUid = auth.currentUser?.uid;
         if (!parentUid) {
-          // Not authenticated; avoid invalid where clause
           console.warn('getAll called for parent without authenticated user; returning empty list');
           return [];
         }
-        // If we are a parent, we must filter by parentId to comply with security rules and avoid permission error
         q = query(collectionRef, where('parentId', '==', parentUid));
       } else {
         q = query(collectionRef, orderBy('createdAt', 'desc'));
       }
       const querySnapshot = await getDocs(q);
       
-      const docs = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        lastPaymentDate: doc.data().lastPaymentDate || null,
-      } as Tutee));
+      const docs = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const totalSessions = data.totalSessions || 0;
+        const totalPaid = data.totalPaid || 0;
+        const ratePerSession = data.ratePerSession || 0;
+
+        return {
+          id: doc.id,
+          ...data,
+          totalSessions,
+          totalPaid,
+          ratePerSession,
+          balance: calculateBalance(totalSessions, ratePerSession, totalPaid, data.balance),
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          lastPaymentDate: data.lastPaymentDate || null,
+        } as Tutee;
+      });
 
       if (tutorId) {
-        // Sort in memory by createdAt descending to avoid composite index requirements
         docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       }
       return docs;
@@ -81,23 +94,32 @@ class TuteeService {
         if (!parentUid) {
           return () => {};
         }
-        // If we are a parent, we filter by parentId to comply with rules
         q = query(collectionRef, where('parentId', '==', parentUid));
       } else {
         q = query(collectionRef, orderBy('createdAt', 'desc'));
       }
 
       return onSnapshot(q, (querySnapshot) => {
-        const docs = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          lastPaymentDate: doc.data().lastPaymentDate || null,
-        } as Tutee));
+        const docs = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          const totalSessions = data.totalSessions || 0;
+          const totalPaid = data.totalPaid || 0;
+          const ratePerSession = data.ratePerSession || 0;
+
+          return {
+            id: doc.id,
+            ...data,
+            totalSessions,
+            totalPaid,
+            ratePerSession,
+            balance: calculateBalance(totalSessions, ratePerSession, totalPaid, data.balance),
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            lastPaymentDate: data.lastPaymentDate || null,
+          } as Tutee;
+        });
 
         if (tutorId) {
-          // Sort in memory to avoid index requirement
           docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         }
         callback(docs);
@@ -117,12 +139,21 @@ class TuteeService {
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
+        const data = docSnap.data();
+        const totalSessions = data.totalSessions || 0;
+        const totalPaid = data.totalPaid || 0;
+        const ratePerSession = data.ratePerSession || 0;
+
         return {
           id: docSnap.id,
-          ...docSnap.data(),
-          createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          updatedAt: docSnap.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          lastPaymentDate: docSnap.data().lastPaymentDate || null,
+          ...data,
+          totalSessions,
+          totalPaid,
+          ratePerSession,
+          balance: calculateBalance(totalSessions, ratePerSession, totalPaid, data.balance),
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          lastPaymentDate: data.lastPaymentDate || null,
         } as Tutee;
       }
       return undefined;
@@ -147,7 +178,7 @@ class TuteeService {
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
         balance: tutee.balance || 0,
-        lastPaymentDate: tutee.lastPaymentDate || undefined,
+        lastPaymentDate: tutee.lastPaymentDate ?? null,
         createdAt: Timestamp.fromDate(now),
         updatedAt: Timestamp.fromDate(now),
       };
@@ -160,7 +191,7 @@ class TuteeService {
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
         balance: tutee.balance || 0,
-        lastPaymentDate: tutee.lastPaymentDate || undefined,
+        lastPaymentDate: tutee.lastPaymentDate,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
@@ -175,7 +206,6 @@ class TuteeService {
       const userId = this.getUserId(tutorId);
       const docRef = doc(db, 'users', userId, 'tutees', id);
 
-      // Filter out undefined values to avoid Firestore errors
       const cleanedUpdates = Object.fromEntries(
         Object.entries(updates).filter(([_, value]) => value !== undefined)
       );
@@ -185,7 +215,6 @@ class TuteeService {
         updatedAt: Timestamp.fromDate(new Date()),
       };
 
-      // Remove id, createdAt from updates if they exist
       delete updateData.id;
       delete updateData.createdAt;
 

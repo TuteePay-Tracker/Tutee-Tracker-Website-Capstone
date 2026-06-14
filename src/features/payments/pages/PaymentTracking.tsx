@@ -170,7 +170,7 @@ export const PaymentTracking = () => {
             </select>
           </div>
           <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
+            <label className="flex text-xs font-medium text-gray-500 mb-1 items-center gap-1">
               <BookOpen size={12} />
               Filter by Subject
             </label>

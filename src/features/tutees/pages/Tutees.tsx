@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
+import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck } from 'lucide-react';
@@ -28,6 +29,7 @@ interface CreatedParentCredentials {
 export const Tutees = () => {
   const { tutees, addTutee, updateTutee, deleteTutee, isLoading } = useTutees();
   const { subjects } = useSubjects();
+  const { payments } = usePayments();
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
@@ -342,7 +344,15 @@ export const Tutees = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAndSortedTutees.map((tutee) => (
+          {filteredAndSortedTutees.map((tutee) => {
+            const tuteePayments = payments.filter(p => p.tuteeId === tutee.id);
+          const verifiedTotalPaid = tuteePayments
+            .filter(p => p.status === 'verified' || !p.status)
+            .reduce((sum, p) => sum + (p.amount || 0), 0);
+          const totalBilled = (tutee.totalPaid || 0) + (tutee.balance || 0);
+          const calculatedBalance = Math.max(0, totalBilled - verifiedTotalPaid);
+
+          return (
             <div key={tutee.id} className="bg-white rounded-lg border p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -400,7 +410,8 @@ export const Tutees = () => {
                 View Details
               </Link>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
     </div>
@@ -753,7 +764,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
 
         {!tutee && (
           <div className="border rounded-lg p-4 bg-green-50 border-green-200">
-            <label className="block text-sm font-medium mb-3 flex items-center gap-2">
+            <label className="flex text-sm font-medium mb-3 items-center gap-2">
               <UserPlus size={18} className="text-green-700" />
               Parent Information
             </label>
@@ -919,7 +930,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
 
         {tutee && (
           <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-            <label className="block text-sm font-medium mb-3 flex items-center gap-2">
+            <label className="flex text-sm font-medium mb-3 items-center gap-2">
               <Users size={18} className="text-blue-700" />
               Link Parent Account (Optional)
             </label>

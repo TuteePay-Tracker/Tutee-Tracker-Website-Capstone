@@ -11,7 +11,7 @@ export const calculateBalance = (totalDue: number, totalPaid: number): number =>
 
 export const calculateTuteeBalance = (tutee: Tutee): number => {
   const totalDue = calculateTotalDue(tutee.totalSessions, tutee.ratePerSession);
-  return calculateBalance(totalDue, tutee.totalPaid);
+  return Math.round(calculateBalance(totalDue, tutee.totalPaid) * 100) / 100;
 };
 
 export const updateTuteeAfterPayment = (
@@ -19,13 +19,12 @@ export const updateTuteeAfterPayment = (
   payment: Payment
 ): Tutee => {
   const newTotalPaid = tutee.totalPaid + payment.amount;
-  const newTotalSessions = tutee.totalSessions + payment.sessionsCovered;
-  const totalDue = calculateTotalDue(newTotalSessions, tutee.ratePerSession);
+  const totalDue = calculateTotalDue(tutee.totalSessions, tutee.ratePerSession);
   const newBalance = calculateBalance(totalDue, newTotalPaid);
 
   return {
     ...tutee,
-    totalSessions: newTotalSessions,
+    totalSessions: tutee.totalSessions,
     totalPaid: newTotalPaid,
     balance: newBalance,
     lastPaymentDate: payment.paymentDate,
@@ -42,5 +41,5 @@ export const getTotalSessions = (tutees: Tutee[]): number => {
 };
 
 export const getTotalPendingBalance = (tutees: Tutee[]): number => {
-  return tutees.reduce((sum, tutee) => sum + tutee.balance, 0);
+  return tutees.reduce((sum, tutee) => sum + Math.max(calculateTuteeBalance(tutee), 0), 0);
 };

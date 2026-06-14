@@ -1,3 +1,9 @@
+export interface AssessmentScore {
+  name: string;
+  score: number;
+  maxScore?: number;
+}
+
 export interface ProgressReport {
   id: string;
   tuteeId: string;
@@ -7,6 +13,7 @@ export interface ProgressReport {
   topicsCovered: string;
   performance: 'excellent' | 'very-good' | 'good' | 'needs-improvement';
   behavior: 'excellent' | 'very-good' | 'good' | 'needs-improvement';
+  assessmentScores: AssessmentScore[];
   notes: string;
   recommendations?: string;
   createdAt: string;
@@ -18,6 +25,7 @@ export interface ProgressReportFormData {
   topicsCovered: string;
   performance: 'excellent' | 'very-good' | 'good' | 'needs-improvement';
   behavior: 'excellent' | 'very-good' | 'good' | 'needs-improvement';
+  assessmentScores: AssessmentScore[];
   notes: string;
   recommendations?: string;
 }
