@@ -56,4 +56,5 @@ export interface ReceiptData {
   totalAmount: number;
   paymentMethod: string;
   notes?: string;
+  coverageType?: 'full' | 'partial';
 }

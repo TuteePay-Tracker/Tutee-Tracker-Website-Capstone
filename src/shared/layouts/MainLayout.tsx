@@ -111,6 +111,34 @@ export const MainLayout = () => {
     });
   };
 
+  // Collapsible state for Communications
+  const isCommPath = 
+    location.pathname.startsWith('/chat') || 
+    location.pathname.startsWith('/announcements');
+
+  const [commMenuOpen, setCommMenuOpen] = useState(() => {
+    const saved = localStorage.getItem('commMenuOpen');
+    if (saved !== null) {
+      return saved === 'true';
+    }
+    return isCommPath;
+  });
+
+  useEffect(() => {
+    if (isCommPath) {
+      setCommMenuOpen(true);
+      localStorage.setItem('commMenuOpen', 'true');
+    }
+  }, [location.pathname, isCommPath]);
+
+  const toggleCommMenu = () => {
+    setCommMenuOpen(prev => {
+      const next = !prev;
+      localStorage.setItem('commMenuOpen', String(next));
+      return next;
+    });
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -149,7 +177,7 @@ export const MainLayout = () => {
               <Link
                 to="/"
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-                  isActive('/')
+                  isActive('/') && location.pathname === '/'
                     ? 'bg-green-55 text-green-700 font-semibold'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
@@ -157,24 +185,57 @@ export const MainLayout = () => {
                 <Users size={20} />
                 <span>My Children</span>
               </Link>
-              <Link
-                to="/chat"
-                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-                  isActive('/chat')
-                    ? 'bg-green-55 text-green-700 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <MessageSquare size={20} />
-                  <span>Chat</span>
-                </div>
-                {totalUnreadCount > 0 && (
-                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm mr-1">
-                    {totalUnreadCount}
-                  </span>
+
+              {/* Communications Accordion */}
+              <div className="space-y-1">
+                <button
+                  onClick={toggleCommMenu}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 ${
+                    isCommPath ? 'text-gray-900 font-semibold' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageSquare size={20} className={isCommPath ? 'text-green-700' : ''} />
+                    <span>Communications</span>
+                  </div>
+                  {commMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+
+                {commMenuOpen && (
+                  <div className="pl-6 space-y-1 transition-all duration-300">
+                    <Link
+                      to="/announcements"
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/announcements')
+                          ? 'bg-green-55 text-green-700 font-bold'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>Announcements</span>
+                    </Link>
+                    <Link
+                      to="/chat"
+                      className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/chat')
+                          ? 'bg-green-55 text-green-700 font-bold'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        <span>Chat</span>
+                      </div>
+                      {totalUnreadCount > 0 && (
+                        <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm mr-1">
+                          {totalUnreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
                 )}
-              </Link>
+              </div>
+
               <Link
                 to="/settings"
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
@@ -281,26 +342,56 @@ export const MainLayout = () => {
                 <span>Reports</span>
               </Link>
 
-              {/* Chat */}
-              <Link
-                to="/chat"
-                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-                  isActive('/chat')
-                    ? 'bg-green-50 text-green-700 font-bold border-l-4 border-green-700 pl-3'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <MessageSquare size={20} />
-                  <span>Chat</span>
-                </div>
-                {totalUnreadCount > 0 && (
-                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm mr-1">
-                    {totalUnreadCount}
-                  </span>
-                )}
-              </Link>
+              {/* Communications Accordion */}
+              <div className="space-y-1">
+                <button
+                  onClick={toggleCommMenu}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 ${
+                    isCommPath ? 'text-gray-900 font-semibold' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageSquare size={20} className={isCommPath ? 'text-green-700' : ''} />
+                    <span>Communications</span>
+                  </div>
+                  {commMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
 
+                {commMenuOpen && (
+                  <div className="pl-6 space-y-1 transition-all duration-300">
+                    <Link
+                      to="/announcements"
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/announcements')
+                          ? 'bg-green-50 text-green-700 font-bold'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>Announcements</span>
+                    </Link>
+                    <Link
+                      to="/chat"
+                      className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/chat')
+                          ? 'bg-green-50 text-green-700 font-bold'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        <span>Chat</span>
+                      </div>
+                      {totalUnreadCount > 0 && (
+                        <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm mr-1">
+                          {totalUnreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
+                )}
+              </div>
+ 
               {/* Settings */}
               <Link
                 to="/settings"
@@ -387,39 +478,73 @@ export const MainLayout = () => {
                 to="/"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-                  isActive('/')
-                    ? 'bg-green-50 text-green-700 font-bold'
+                  isActive('/') && location.pathname === '/'
+                    ? 'bg-green-55 text-green-700 font-semibold'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`}
               >
                 <Users size={20} />
                 <span>My Children</span>
               </Link>
-              <Link
-                to="/chat"
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-                  isActive('/chat')
-                    ? 'bg-green-50 text-green-700 font-bold'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <MessageSquare size={20} />
-                  <span>Chat</span>
-                </div>
-                {totalUnreadCount > 0 && (
-                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
-                    {totalUnreadCount}
-                  </span>
+
+              {/* Mobile Communications Accordion */}
+              <div className="space-y-1">
+                <button
+                  onClick={toggleCommMenu}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm text-gray-600 hover:bg-gray-50 ${
+                    isCommPath ? 'text-gray-900 font-semibold' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageSquare size={20} className={isCommPath ? 'text-green-700' : ''} />
+                    <span>Communications</span>
+                  </div>
+                  {commMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+
+                {commMenuOpen && (
+                  <div className="pl-6 space-y-1">
+                    <Link
+                      to="/announcements"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/announcements')
+                          ? 'bg-green-55 text-green-700 font-bold'
+                          : 'text-gray-550 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>Announcements</span>
+                    </Link>
+                    <Link
+                      to="/chat"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/chat')
+                          ? 'bg-green-55 text-green-700 font-bold'
+                          : 'text-gray-555 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        <span>Chat</span>
+                      </div>
+                      {totalUnreadCount > 0 && (
+                        <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                          {totalUnreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
                 )}
-              </Link>
+              </div>
+
               <Link
                 to="/settings"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
                   isActive('/settings')
-                    ? 'bg-green-50 text-green-700 font-bold'
+                    ? 'bg-green-55 text-green-700 font-semibold'
                     : 'text-gray-600 hover:bg-gray-55'
                 }`}
               >
@@ -524,25 +649,57 @@ export const MainLayout = () => {
                 <span>Reports</span>
               </Link>
 
-              <Link
-                to="/chat"
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-                  isActive('/chat')
-                    ? 'bg-green-50 text-green-700 font-bold'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <MessageSquare size={20} />
-                  <span>Chat</span>
-                </div>
-                {totalUnreadCount > 0 && (
-                  <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
-                    {totalUnreadCount}
-                  </span>
+              {/* Mobile Communications Accordion */}
+              <div className="space-y-1">
+                <button
+                  onClick={toggleCommMenu}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all font-medium text-sm text-gray-600 hover:bg-gray-50 ${
+                    isCommPath ? 'text-gray-900 font-semibold' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageSquare size={20} className={isCommPath ? 'text-green-700' : ''} />
+                    <span>Communications</span>
+                  </div>
+                  {commMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+
+                {commMenuOpen && (
+                  <div className="pl-6 space-y-1">
+                    <Link
+                      to="/announcements"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/announcements')
+                          ? 'bg-green-55 text-green-700 font-bold'
+                          : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>Announcements</span>
+                    </Link>
+                    <Link
+                      to="/chat"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/chat')
+                          ? 'bg-green-55 text-green-700 font-bold'
+                          : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        <span>Chat</span>
+                      </div>
+                      {totalUnreadCount > 0 && (
+                        <span className="bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                          {totalUnreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
                 )}
-              </Link>
+              </div>
 
               <Link
                 to="/settings"
@@ -550,7 +707,7 @@ export const MainLayout = () => {
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
                   isActive('/settings')
                     ? 'bg-green-50 text-green-700 font-bold'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    : 'text-gray-600 hover:bg-gray-55'
                 }`}
               >
                 <Settings size={20} />

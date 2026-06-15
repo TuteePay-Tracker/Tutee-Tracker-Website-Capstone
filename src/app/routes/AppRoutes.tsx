@@ -11,6 +11,7 @@ import { Reports } from '@/features/reports/pages/Reports';
 import { Settings } from '@/features/settings/pages/Settings';
 import { Schedule } from '@/features/schedule/pages/Schedule';
 import { Chat } from '@/features/chat/pages/Chat';
+import { Announcements } from '@/features/announcements/pages/Announcements';
 import { Login } from '@/features/auth/pages/Login';
 import { Signup } from '@/features/auth/pages/Signup';
 import { ForgotPassword } from '@/features/auth/pages/ForgotPassword';
@@ -158,6 +159,10 @@ export const router = createBrowserRouter([
       {
         path: 'chat',
         element: <Chat />,
+      },
+      {
+        path: 'announcements',
+        element: <Announcements />,
       },
     ],
   },

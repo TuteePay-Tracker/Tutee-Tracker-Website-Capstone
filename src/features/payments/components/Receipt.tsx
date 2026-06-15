@@ -132,10 +132,22 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
               </div>
             </div>
 
-            {/* Payment Method */}
-            <div className="mb-6">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Method</p>
-              <p className="text-sm text-gray-900">{receipt.paymentMethod}</p>
+            {/* Payment Info Grid */}
+            <div className="grid grid-cols-2 gap-8 mb-6">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Method</p>
+                <p className="text-sm text-gray-900 font-semibold">{receipt.paymentMethod}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Type</p>
+                <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg border ${
+                  receipt.coverageType === 'full'
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : 'bg-orange-50 border-orange-200 text-orange-700'
+                }`}>
+                  {receipt.coverageType === 'full' ? 'Full Payment' : 'Partial Payment'}
+                </span>
+              </div>
             </div>
 
             {/* Notes */}

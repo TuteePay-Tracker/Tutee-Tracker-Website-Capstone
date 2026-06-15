@@ -13,6 +13,8 @@ export interface Payment {
   month?: string;
   status?: 'pending' | 'verified' | 'rejected';
   proofUrl?: string;
+  coverageType?: 'full' | 'partial';
+  rejectionReason?: string;
 }
 
 export interface PaymentFormData {

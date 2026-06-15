@@ -39,7 +39,9 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
     const amountDue = coverage > 0 && tuteeRate
       ? coverage * tuteeRate
       : payment.amount;
-    const receiptStatus: PaymentStatus = payment.amount >= amountDue ? 'paid' : 'partial';
+    
+    const coverageType = payment.coverageType || (payment.amount >= amountDue ? 'full' : 'partial');
+    const receiptStatus: PaymentStatus = coverageType === 'full' ? 'paid' : 'partial';
 
     // Otherwise show the official generated receipt
     const receiptData: ReceiptData = {
@@ -56,6 +58,7 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
       totalAmount: payment.amount,
       paymentMethod: payment.paymentMethod,
       notes: payment.notes,
+      coverageType,
     };
     setSelectedReceipt(receiptData);
   };
@@ -120,12 +123,29 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
               </span>
             )}
             {payment.status === 'rejected' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-bold rounded-full border border-red-200">
-                <XCircle size={10} /> Rejected
-              </span>
+              <div className="flex flex-col gap-1 items-start">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-bold rounded-full border border-red-200 animate-none">
+                  <XCircle size={10} /> Rejected
+                </span>
+                <span className="text-xs text-red-600 italic font-semibold">
+                  Reason: {payment.rejectionReason || payment.notes?.split(' | Rejected: ')[1] || 'No reason specified'}
+                </span>
+              </div>
             )}
             {(payment.status === 'verified' || !payment.status) && (
               (() => {
+                if (payment.coverageType) {
+                  return payment.coverageType === 'full' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200 animate-none">
+                      <CheckCircle2 size={10} /> Full Payment
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-bold rounded-full border border-orange-200 animate-none">
+                      <AlertCircle size={10} /> Partial Payment
+                    </span>
+                  );
+                }
+
                 const coverage = payment.sessionsCovered > 0
                   ? payment.sessionsCovered
                   : (tuteeRate && tuteeRate > 0 ? payment.amount / tuteeRate : 0);
@@ -133,11 +153,11 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
                 if (coverage === 0 && payment.amount > 0) return null;
 
                 return coverage >= 0.99 ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200 animate-none">
                     <CheckCircle2 size={10} /> Full Payment
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-bold rounded-full border border-orange-200">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-bold rounded-full border border-orange-200 animate-none">
                     <AlertCircle size={10} /> Partial Payment
                   </span>
                 );

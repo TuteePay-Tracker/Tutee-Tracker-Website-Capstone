@@ -586,17 +586,19 @@ class DayPaymentService {
     }
   }
 
-  async verifyPendingPayment(payment: Payment): Promise<void> {
+  async verifyPendingPayment(payment: Payment, coverageType?: 'full' | 'partial'): Promise<void> {
     try {
       const userId = this.getUserId();
       const recordId = `${payment.tuteeId}_${payment.month}`;
       const recordDocRef = doc(db, 'users', userId, 'paymentRecords', recordId);
       const recordSnap = await getDoc(recordDocRef);
 
+      let totalDue = 300;
       if (recordSnap.exists()) {
         const recordData = recordSnap.data();
+        totalDue = recordData.totalDue || 300;
         const totalPaid = (recordData.totalPaid || 0) + payment.amount;
-        const totalBalance = (recordData.totalDue || 0) - totalPaid;
+        const totalBalance = totalDue - totalPaid;
 
         await updateDoc(recordDocRef, {
           totalPaid,
@@ -609,6 +611,7 @@ class DayPaymentService {
       const paymentDocRef = doc(db, 'users', userId, 'payments', payment.id);
       await updateDoc(paymentDocRef, {
         status: 'verified',
+        coverageType: coverageType || (payment.amount >= totalDue ? 'full' : 'partial'),
         updatedAt: Timestamp.fromDate(new Date()),
       });
 
@@ -637,6 +640,7 @@ class DayPaymentService {
       await updateDoc(paymentDocRef, {
         status: 'rejected',
         notes: newNotes,
+        rejectionReason: rejectionReason || 'No reason specified',
         updatedAt: Timestamp.fromDate(new Date()),
       });
     } catch (error) {

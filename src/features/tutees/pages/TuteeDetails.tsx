@@ -292,6 +292,12 @@ export const TuteeDetails = () => {
   const isPartial = hasOutstandingBalance && totalPaid > 0;
   const backLink = user?.role === 'parent' ? '/' : '/tutees';
 
+  const currentMonthStr = format(new Date(), 'yyyy-MM');
+  const currentMonthRecord = attendanceRecords.find(r => r.month === currentMonthStr);
+  const isCurrentMonthFullyPaid = currentMonthRecord 
+    ? currentMonthRecord.totalBalance <= 0 
+    : false;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -557,7 +563,17 @@ export const TuteeDetails = () => {
         <div className="space-y-6">
           {user?.role === 'parent' && (
             <div className="bg-white rounded-2xl border p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-950 mb-4">Unpaid Balances</h2>
+              <h2 className="text-lg font-bold text-gray-955 mb-4">Unpaid Balances</h2>
+              {isCurrentMonthFullyPaid && (
+                <div className="flex items-center gap-3 bg-green-50 border-2 border-green-200 rounded-xl p-4 mb-6 shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={18} className="text-green-700 animate-none" />
+                  </div>
+                  <p className="text-green-800 font-bold text-sm">
+                    You’re fully paid this month. You can proceed to the next payment.
+                  </p>
+                </div>
+              )}
               {attendanceRecords.filter(r => r.totalBalance > 0).length === 0 ? (
                 <div className="bg-green-50/50 border border-green-100 rounded-xl p-4 text-center">
                   <p className="text-green-800 font-semibold text-sm">All invoices are settled! No unpaid balances.</p>

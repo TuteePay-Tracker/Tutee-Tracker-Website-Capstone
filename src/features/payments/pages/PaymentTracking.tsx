@@ -19,7 +19,20 @@ export const PaymentTracking = () => {
 
   const [reviewingPayment, setReviewingPayment] = useState<any>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [coverageType, setCoverageType] = useState<'full' | 'partial'>('full');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (reviewingPayment) {
+      const tutee = tutees.find(t => t.id === reviewingPayment.tuteeId);
+      const expectedRate = tutee ? tutee.ratePerSession : 0;
+      if (reviewingPayment.amount >= expectedRate) {
+        setCoverageType('full');
+      } else {
+        setCoverageType('partial');
+      }
+    }
+  }, [reviewingPayment, tutees]);
 
   const pendingPayments = payments.filter(p => p.status === 'pending');
   const isLoading = loadingTutees || loadingPayments;
@@ -54,7 +67,7 @@ export const PaymentTracking = () => {
   const handleApprove = async (payment: any) => {
     setIsProcessing(true);
     try {
-      await dayPaymentService.verifyPendingPayment(payment);
+      await dayPaymentService.verifyPendingPayment(payment, coverageType);
       toast.success('Payment approved and recorded successfully!');
       setReviewingPayment(null);
       refreshPayments();
@@ -349,13 +362,44 @@ export const PaymentTracking = () => {
                 />
               </div>
 
+              {/* Confirm Coverage Type input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider">
+                  Confirm Payment Type
+                </label>
+                <div className="flex gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="coverageType"
+                      value="full"
+                      checked={coverageType === 'full'}
+                      onChange={() => setCoverageType('full')}
+                      className="text-green-700 focus:ring-green-500 w-4 h-4 cursor-pointer"
+                    />
+                    Full Payment
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="coverageType"
+                      value="partial"
+                      checked={coverageType === 'partial'}
+                      onChange={() => setCoverageType('partial')}
+                      className="text-green-700 focus:ring-green-500 w-4 h-4 cursor-pointer"
+                    />
+                    Partial Payment
+                  </label>
+                </div>
+              </div>
+
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4 border-t">
                 <button
                   type="button"
                   onClick={() => handleReject(reviewingPayment.id)}
                   disabled={isProcessing}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-red-650 hover:bg-red-750 text-white py-3 rounded-xl font-bold text-sm transition-colors text-center shadow-md"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm transition-colors text-center shadow-md"
                 >
                   <XCircle size={16} /> Reject Payment
                 </button>
