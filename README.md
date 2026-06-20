@@ -28,13 +28,11 @@ Built with a robust, feature-first React architecture and real-time database syn
 ---
 
 ## ⚡ Quick Start & Installation
-Run Development Server
+```
+```bash
+npm install
+```
 ```bash
 npm run dev
 ```
 Open `http://localhost:5173` in your browser to view the application.
-
-### 5. Build for Production
-```bash
-npm run build
-``
