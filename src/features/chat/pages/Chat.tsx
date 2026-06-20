@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 export const Chat = () => {
   const { user } = useAuth();
@@ -67,7 +68,7 @@ export const Chat = () => {
 
     const loadTutor = async () => {
       try {
-        const tutorSnap = await getDoc(doc(db, 'users', user.createdByTutorId));
+        const tutorSnap = await getDoc(doc(db, 'users', user.createdByTutorId as string));
         if (tutorSnap.exists()) {
           setTutorName(tutorSnap.data().name || 'Tutor');
         }
@@ -173,6 +174,15 @@ export const Chat = () => {
       );
       // Scroll to bottom
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+      await logActivity(
+        user.id,
+        user.name,
+        user.role,
+        'Message Sent',
+        'Messaging',
+        `Sent a message in conversation for student ${activeThread.tuteeName}`
+      );
     } catch (error) {
       toast.error('Failed to send message');
       setInputText(textToSend); // Restore text on failure
@@ -478,9 +488,13 @@ export const Chat = () => {
                             {isMe && (
                               <span className="flex items-center">
                                 {msg.status === 'seen' ? (
-                                  <CheckCheck size={12} className="text-blue-500" title="Seen" />
+                                  <span title="Seen">
+                                    <CheckCheck size={12} className="text-blue-500" />
+                                  </span>
                                 ) : (
-                                  <Check size={12} title="Sent" />
+                                  <span title="Sent">
+                                    <Check size={12} />
+                                  </span>
                                 )}
                               </span>
                             )}

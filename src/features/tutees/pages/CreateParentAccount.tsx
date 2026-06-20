@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Users, UserPlus, Copy, CheckCircle, X, Search, Printer, ShieldCheck } from 'lucide-react';
+import { Users, UserPlus, Copy, CheckCircle, X, Search, Printer, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, collection, getDocs, query, where, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs, query, where, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, firebaseConfig } from '@/shared/lib/firebase/config';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 interface CreatedAccount {
   name: string;
@@ -36,6 +37,43 @@ export const CreateParentAccount = () => {
   const [modalAccount, setModalAccount] = useState<CreatedAccount | null>(null);
   const [existingParents, setExistingParents] = useState<any[]>([]);
   const [loadingParents, setLoadingParents] = useState(true);
+
+  const handleDeleteParent = async (parentId: string, parentName: string) => {
+    if (!window.confirm(`Are you sure you want to delete parent account "${parentName}"? This will unlink all their children.`)) return;
+
+    try {
+      // 1. Delete parent Firestore doc
+      await deleteDoc(doc(db, 'users', parentId));
+
+      // 2. Unlink tutees from this parent
+      if (user?.id) {
+        const linkedTutees = tutees.filter(t => t.parentId === parentId);
+        for (const student of linkedTutees) {
+          await updateDoc(doc(db, 'users', user.id, 'tutees', student.id), {
+            parentId: null
+          });
+        }
+      }
+
+      // 3. Log "Parent Account Deleted"
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Parent Account Deleted',
+          'Parent Management',
+          `Deleted parent account ${parentName}`
+        );
+      }
+
+      toast.success('Parent account deleted successfully');
+      await loadParents();
+    } catch (error) {
+      console.error('Error deleting parent:', error);
+      toast.error('Failed to delete parent account');
+    }
+  };
 
   useEffect(() => {
     loadParents();
@@ -109,6 +147,17 @@ export const CreateParentAccount = () => {
         createdAt: new Date().toISOString(),
         createdByTutorId: user?.id || '',
       });
+
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Parent Account Created',
+          'Parent Management',
+          `Created parent account ${parentName}`
+        );
+      }
 
       // Link each student to this parent
       if (!user?.id) throw new Error('Tutor not authenticated');
@@ -330,6 +379,14 @@ export const CreateParentAccount = () => {
                       Pending login
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteParent(parent.id, parent.name)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Delete Parent Account"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               ))}
             </div>

@@ -377,5 +377,13 @@ service cloud.firestore {
         );
       }
     }
+
+    // AUDIT LOGS
+    match /audit_logs/{logId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tutor';
+      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tutor' && resource.data.tutorId == request.auth.uid;
+      allow update: if false;
+    }
   }
 }

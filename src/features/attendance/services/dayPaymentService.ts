@@ -18,6 +18,7 @@ import {
 import { db, auth } from '@/shared/lib/firebase/config';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
+import { logActivity } from '@/shared/utils/auditLogger';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
 
 class DayPaymentService {
@@ -339,17 +340,36 @@ class DayPaymentService {
         lastUpdated: Timestamp.fromDate(new Date()),
       });
 
+      // Determine coverageType: full if amount >= totalDue, partial otherwise
+      const resolvedCoverageType: 'full' | 'partial' = amount >= record.totalDue ? 'full' : 'partial';
+
       // Create transaction record in the central 'payments' collection
       await paymentService.create({
         tuteeId,
         tuteeName: `${tutee.firstName} ${tutee.surname}`,
         amount,
-        sessionsCovered: 0, // monthly record itself acts as 1 session
+        sessionsCovered: 1,
         paymentMethod: paymentMethod as any,
         paymentDate: new Date().toISOString().split('T')[0],
         notes: notes || `Payment for ${month}`,
         month,
+        coverageType: resolvedCoverageType,
       } as any);
+
+      // Log audit activity
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const tutorSnap = await getDoc(doc(db, 'users', currentUser.uid));
+        const tutorName = tutorSnap.exists() ? (tutorSnap.data().name || 'Tutor') : 'Tutor';
+        await logActivity(
+          currentUser.uid,
+          tutorName,
+          'tutor',
+          'Payment Recorded',
+          'Billing',
+          `Recorded ${paymentMethod} payment of ₱${amount} for student ${tutee.firstName} ${tutee.surname} (${month}) — ${resolvedCoverageType} payment`
+        );
+      }
 
       // Create transaction record in the subcollection for backward compatibility
       const transaction: Omit<PaymentTransaction, 'id'> = {
@@ -539,12 +559,28 @@ class DayPaymentService {
             tuteeId,
             tuteeName: `${tutee.firstName} ${tutee.surname}`,
             amount: remainingBalance,
-            sessionsCovered: 0, // monthly record itself acts as 1 session
+            sessionsCovered: 1,
             paymentMethod: 'Cash',
             paymentDate: new Date().toISOString().split('T')[0],
             notes: `Marked as Paid via monthly checkbox for ${month}`,
-            month, // link to this month
+            month,
+            coverageType: 'full',
           } as any);
+
+          // Log audit activity for cash mark-as-paid
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            const tutorSnap = await getDoc(doc(db, 'users', currentUser.uid));
+            const tutorName = tutorSnap.exists() ? (tutorSnap.data().name || 'Tutor') : 'Tutor';
+            await logActivity(
+              currentUser.uid,
+              tutorName,
+              'tutor',
+              'Payment Recorded',
+              'Billing',
+              `Marked Cash payment of ₱${remainingBalance} as Full Payment for student ${tutee.firstName} ${tutee.surname} (${month})`
+            );
+          }
         }
 
         // Update monthly record to show fully paid

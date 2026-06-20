@@ -4,6 +4,7 @@ import { Announcement, AnnouncementFormData } from '@/features/announcements/typ
 import { announcementService } from '@/features/announcements/services/announcementService';
 import { Megaphone, Plus, Pencil, Trash2, X, Bell } from 'lucide-react';
 import { toast } from 'sonner';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 export const Announcements = () => {
   const { user } = useAuth();
@@ -32,9 +33,25 @@ export const Announcements = () => {
       if (editingAnnounce) {
         await announcementService.update(user.id, editingAnnounce.id, form);
         toast.success('Announcement updated');
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Announcement Edited',
+          'Announcements',
+          `Updated announcement "${form.title}"`
+        );
       } else {
         await announcementService.create(user.id, form);
         toast.success('Announcement posted to parents');
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Announcement Posted',
+          'Announcements',
+          `Posted announcement "${form.title}"`
+        );
       }
       setIsModalOpen(false);
       setEditingAnnounce(null);
@@ -45,10 +62,21 @@ export const Announcements = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!user?.id || user.role !== 'tutor' || !window.confirm('Delete this announcement?')) return;
+    if (!user?.id || user.role !== 'tutor') return;
+    const announceToDelete = announcements.find(a => a.id === id);
+    const announceTitle = announceToDelete ? announceToDelete.title : 'Announcement';
+    if (!window.confirm('Delete this announcement?')) return;
     try {
       await announcementService.delete(user.id, id);
       toast.success('Announcement removed');
+      await logActivity(
+        user.id,
+        user.name,
+        user.role,
+        'Announcement Deleted',
+        'Announcements',
+        `Deleted announcement "${announceTitle}"`
+      );
     } catch (error) {
       toast.error('Failed to delete');
     }

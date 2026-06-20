@@ -6,6 +6,7 @@ import { updatePassword } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/shared/lib/firebase/config';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 export const ChangePassword = () => {
   const [newPassword, setNewPassword] = useState('');
@@ -35,6 +36,17 @@ export const ChangePassword = () => {
       await updateDoc(doc(db, 'users', firebaseUser.uid), {
         mustChangePassword: false,
       });
+
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Password Change',
+          'Authentication',
+          `Changed password for account ${user.name}`
+        );
+      }
 
       await refreshUser();
       toast.success('Password changed successfully! Welcome to TuteePay Tracker.');

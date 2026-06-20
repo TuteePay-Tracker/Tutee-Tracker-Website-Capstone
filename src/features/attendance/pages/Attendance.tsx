@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { logActivity } from '@/shared/utils/auditLogger';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { PaymentRecord } from '@/features/attendance/types/dayPayment';
 import { Tutee } from '@/features/tutees/types/tutee';
@@ -41,6 +43,7 @@ const fromAttendance = (current: AttendanceStatus): string => {
 
 export const Attendance = () => {
   const { tutees, isLoading } = useTutees();
+  const { user } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedTuteeId, setSelectedTuteeId] = useState<string>('');
   const [records, setRecords] = useState<Record<string, PaymentRecord | null>>({});
@@ -130,6 +133,19 @@ export const Attendance = () => {
       await dayPaymentService.toggleDayStatus(tutee.id, monthKey, date);
       const label = currentStatus === 'none' ? 'Marked Present ✓' : currentStatus === 'present' ? 'Marked Absent ✗' : 'Status cleared';
       toast.success(label);
+
+      if (user) {
+        const isNew = currentStatus === 'none';
+        const newStatusStr = currentStatus === 'none' ? 'Present' : currentStatus === 'present' ? 'Absent' : 'None';
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          isNew ? 'Attendance Recorded' : 'Attendance Updated',
+          'Attendance',
+          `Marked student ${tutee.firstName} ${tutee.surname} on ${date} as ${newStatusStr}`
+        );
+      }
     } catch (error) {
       console.error('Error updating attendance:', error);
       toast.error('Failed to update attendance');

@@ -4,6 +4,8 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { format } from 'date-fns';
 import html2canvas from 'html2canvas';
 import { Download, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 interface ReceiptProps {
   receipt: ReceiptData;
@@ -12,6 +14,7 @@ interface ReceiptProps {
 
 export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
   const receiptRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   const downloadReceipt = async () => {
     if (!receiptRef.current) return;
@@ -27,6 +30,17 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
       link.download = `receipt_${receipt.receiptNumber}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
+
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Receipt Generated',
+          'Billing',
+          `Downloaded receipt #${receipt.receiptNumber} of ₱${receipt.totalAmount} for student ${receipt.tuteeName}`
+        );
+      }
     } catch (error) {
       console.error('Error generating receipt:', error);
     }

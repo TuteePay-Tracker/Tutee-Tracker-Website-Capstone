@@ -3,6 +3,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/shared/lib/firebase/config';
 import { registerUser, loginUser, logoutUser, resetPassword as resetUserPassword } from '@/shared/lib/firebase/auth';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 interface User {
   id: string;
@@ -104,7 +105,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setIsLoading(true);
     try {
       const firebaseUser = await loginUser(email, password);
-      // User state will be updated by onAuthStateChanged listener
+      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        await logActivity(
+          firebaseUser.uid,
+          userData.name || 'User',
+          userData.role || 'tutor',
+          'Login',
+          'Authentication',
+          `User ${userData.name || firebaseUser.email} logged in`
+        );
+      }
     } catch (error: any) {
       setIsLoading(false);
       // Re-throw error with user-friendly message
@@ -194,6 +206,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
+    if (user) {
+      await logActivity(
+        user.id,
+        user.name,
+        user.role,
+        'Logout',
+        'Authentication',
+        `User ${user.name} logged out`
+      );
+    }
     await logoutUser();
     setUser(null);
   };

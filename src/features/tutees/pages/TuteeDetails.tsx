@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { usePayments } from '@/features/payments/hooks/usePayments';
@@ -8,10 +8,11 @@ import { formatDate } from '@/shared/utils/formatDate';
 import {
   ArrowLeft, Mail, Phone, Calendar, DollarSign, BookOpen, Users,
   X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
-  Download, Upload, Smartphone
+  Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash
 } from 'lucide-react';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { PaymentHistory } from '@/features/payments/components/PaymentHistory';
+import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
 import { ScheduleItem } from '@/features/tutees/types/tutee';
 import { PaymentRecord } from '@/features/attendance/types/dayPayment';
 import { PaymentMethod } from '@/features/payments/types/payment';
@@ -22,6 +23,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 export const TuteeDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -139,6 +141,57 @@ export const TuteeDetails = () => {
     }
   };
 
+  const { assessments } = useAssessments();
+
+  const studentAssessments = useMemo(() => {
+    if (!tutee || !assessments.length) return [];
+    return assessments.filter(a => a.tuteeId === tutee.id).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [tutee, assessments]);
+
+  const assessmentSummary = useMemo(() => {
+    if (!studentAssessments.length) return null;
+    const scores = studentAssessments.map(a => a.score);
+    const avg = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
+    const improvement = scores.length >= 2 ? Math.max(...scores) - Math.min(...scores) : 0;
+    const latestScore = scores[scores.length - 1];
+    
+    // Calculate slope (trend)
+    const n = scores.length;
+    let trend = 0;
+    if (n >= 2) {
+      const xMean = (n - 1) / 2;
+      const yMean = avg;
+      let num = 0, den = 0;
+      scores.forEach((y, x) => {
+        num += (x - xMean) * (y - yMean);
+        den += (x - xMean) ** 2;
+      });
+      trend = den === 0 ? 0 : Math.round((num / den) * 10) / 10;
+    }
+
+    return { avg, trend, improvement, latestScore, totalAssessments: scores.length };
+  }, [studentAssessments]);
+
+  const subjectSummaries = useMemo(() => {
+    if (!studentAssessments.length) return [];
+    
+    const bySubject: Record<string, typeof studentAssessments> = {};
+    studentAssessments.forEach(a => {
+      if (!bySubject[a.subject]) bySubject[a.subject] = [];
+      bySubject[a.subject].push(a);
+    });
+
+    return Object.entries(bySubject).map(([subject, assessments]) => {
+      const scores = assessments.map(a => a.score);
+      const avg = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
+      return {
+        subject,
+        avg,
+        count: assessments.length
+      };
+    });
+  }, [studentAssessments]);
+
   const handleViewParent = async () => {
     if (!tutee?.parentId) return;
     setShowParentModal(true);
@@ -233,6 +286,16 @@ export const TuteeDetails = () => {
         ...reportForm,
       });
       toast.success('Progress report added successfully');
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Progress Updated',
+          'Tutee Progress',
+          `Created a progress report for student ${tutee.firstName} ${tutee.surname} in ${reportForm.subject}`
+        );
+      }
       setShowReportModal(false);
       // Reset form fields
       setReportForm({
@@ -669,15 +732,75 @@ export const TuteeDetails = () => {
               <h2 className="text-lg font-bold text-gray-955">Progress Reports</h2>
               <p className="text-gray-500 text-sm mt-0.5">Academic updates and performance evaluations</p>
             </div>
-            {user?.role !== 'parent' && (
-              <button
-                onClick={() => setShowReportModal(true)}
-                className="bg-green-700 hover:bg-green-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-              >
-                Create Progress Report
-              </button>
-            )}
           </div>
+
+          {assessmentSummary && (
+            <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-2xl p-6 text-white shadow-lg shadow-blue-700/10">
+              <div className="flex items-center gap-3 mb-2">
+                <Star size={24} className="text-blue-200" />
+                <h3 className="font-bold text-lg">Academic Performance Overview</h3>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
+                <div>
+                  <p className="text-sm font-medium text-blue-200 mb-1">Average Score</p>
+                  <p className="text-3xl font-extrabold text-white">{assessmentSummary.avg}%</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-200 mb-1">Latest Score</p>
+                  <p className="text-3xl font-extrabold text-white">{assessmentSummary.latestScore}%</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-200 mb-1">Max Improvement</p>
+                  <p className="text-3xl font-extrabold text-emerald-300">+{assessmentSummary.improvement}%</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-200 mb-1">Score Trend</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-3xl font-extrabold text-white">{Math.abs(assessmentSummary.trend)}</p>
+                    {assessmentSummary.trend > 1 ? (
+                      <TrendingUp size={24} className="text-emerald-400" />
+                    ) : assessmentSummary.trend < -1 ? (
+                      <TrendingDown size={24} className="text-red-400" />
+                    ) : (
+                      <Minus size={24} className="text-gray-300" />
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="text-blue-200/80 text-xs mt-6 font-medium">Based on {assessmentSummary.totalAssessments} recorded assessments from the Tutee Progress tracker.</p>
+            </div>
+          )}
+
+          {subjectSummaries.length > 0 && (
+            <div className="bg-white border rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <BookOpen size={20} className="text-gray-400" />
+                <h3 className="font-bold text-lg text-gray-900">Subject Breakdown</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {subjectSummaries.map((subject, idx) => (
+                  <div key={idx} className="bg-gray-50 border border-gray-100 rounded-xl p-4 flex justify-between items-center hover:bg-gray-100 transition-colors">
+                    <div>
+                      <p className="font-bold text-gray-900">{subject.subject}</p>
+                      <p className="text-xs font-semibold text-gray-500 mt-0.5 flex items-center gap-1">
+                        <Hash size={12} /> {subject.count} {subject.count === 1 ? 'assessment' : 'assessments'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-400">Average</p>
+                      <p className={`text-xl font-extrabold ${
+                        subject.avg >= 90 ? 'text-emerald-600' :
+                        subject.avg >= 75 ? 'text-blue-600' :
+                        'text-red-600'
+                      }`}>
+                        {subject.avg}%
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {loadingReports ? (
             <div className="flex items-center justify-center py-12 bg-white rounded-2xl border shadow-sm">

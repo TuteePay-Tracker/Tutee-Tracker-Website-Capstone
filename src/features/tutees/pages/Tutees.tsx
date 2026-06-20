@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
+import { logActivity } from '@/shared/utils/auditLogger';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
@@ -108,10 +109,30 @@ export const Tutees = () => {
     });
 
   const handleDelete = async (id: string) => {
+    const studentToDelete = tutees.find(t => t.id === id);
+    const studentName = studentToDelete ? `${studentToDelete.firstName} ${studentToDelete.surname}` : 'Student';
     if (window.confirm('Are you sure you want to delete this tutee?')) {
       try {
         await deleteTutee(id);
         toast.success('Tutee deleted successfully');
+        if (user) {
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Student Archived',
+            'Students',
+            `Archived student ${studentName}`
+          );
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Schedule Deleted',
+            'Scheduling',
+            `Deleted schedule for archived student ${studentName}`
+          );
+        }
       } catch (error) {
         toast.error('Failed to delete tutee');
       }
@@ -228,9 +249,43 @@ export const Tutees = () => {
               // Create student first
               let studentId: string;
               if (editingTutee) {
+                const scheduleChanged = JSON.stringify(editingTutee.schedule) !== JSON.stringify(data.schedule);
+                const parentChanged = editingTutee.parentId !== data.parentId;
+
                 await updateTutee(editingTutee.id, data);
                 studentId = editingTutee.id;
                 toast.success('Tutee updated successfully');
+
+                await logActivity(
+                  user.id,
+                  user.name,
+                  user.role,
+                  'Student Updated',
+                  'Students',
+                  `Updated student ${data.firstName} ${data.surname}`
+                );
+
+                if (scheduleChanged) {
+                  await logActivity(
+                    user.id,
+                    user.name,
+                    user.role,
+                    'Schedule Updated',
+                    'Scheduling',
+                    `Updated schedule for student ${data.firstName} ${data.surname}`
+                  );
+                }
+
+                if (parentChanged) {
+                  await logActivity(
+                    user.id,
+                    user.name,
+                    user.role,
+                    'Parent Account Updated',
+                    'Parent Management',
+                    `Updated parent link for student ${data.firstName} ${data.surname}`
+                  );
+                }
               } else {
                 const newTutee = await addTutee({
                   ...data,
@@ -240,6 +295,24 @@ export const Tutees = () => {
                 });
                 studentId = newTutee.id;
                 toast.success('Tutee added successfully');
+
+                await logActivity(
+                  user.id,
+                  user.name,
+                  user.role,
+                  'Student Added',
+                  'Students',
+                  `Added student ${data.firstName} ${data.surname}`
+                );
+
+                await logActivity(
+                  user.id,
+                  user.name,
+                  user.role,
+                  'Schedule Created',
+                  'Scheduling',
+                  `Created schedule for student ${data.firstName} ${data.surname}`
+                );
               }
 
               // Create parent account if requested (New Parent)
@@ -267,6 +340,15 @@ export const Tutees = () => {
                     createdAt: new Date().toISOString(),
                     createdByTutorId: user.id,
                   });
+
+                  await logActivity(
+                    user.id,
+                    user.name,
+                    user.role,
+                    'Parent Account Created',
+                    'Parent Management',
+                    `Created parent account ${parentData.name} for student ${data.firstName} ${data.surname}`
+                  );
 
                   // Link student to parent
                   await updateDoc(doc(db, 'users', user.id, 'tutees', studentId), {
@@ -313,6 +395,15 @@ export const Tutees = () => {
                     }
                     if (Object.keys(updatePayload).length > 0) {
                       await updateDoc(parentRef, updatePayload);
+                      
+                      await logActivity(
+                        user.id,
+                        user.name,
+                        user.role,
+                        'Parent Account Updated',
+                        'Parent Management',
+                        `Linked student ${data.firstName} ${data.surname} to parent ${parentDoc.data().name || 'Parent'}`
+                      );
                     }
                   }
                 } catch (err) {
@@ -537,6 +628,20 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
     address: tutee?.address || '',
     parentId: tutee?.parentId || undefined,
   });
+
+  const prevGuardianNumberRef = useRef(formData.guardianNumber);
+
+  useEffect(() => {
+    const prevGuardianNumber = prevGuardianNumberRef.current;
+    prevGuardianNumberRef.current = formData.guardianNumber;
+
+    setNewParentContactNumber(prevContact => {
+      if (!prevContact || prevContact === prevGuardianNumber) {
+        return formData.guardianNumber || '';
+      }
+      return prevContact;
+    });
+  }, [formData.guardianNumber]);
 
   const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const [scheduleTime, setScheduleTime] = useState(getInitialTime());

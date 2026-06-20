@@ -35,6 +35,7 @@ import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { assessmentService } from '@/features/tutee-progress/services/assessmentService';
+import { logActivity } from '@/shared/utils/auditLogger';
 import {
   Assessment,
   AssessmentFormData,
@@ -191,6 +192,7 @@ function AssessmentModal({
   editing,
   onClose,
 }: AssessmentModalProps) {
+  const { user } = useAuth();
   const [form, setForm] = useState<AssessmentFormData>({
     tuteeId: editing?.tuteeId ?? '',
     tuteeName: editing?.tuteeName ?? '',
@@ -279,9 +281,45 @@ function AssessmentModal({
       if (editing) {
         await assessmentService.update(tutorId, editing.id, form);
         toast.success('Assessment updated');
+        if (user) {
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Assessment Updated',
+            'Tutee Progress',
+            `Updated assessment for student ${form.tuteeName} in ${form.subject}`
+          );
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Scores Recorded',
+            'Tutee Progress',
+            `Recorded scores for student ${form.tuteeName} in ${form.subject}`
+          );
+        }
       } else {
         await assessmentService.add(tutorId, form);
         toast.success('Assessment recorded!');
+        if (user) {
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Assessment Created',
+            'Tutee Progress',
+            `Created assessment for student ${form.tuteeName} in ${form.subject}`
+          );
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Scores Recorded',
+            'Tutee Progress',
+            `Recorded scores for student ${form.tuteeName} in ${form.subject}`
+          );
+        }
       }
       onClose();
     } catch {
@@ -860,11 +898,12 @@ function SubjectSection({
   subjects,
 }: {
   assessments: Assessment[];
-  tutees: { id: string; firstName: string; surname: string }[];
-  tutorId: string | null;
+  tutees: any[];
+  tutorId: string | undefined;
   isTutor: boolean;
   subjects: string[];
 }) {
+  const { user } = useAuth();
   const [activeSubject, setActiveSubject] = useState<string>(subjects[0] ?? '');
   const [showModal, setShowModal] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
@@ -907,6 +946,16 @@ function SubjectSection({
     try {
       await assessmentService.delete(tutorId, a.id);
       toast.success('Assessment deleted');
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Assessment Deleted',
+          'Tutee Progress',
+          `Deleted assessment for student ${a.tuteeName} in ${a.subject}`
+        );
+      }
     } catch {
       toast.error('Failed to delete');
     }
