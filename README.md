@@ -28,7 +28,7 @@ Built with a robust, feature-first React architecture and real-time database syn
 ---
 
 ## ⚡ Quick Start & Installation
-```
+
 ```bash
 npm install
 ```
