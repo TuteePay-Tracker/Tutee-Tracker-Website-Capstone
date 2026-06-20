@@ -4,6 +4,7 @@ import { AuthLayout } from '@/shared/layouts/AuthLayout';
 import { Dashboard } from '@/features/dashboard/pages/Dashboard';
 import { Tutees } from '@/features/tutees/pages/Tutees';
 import { TuteeDetails } from '@/features/tutees/pages/TuteeDetails';
+import { MyChildren } from '@/features/tutees/pages/MyChildren';
 import { PaymentTracking } from '@/features/payments/pages/PaymentTracking';
 import { Attendance } from '@/features/attendance/pages/Attendance';
 import { QuickPayment } from '@/features/payments/pages/QuickPayment';
@@ -12,6 +13,7 @@ import { Settings } from '@/features/settings/pages/Settings';
 import { Schedule } from '@/features/schedule/pages/Schedule';
 import { Chat } from '@/features/chat/pages/Chat';
 import { Announcements } from '@/features/announcements/pages/Announcements';
+import { TuteeProgress } from '@/features/tutee-progress/pages/TuteeProgress';
 import { Login } from '@/features/auth/pages/Login';
 import { Signup } from '@/features/auth/pages/Signup';
 import { ForgotPassword } from '@/features/auth/pages/ForgotPassword';
@@ -163,6 +165,14 @@ export const router = createBrowserRouter([
       {
         path: 'announcements',
         element: <Announcements />,
+      },
+      {
+        path: 'tutee-progress',
+        element: <TuteeProgress />,
+      },
+      {
+        path: 'my-children',
+        element: <MyChildren />,
       },
     ],
   },

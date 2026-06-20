@@ -311,6 +311,35 @@ service cloud.firestore {
         allow read, delete: if isAuthenticated() && isOwner(userId);
         allow create, update: if isAuthenticated() && isOwner(userId) && isValidSubject();
       }
+
+      // ASSESSMENTS subcollection (tutor-managed student assessment records)
+      match /assessments/{assessmentId} {
+        function isValidAssessment() {
+          let data = request.resource.data;
+          return data.keys().hasAll(['tuteeId', 'tuteeName', 'subject', 'date', 'assessmentScores', 'topicsCovered', 'notes', 'score', 'remarks', 'createdAt', 'updatedAt'])
+            && data.tuteeId is string
+            && data.tuteeName is string
+            && data.subject is string
+            && data.date is string
+            && data.assessmentScores is list
+            && data.topicsCovered is string
+            && data.notes is string
+            && data.score is number && data.score >= 0 && data.score <= 100
+            && data.remarks is string
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp
+            && (!data.keys().hasAny(['recommendations']) || data.recommendations is string);
+        }
+
+        // Tutor reads/writes own assessments; linked parents can read too
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+        );
+        allow create, update: if isAuthenticated() && isOwner(userId) && isValidAssessment();
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
     }
 
     // CHAT THREADS and MESSAGES

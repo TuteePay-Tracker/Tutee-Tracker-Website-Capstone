@@ -81,7 +81,9 @@ export const useTutees = () => {
   const addTutee = async (tutee: Omit<Tutee, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
       const newTutee = await tuteeService.create(tutee);
-      setTutees(prev => [newTutee, ...prev]);
+      // NOTE: Do NOT call setTutees here.
+      // The real-time Firestore listener (subscribeAll) automatically
+      // updates the state when the document is written, preventing duplicates.
       return newTutee;
     } catch (err: any) {
       const errorMessage = err?.message || 'Failed to add tutee';
@@ -94,7 +96,7 @@ export const useTutees = () => {
   const updateTutee = async (id: string, updates: Partial<Tutee>) => {
     try {
       const updatedTutee = await tuteeService.update(id, updates);
-      setTutees(prev => prev.map(t => t.id === id ? updatedTutee : t));
+      // Real-time listener handles the state update automatically.
       return updatedTutee;
     } catch (err: any) {
       const errorMessage = err?.message || 'Failed to update tutee';
@@ -107,7 +109,7 @@ export const useTutees = () => {
   const deleteTutee = async (id: string) => {
     try {
       await tuteeService.delete(id);
-      setTutees(prev => prev.filter(t => t.id !== id));
+      // Real-time listener handles the state update automatically.
     } catch (err: any) {
       const errorMessage = err?.message || 'Failed to delete tutee';
       setError(errorMessage);

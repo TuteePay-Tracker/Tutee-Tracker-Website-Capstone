@@ -59,21 +59,21 @@ export const Login = () => {
         <div className="flex-1 text-gray-800 space-y-6 text-center lg:text-left">
           <div className="inline-flex items-center gap-3 bg-green-700 backdrop-blur-lg rounded-full px-4 py-2 border border-green-800">
             <Sparkles size={20} className="text-green-200" />
-            <span className="text-sm font-medium text-white">Professional Tutoring Management</span>
+            <span className="text-sm font-medium text-white">Smart Tutee & Session Management</span>
           </div>
 
           <h1 className="text-5xl lg:text-6xl font-bold leading-tight text-gray-900">
             Welcome to
             <span className="block text-green-700">
-              TuteePay Tracker
+              TUTOR TRACK
             </span>
           </h1>
 
           <p className="text-xl text-gray-700 max-w-md">
-            Manage your tutoring business with ease. Track payments, monitor sessions, and grow your income.
+            Your all-in-one platform for managing tutees, scheduling sessions, tracking payments, and keeping <span className="font-semibold text-green-700">parents informed</span> — so you can focus on what matters most: <span className="font-semibold text-green-700">teaching</span>.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 pt-4">
+          <div className="flex flex-col sm:flex-row gap-4 pt-4 flex-wrap">
             <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-green-300 shadow-sm">
               <div className="w-10 h-10 bg-green-700 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,7 +82,7 @@ export const Login = () => {
               </div>
               <div className="text-left">
                 <p className="font-semibold text-gray-900">Track Payments</p>
-                <p className="text-sm text-gray-600">Never miss a payment</p>
+                <p className="text-sm text-gray-600">Stay on top of every tutee's balance</p>
               </div>
             </div>
 
@@ -93,8 +93,20 @@ export const Login = () => {
                 </svg>
               </div>
               <div className="text-left">
-                <p className="font-semibold text-gray-900">View Reports</p>
-                <p className="text-sm text-gray-600">Insightful analytics</p>
+                <p className="font-semibold text-gray-900">Manage Tutees</p>
+                <p className="text-sm text-gray-600">Organize sessions & attendance</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-green-300 shadow-sm">
+              <div className="w-10 h-10 bg-green-700 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-gray-900">Parent Access</p>
+                <p className="text-sm text-gray-600">Keep parents updated on progress</p>
               </div>
             </div>
           </div>
@@ -215,7 +227,7 @@ export const Login = () => {
 
           {/* Trust Indicators */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-700 mb-3">Trusted by tutors worldwide</p>
+            <p className="text-sm text-gray-700 mb-3">Trusted by tutors across the Philippines</p>
             <div className="flex items-center justify-center gap-6">
               <div className="text-gray-700 text-xs">
                 <div className="font-semibold text-lg text-green-700">1000+</div>
@@ -224,7 +236,7 @@ export const Login = () => {
               <div className="w-px h-10 bg-green-300"></div>
               <div className="text-gray-700 text-xs">
                 <div className="font-semibold text-lg text-green-700">₱10M+</div>
-                <div>Tracked</div>
+                <div>Payments Tracked</div>
               </div>
               <div className="w-px h-10 bg-green-300"></div>
               <div className="text-gray-700 text-xs">

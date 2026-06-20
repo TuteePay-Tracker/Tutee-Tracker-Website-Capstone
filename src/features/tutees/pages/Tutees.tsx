@@ -145,7 +145,7 @@ export const Tutees = () => {
           className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800"
         >
           <Plus size={20} />
-          Add Tutee
+          Enroll Tutee
         </button>
       </div>
 
@@ -427,10 +427,13 @@ interface TuteeFormProps {
 
 const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Ref guard prevents double-submit even before React state re-renders
+  const submittingRef = useRef(false);
   const [parentEmail, setParentEmail] = useState('');
   const [parentName, setParentName] = useState('');
   const [linkedParentId, setLinkedParentId] = useState<string | null>(tutee?.parentId || null);
   const [parentSearching, setParentSearching] = useState(false);
+  const { user: currentUser } = useAuth();
 
   // Parent account status toggles
   const [linkOrCreateParent, setLinkOrCreateParent] = useState(false);
@@ -445,25 +448,38 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
   const [newParentContactNumber, setNewParentContactNumber] = useState('');
 
   const handleSearchParents = async () => {
-    if (!parentSearchQuery.trim()) return;
+    const trimmed = parentSearchQuery.trim();
+    if (!trimmed) return;
     setSearchingParents(true);
     try {
+      // Restrict to parents created by the current tutor for accurate results
       const q = query(
         collection(db, 'users'),
-        where('role', '==', 'parent')
+        where('role', '==', 'parent'),
+        where('createdByTutorId', '==', currentUser?.id ?? '')
       );
       const snap = await getDocs(q);
-      const queryLower = parentSearchQuery.toLowerCase().trim();
+      const queryLower = trimmed.toLowerCase();
+      const digitsOnly = trimmed.replace(/\D/g, '');
       const results = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as any))
-        .filter(p => 
-          p.name?.toLowerCase().includes(queryLower) ||
-          p.contactNumber?.replace(/\D/g, '').includes(queryLower.replace(/\D/g, '')) ||
-          p.email?.toLowerCase().includes(queryLower)
-        );
+        .filter(p => {
+          const nameMatch = p.name?.toLowerCase().startsWith(queryLower) ||
+            p.name?.toLowerCase().includes(queryLower);
+          const phoneMatch = digitsOnly.length >= 3 &&
+            (p.contactNumber?.replace(/\D/g, '').startsWith(digitsOnly) ||
+             p.contactNumber?.replace(/\D/g, '').includes(digitsOnly));
+          return nameMatch || phoneMatch;
+        })
+        .sort((a: any, b: any) => {
+          // Prioritise name-starts-with matches at the top
+          const aStarts = a.name?.toLowerCase().startsWith(queryLower) ? 0 : 1;
+          const bStarts = b.name?.toLowerCase().startsWith(queryLower) ? 0 : 1;
+          return aStarts - bStarts || a.name?.localeCompare(b.name);
+        });
       setSearchResults(results);
       if (results.length === 0) {
-        toast.error('No parent account found matching the search.');
+        toast.error('No parent account found matching your search.');
       }
     } catch (error) {
       console.error('Error searching parents:', error);
@@ -566,6 +582,9 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Synchronous guard against double-submit
+    if (submittingRef.current) return;
+
     if (formData.subjects.length === 0) {
       toast.error('Please select at least one subject');
       return;
@@ -611,10 +630,12 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
       contactNumber: newParentContactNumber.trim(),
     } : undefined;
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       await onSubmit(submitData, parentData);
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -834,14 +855,19 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                   {parentStatus === 'existing' && (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-sm text-gray-750 text-gray-700 mb-1">Search Parent</label>
+                        <label className="block text-sm text-gray-700 mb-1">Search Parent by Name or Contact Number</label>
                         <div className="flex gap-2">
                           <input
                             type="text"
                             value={parentSearchQuery}
-                            onChange={(e) => setParentSearchQuery(e.target.value)}
+                            onChange={(e) => {
+                              setParentSearchQuery(e.target.value);
+                              // Clear stale results when query changes
+                              if (!e.target.value.trim()) setSearchResults([]);
+                            }}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearchParents()}
                             className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 text-sm bg-white"
-                            placeholder="Search by parent name or contact number..."
+                            placeholder="e.g. Maria Santos or 09171234567"
                           />
                           <button
                             type="button"

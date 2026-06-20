@@ -3,22 +3,28 @@ import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useReports } from '@/features/reports/hooks/useReports';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
-import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell } from 'lucide-react';
+import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell, CheckSquare } from 'lucide-react';
 import { Link } from 'react-router';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { Announcement, AnnouncementFormData } from '@/features/announcements/types/announcement';
 import { announcementService } from '@/features/announcements/services/announcementService';
 import { toast } from 'sonner';
+import { ScheduleItem } from '@/features/tutees/types/tutee';
+import { Assessment } from '@/features/tutee-progress/types/assessment';
 
-// Parent portal view: read-only summary of linked children
+// Parent portal view: aggregated summary of all children
 const ParentDashboard = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
   const [transactionTotals, setTransactionTotals] = useState<Record<string, number>>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [tuteeAttendance, setTuteeAttendance] = useState<Record<string, { presentCount: number; totalSessions: number }>>({});
+  const [tuteeAssessments, setTuteeAssessments] = useState<Record<string, Assessment[]>>({});
+  const [assessmentPage, setAssessmentPage] = useState(0);
+  const ASSESSMENT_PAGE_SIZE = 3;
 
   useEffect(() => {
     if (user?.createdByTutorId) {
@@ -29,21 +35,15 @@ const ParentDashboard = () => {
   useEffect(() => {
     if (!user?.createdByTutorId || tutees.length === 0) {
       setTransactionTotals({});
+      setTuteeAttendance({});
+      setTuteeAssessments({});
       return;
     }
 
-    setTransactionTotals({});
-
-    const initialTotals: Record<string, number> = {};
-    tutees.forEach((tutee) => {
-      initialTotals[tutee.id] = 0;
-    });
-    setTransactionTotals(initialTotals);
-
-    const unsubscribes = tutees.map((tutee) => {
+    // Set up transactions subscriptions
+    const unsubTransactions = tutees.map((tutee) => {
       const transactionsRef = collection(db, 'users', user.createdByTutorId!, 'paymentTransactions');
       const transactionsQuery = query(transactionsRef, where('tuteeId', '==', tutee.id));
-
       return onSnapshot(
         transactionsQuery,
         (snapshot) => {
@@ -51,150 +51,563 @@ const ParentDashboard = () => {
             const data = docSnap.data();
             return sum + (typeof data.totalAmount === 'number' ? data.totalAmount : 0);
           }, 0);
-
-          setTransactionTotals((prev) => ({
-            ...prev,
-            [tutee.id]: totalAmount,
-          }));
+          setTransactionTotals((prev) => ({ ...prev, [tutee.id]: totalAmount }));
         },
         (error) => {
           console.warn('Unable to load payment transactions for tutee:', tutee.id, error);
-          setTransactionTotals((prev) => ({
+          setTransactionTotals((prev) => ({ ...prev, [tutee.id]: 0 }));
+        }
+      );
+    });
+
+    // Set up attendance subscriptions
+    const unsubAttendance = tutees.map((tutee) => {
+      const recordsRef = collection(db, 'users', user.createdByTutorId!, 'paymentRecords');
+      const recordsQuery = query(recordsRef, where('tuteeId', '==', tutee.id));
+      return onSnapshot(
+        recordsQuery,
+        (snapshot) => {
+          let present = 0;
+          let total = 0;
+          snapshot.docs.forEach((docSnap) => {
+            const recData = docSnap.data();
+            const dayPayments = (recData.dayPayments || []) as any[];
+            dayPayments.forEach((dp) => {
+              if (dp.status === 'paid') present++;
+              total++;
+            });
+          });
+          setTuteeAttendance((prev) => ({
             ...prev,
-            [tutee.id]: 0,
+            [tutee.id]: { presentCount: present, totalSessions: total }
           }));
+        },
+        (error) => {
+          console.warn('Unable to load payment records for tutee:', tutee.id, error);
+        }
+      );
+    });
+
+    // Set up assessments subscriptions
+    const unsubAssessments = tutees.map((tutee) => {
+      const assessmentsRef = collection(db, 'users', user.createdByTutorId!, 'assessments');
+      const assessmentsQuery = query(assessmentsRef, where('tuteeId', '==', tutee.id));
+      return onSnapshot(
+        assessmentsQuery,
+        (snapshot) => {
+          const list = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          })) as Assessment[];
+          setTuteeAssessments((prev) => ({
+            ...prev,
+            [tutee.id]: list
+          }));
+        },
+        (error) => {
+          console.warn('Unable to load assessments for tutee:', tutee.id, error);
         }
       );
     });
 
     return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe());
+      unsubTransactions.forEach((unsub) => unsub());
+      unsubAttendance.forEach((unsub) => unsub());
+      unsubAssessments.forEach((unsub) => unsub());
     };
-  }, [user?.createdByTutorId, tutees.map((tutee) => tutee.id).join('|')]);
+  }, [user?.createdByTutorId, tutees]);
+
+  // Compute aggregated stats
+  const totalChildren = tutees.length;
+  
+  const totalPaid = Object.values(transactionTotals).reduce((sum, val) => sum + val, 0);
+  
+  const totalOutstandingBalance = tutees.reduce((sum, tutee) => {
+    const paid = transactionTotals[tutee.id] || 0;
+    const due = (tutee.totalSessions || 0) * (tutee.ratePerSession || 0);
+    return sum + Math.max(due - paid, 0);
+  }, 0);
+
+  let totalPresent = 0;
+  let totalSessions = 0;
+  Object.values(tuteeAttendance).forEach((att) => {
+    totalPresent += att.presentCount;
+    totalSessions += att.totalSessions;
+  });
+  const overallAttendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 100;
+
+  // Flatten assessments and sort chronologically
+  const allAssessmentsList = Object.values(tuteeAssessments).flat().sort((a, b) => b.date.localeCompare(a.date));
+  const recentAssessments = allAssessmentsList.slice(assessmentPage * ASSESSMENT_PAGE_SIZE, (assessmentPage + 1) * ASSESSMENT_PAGE_SIZE);
+  const assessmentTotalPages = Math.ceil(Math.min(allAssessmentsList.length, 15) / ASSESSMENT_PAGE_SIZE);
+  const assessmentTotalSource = allAssessmentsList.slice(0, 15);
+
+  // Group assessments by month for LineChart
+  const monthlyDataMap: Record<string, Record<string, { sum: number; count: number }>> = {};
+  Object.entries(tuteeAssessments).forEach(([tuteeId, list]) => {
+    const tutee = tutees.find((t) => t.id === tuteeId);
+    if (!tutee) return;
+    const childName = `${tutee.firstName} ${tutee.surname.charAt(0)}.`;
+
+    list.forEach((assessment) => {
+      if (typeof assessment.score !== 'number') return;
+      const dateObj = new Date(assessment.date);
+      const monthKey = !isNaN(dateObj.getTime())
+        ? assessment.date.substring(0, 7) // "YYYY-MM"
+        : 'Unknown';
+
+      if (monthKey === 'Unknown') return;
+
+      if (!monthlyDataMap[monthKey]) {
+        monthlyDataMap[monthKey] = {};
+      }
+      if (!monthlyDataMap[monthKey][childName]) {
+        monthlyDataMap[monthKey][childName] = { sum: 0, count: 0 };
+      }
+      monthlyDataMap[monthKey][childName].sum += assessment.score;
+      monthlyDataMap[monthKey][childName].count += 1;
+    });
+  });
+
+  const sortedMonths = Object.keys(monthlyDataMap).sort();
+  const performanceChartData = sortedMonths.map((monthKey) => {
+    const [year, month] = monthKey.split('-');
+    const monthLabel = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleString('default', { month: 'short' }) + ' ' + year.substring(2);
+
+    const row: Record<string, any> = { month: monthLabel };
+    Object.entries(monthlyDataMap[monthKey]).forEach(([childName, stats]) => {
+      row[childName] = Math.round(stats.sum / stats.count);
+    });
+    return row;
+  });
+
+  const childNames = Array.from(new Set(tutees.map((t) => `${t.firstName} ${t.surname.charAt(0)}.`)));
+
+  // Calculate subject averages across all children
+  const subjectStats: Record<string, { sum: number; count: number }> = {};
+  Object.values(tuteeAssessments).flat().forEach((assessment) => {
+    if (typeof assessment.score !== 'number' || !assessment.subject) return;
+    const sub = assessment.subject;
+    if (!subjectStats[sub]) {
+      subjectStats[sub] = { sum: 0, count: 0 };
+    }
+    subjectStats[sub].sum += assessment.score;
+    subjectStats[sub].count += 1;
+  });
+
+  const subjectChartData = Object.entries(subjectStats).map(([subject, stats]) => ({
+    subject,
+    average: Math.round(stats.sum / stats.count),
+  }));
+
+  // Parse combined tutoring schedule
+  interface CombinedScheduleItem {
+    id: string;
+    childName: string;
+    subject: string;
+    day: string;
+    time: string;
+  }
+
+  const combinedSchedule: CombinedScheduleItem[] = [];
+  tutees.forEach((tutee) => {
+    const childName = `${tutee.firstName} ${tutee.surname}`;
+    const firstSubject = tutee.subjects?.[0] || tutee.subject || 'Tutoring';
+
+    if (Array.isArray(tutee.schedule)) {
+      tutee.schedule.forEach((slot, index) => {
+        if (typeof slot === 'object' && slot !== null) {
+          if ('startTime' in slot && 'endTime' in slot) {
+            combinedSchedule.push({
+              id: `${tutee.id}-s-${index}`,
+              childName,
+              subject: firstSubject,
+              day: slot.day,
+              time: `${slot.startTime} - ${slot.endTime}`,
+            });
+          } else if ('time' in slot) {
+            combinedSchedule.push({
+              id: `${tutee.id}-s-${index}`,
+              childName,
+              subject: firstSubject,
+              day: (slot as any).day,
+              time: (slot as any).time,
+            });
+          } else {
+            combinedSchedule.push({
+              id: `${tutee.id}-s-${index}`,
+              childName,
+              subject: firstSubject,
+              day: (slot as any).day || 'Unknown Day',
+              time: 'Scheduled',
+            });
+          }
+        } else if (typeof slot === 'string') {
+          const parts = (slot as string).split(':');
+          if (parts.length >= 2) {
+            combinedSchedule.push({
+              id: `${tutee.id}-s-${index}`,
+              childName,
+              subject: firstSubject,
+              day: parts[0].trim(),
+              time: parts.slice(1).join(':').trim(),
+            });
+          } else {
+            combinedSchedule.push({
+              id: `${tutee.id}-s-${index}`,
+              childName,
+              subject: firstSubject,
+              day: slot,
+              time: 'Scheduled',
+            });
+          }
+        }
+      });
+    } else if (typeof tutee.schedule === 'string') {
+      const lines = tutee.schedule.split(/\r?\n|,/);
+      lines.forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const parts = trimmed.split(':');
+        if (parts.length >= 2) {
+          combinedSchedule.push({
+            id: `${tutee.id}-string-${index}`,
+            childName,
+            subject: firstSubject,
+            day: parts[0].trim(),
+            time: parts.slice(1).join(':').trim(),
+          });
+        } else {
+          combinedSchedule.push({
+            id: `${tutee.id}-string-${index}`,
+            childName,
+            subject: firstSubject,
+            day: trimmed,
+            time: 'Scheduled',
+          });
+        }
+      });
+    }
+  });
+
+  const dayIndex = (day: string) => {
+    const normalized = day.trim().toLowerCase();
+    if (normalized.startsWith('mon')) return 0;
+    if (normalized.startsWith('tue')) return 1;
+    if (normalized.startsWith('wed')) return 2;
+    if (normalized.startsWith('thu')) return 3;
+    if (normalized.startsWith('fri')) return 4;
+    if (normalized.startsWith('sat')) return 5;
+    if (normalized.startsWith('sun')) return 6;
+    return 7;
+  };
+
+  combinedSchedule.sort((a, b) => dayIndex(a.day) - dayIndex(b.day));
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
-        <span className="ml-3 text-gray-500 font-medium">Loading child summaries...</span>
+        <span className="ml-3 text-gray-500 font-medium">Loading parent dashboard...</span>
       </div>
     );
   }
 
+  const hasAssessments = allAssessmentsList.length > 0;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Welcome, {user?.name?.split(' ')[0]}!</h1>
-        <p className="text-gray-600 mt-1">Here's an overview of your child's tutoring progress</p>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Parent Dashboard</h1>
+          <p className="text-gray-500 mt-1">Aggregated statistics, progress history, and tutoring schedules for your children.</p>
+        </div>
+        <Link
+          to="/my-children"
+          className="bg-green-700 hover:bg-green-800 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all shadow-sm shadow-green-700/10 flex items-center gap-2 self-start md:self-auto"
+        >
+          <Users size={16} />
+          <span>View My Children Cards</span>
+        </Link>
       </div>
 
+      {/* Announcements */}
       {announcements.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="bg-amber-100 p-3 rounded-xl h-fit">
-            <Megaphone className="text-amber-700" size={24} />
+            <Megaphone className="text-amber-700 animate-bounce" size={24} />
           </div>
           <div className="flex-1">
             <div className="flex justify-between items-start">
               <h3 className="font-bold text-amber-900 text-lg">{announcements[0].title}</h3>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200 text-amber-800 px-2.5 py-1 rounded-full">
                 New Announcement
               </span>
             </div>
-            <p className="text-amber-800/90 text-sm mt-1 leading-relaxed">{announcements[0].content}</p>
-            <p className="text-amber-600 text-[10px] mt-3 font-medium italic">Posted on {new Date(announcements[0].createdAt).toLocaleDateString()}</p>
+            <p className="text-amber-800/90 text-sm mt-2 leading-relaxed">{announcements[0].content}</p>
+            <p className="text-amber-600 text-[10px] mt-4 font-semibold italic">
+              Posted on {new Date(announcements[0].createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}
+            </p>
           </div>
         </div>
       )}
 
+      {/* Empty State when no children are linked */}
       {tutees.length === 0 ? (
         <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-16 text-center">
           <GraduationCap size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 text-lg">No linked students yet</p>
-          <p className="text-gray-400 text-sm mt-1">Contact your tutor to link your child's account</p>
+          <p className="text-gray-500 text-lg font-semibold">No children linked to your account</p>
+          <p className="text-gray-400 text-sm mt-1">Please ask your tutor to invite or register your child using your email.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {tutees.map(tutee => {
-            const totalPaid = Math.round((transactionTotals[tutee.id] || 0) * 100) / 100;
-            const totalDue = Math.round((tutee.totalSessions || 0) * (tutee.ratePerSession || 0) * 100) / 100;
-            const remainingBalance = Math.max(Math.round((totalDue - totalPaid) * 100) / 100, 0);
-            const hasOutstandingBalance = remainingBalance > 0;
-            const isFull = totalPaid > 0 && !hasOutstandingBalance;
-            const isPartial = totalPaid > 0 && hasOutstandingBalance;
-
-            return (
-            <div key={tutee.id} className="bg-white rounded-2xl border p-6 shadow-sm">
-              <div className="flex items-start gap-4 mb-5">
-                <div className="w-14 h-14 bg-green-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-green-700/20">
-                  {tutee.firstName.charAt(0)}{tutee.surname.charAt(0)}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{tutee.firstName} {tutee.surname}</h2>
-                  <p className="text-gray-500 text-sm">{tutee.gradeLevel}</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
-                      <span key={s} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">{s}</span>
-                    ))}
-                  </div>
-                </div>
+        <>
+          {/* KPI Dashboard Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="bg-green-100 p-3.5 rounded-2xl text-green-700 shrink-0">
+                <Users size={24} />
               </div>
-
-              <div className="grid grid-cols-3 gap-3 mb-5">
-                <div className="bg-green-50 rounded-xl p-3 text-center">
-                  <p className="text-lg font-bold text-green-700">{formatCurrency(totalPaid)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Total Paid</p>
-                </div>
-                {(() => (
-                  <div className="bg-orange-50 rounded-xl p-3 text-center">
-                    <p className="text-lg font-bold text-orange-700">{formatCurrency(remainingBalance)}</p>
-                    <p className="text-xs text-gray-500 mt-1">Balance</p>
-                  </div>
-                ))()}
-                {(() => (
-                  <div className={`rounded-xl p-3 text-center ${
-                    isFull
-                      ? 'bg-green-50'
-                      : isPartial
-                      ? 'bg-orange-50'
-                      : 'bg-gray-50'
-                  }`}>
-                    <p className={`text-lg font-bold leading-tight ${
-                      isFull
-                        ? 'text-green-600'
-                        : isPartial
-                        ? 'text-orange-600'
-                        : 'text-gray-400'
-                    }`}>
-                      {isFull
-                        ? 'Full Payment'
-                        : isPartial
-                        ? 'Partial Payment'
-                        : 'Unpaid'}
-                    </p>
-                    <p className="text-[10px] text-gray-500 mt-1 uppercase font-bold tracking-wider">
-                      Status
-                    </p>
-                  </div>
-                ))()}
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Linked Children</p>
+                <p className="text-2xl font-black text-gray-900 mt-1">{totalChildren}</p>
               </div>
-
-              <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-xl p-3 mb-4">
-                <Calendar size={16} className="text-green-700 shrink-0" />
-                <span className="text-gray-700">
-                  Rate: <strong>₱{tutee.ratePerSession}/month</strong>
-                </span>
-              </div>
-
-              <Link
-                to={`/tutees/${tutee.id}`}
-                className="w-full flex items-center justify-center bg-green-700 hover:bg-green-800 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-sm shadow-green-700/10"
-              >
-                View Details & Reports
-              </Link>
             </div>
-            );
-          })}
-        </div>
+
+            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="bg-emerald-100 p-3.5 rounded-2xl text-emerald-700 shrink-0">
+                <DollarSign size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Paid</p>
+                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(totalPaid)}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="bg-orange-100 p-3.5 rounded-2xl text-orange-700 shrink-0">
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Outstanding Balance</p>
+                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(totalOutstandingBalance)}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="bg-indigo-100 p-3.5 rounded-2xl text-indigo-700 shrink-0">
+                <CheckSquare size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Average Attendance</p>
+                <p className="text-2xl font-black text-gray-900 mt-1">{overallAttendanceRate}%</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Recharts Analytics Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Overall Progress Trend */}
+            <div className="bg-white p-6 rounded-2xl border shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Overall Progress History</h3>
+                <p className="text-xs text-gray-500">Monthly assessment scores per child</p>
+              </div>
+              {!hasAssessments || performanceChartData.length === 0 ? (
+                <div className="h-[280px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <TrendingUp className="text-gray-300 mb-2" size={32} />
+                  <p className="text-sm font-medium text-gray-500">No score history</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Progress chart will populate when assessments are added.</p>
+                </div>
+              ) : (
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={performanceChartData} margin={{ left: -15, right: 10, top: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(val) => [`${val}%`, 'Score']} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      {childNames.map((name, index) => {
+                        const colors = ['#15803d', '#4f46e5', '#d97706', '#2563eb', '#db2777'];
+                        const strokeColor = colors[index % colors.length];
+                        return (
+                          <Line
+                            key={name}
+                            type="monotone"
+                            dataKey={name}
+                            stroke={strokeColor}
+                            strokeWidth={3}
+                            connectNulls
+                            activeDot={{ r: 6 }}
+                            dot={{ r: 3, strokeWidth: 2 }}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            {/* Subject Average Scores */}
+            <div className="bg-white p-6 rounded-2xl border shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Subject Performance Averages</h3>
+                <p className="text-xs text-gray-500">Average grades across all subjects studied</p>
+              </div>
+              {!hasAssessments || subjectChartData.length === 0 ? (
+                <div className="h-[280px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <GraduationCap className="text-gray-300 mb-2" size={32} />
+                  <p className="text-sm font-medium text-gray-500">No subject averages</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Performance averages appear as soon as grades are recorded.</p>
+                </div>
+              ) : (
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={subjectChartData} margin={{ left: -15, right: 10, top: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="subject" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(val) => [`${val}%`, 'Avg Score']} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb' }} />
+                      <Bar dataKey="average" radius={[6, 6, 0, 0]} barSize={36}>
+                        {subjectChartData.map((_entry, index) => {
+                          const colors = ['#16a34a', '#4f46e5', '#ea580c', '#2563eb', '#db2777'];
+                          return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Assessments and Tutoring Schedule */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Assessments */}
+            <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Recent Assessments</h3>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">Latest assessment scores across all children</p>
+                  </div>
+                  {assessmentTotalSource.length > 0 && (
+                    <span className="text-xs text-gray-400 font-medium">
+                      {assessmentPage * ASSESSMENT_PAGE_SIZE + 1}–{Math.min((assessmentPage + 1) * ASSESSMENT_PAGE_SIZE, assessmentTotalSource.length)} of {assessmentTotalSource.length}
+                    </span>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-left text-xs font-bold uppercase tracking-wider text-gray-400">
+                        <th className="pb-3 pr-2">Child</th>
+                        <th className="pb-3 px-2">Subject</th>
+                        <th className="pb-3 px-2">Score</th>
+                        <th className="pb-3 px-2">Remarks</th>
+                        <th className="pb-3 pl-2 text-right">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-sm">
+                      {recentAssessments.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-gray-400 font-medium">
+                            No assessments recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        recentAssessments.map((a) => (
+                          <tr key={a.id} className="hover:bg-gray-50/50">
+                            <td className="py-3.5 pr-2 font-semibold text-gray-800">{a.tuteeName}</td>
+                            <td className="py-3.5 px-2 text-gray-600 font-medium">{a.subject}</td>
+                            <td className="py-3.5 px-2 font-bold text-gray-950">{a.score}%</td>
+                            <td className="py-3.5 px-2">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                a.remarks === 'Excellent' ? 'bg-green-55 border-green-200 text-green-700' :
+                                a.remarks === 'Good' ? 'bg-blue-55 border-blue-200 text-blue-700' :
+                                'bg-orange-55 border-orange-200 text-orange-700'
+                              }`}>
+                                {a.remarks}
+                              </span>
+                            </td>
+                            <td className="py-3.5 pl-2 text-right text-gray-500 text-xs font-medium">
+                              {new Date(a.date).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {hasAssessments && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  {assessmentTotalPages > 1 ? (
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setAssessmentPage((p) => Math.max(0, p - 1))}
+                        disabled={assessmentPage === 0}
+                        className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200 transition-colors"
+                      >
+                        ← Previous
+                      </button>
+                      <span className="text-xs text-gray-400 font-semibold">
+                        Page {assessmentPage + 1} of {assessmentTotalPages}
+                      </span>
+                      <button
+                        onClick={() => setAssessmentPage((p) => Math.min(assessmentTotalPages - 1, p + 1))}
+                        disabled={assessmentPage === assessmentTotalPages - 1}
+                        className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200 transition-colors"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 font-medium text-center">
+                      Detailed performance parameters and feedback notes can be viewed inside each child's detailed reports.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Combined Schedule Agenda */}
+            <div className="bg-white p-6 rounded-2xl border shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Weekly Tutoring Schedule</h3>
+                <p className="text-xs text-gray-500">Unified schedule overview for all children</p>
+              </div>
+
+              {combinedSchedule.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <Calendar className="text-gray-300 mb-2" size={32} />
+                  <p className="text-sm font-medium text-gray-500">No scheduled sessions</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Schedule sessions will appear here once defined by the tutor.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                  {combinedSchedule.map((item) => (
+                    <div key={item.id} className="flex border-l-4 border-green-700 bg-gray-50 hover:bg-gray-100/70 transition-colors p-3.5 rounded-r-xl items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{item.childName}</p>
+                        <p className="text-xs font-medium text-gray-500 mt-0.5">Subject: {item.subject}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-green-800 uppercase tracking-wide bg-green-50 border border-green-100 px-2 py-0.5 rounded-md inline-block">
+                          {item.day}
+                        </p>
+                        <p className="text-xs font-bold text-gray-700 mt-1">{item.time}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -318,7 +731,7 @@ export const Dashboard = () => {
             to="/tutees?action=add"
             className="bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800"
           >
-            Add Tutee
+            Enroll Tutee
           </Link>
           <Link
             to="/payments"

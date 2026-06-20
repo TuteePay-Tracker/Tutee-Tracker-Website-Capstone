@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronRight,
   CheckSquare,
-  MessageSquare
+  MessageSquare,
+  TrendingUp
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { chatService } from '@/features/chat/services/chatService';
@@ -80,12 +81,12 @@ export const MainLayout = () => {
     return () => unsubscribe();
   }, [user?.id, user?.role, location.pathname, navigate]);
 
-  // Collapsible state for Tutee Management
   const isTuteePath = 
     location.pathname.startsWith('/tutees') || 
     location.pathname.startsWith('/schedule') || 
     location.pathname.startsWith('/attendance') || 
-    location.pathname.startsWith('/payments');
+    location.pathname.startsWith('/payments') ||
+    location.pathname.startsWith('/tutee-progress');
 
   const [tuteeMenuOpen, setTuteeMenuOpen] = useState(() => {
     const saved = localStorage.getItem('tuteeMenuOpen');
@@ -164,7 +165,7 @@ export const MainLayout = () => {
             <GraduationCap size={24} className="text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-lg text-gray-900 tracking-tight leading-none">TuteePay</h1>
+            <h1 className="font-bold text-lg text-gray-900 tracking-tight leading-none">Tutor Track</h1>
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mt-1 block">Tracker</span>
           </div>
         </div>
@@ -180,6 +181,18 @@ export const MainLayout = () => {
                   isActive('/') && location.pathname === '/'
                     ? 'bg-green-55 text-green-700 font-semibold'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <LayoutDashboard size={20} />
+                <span>Dashboard</span>
+              </Link>
+
+              <Link
+                to="/my-children"
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
+                  isActive('/my-children')
+                    ? 'bg-green-55 text-green-700 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-55 hover:text-gray-900'
                 }`}
               >
                 <Users size={20} />
@@ -325,6 +338,17 @@ export const MainLayout = () => {
                       <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                       <span>Payments</span>
                     </Link>
+                    <Link
+                      to="/tutee-progress"
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/tutee-progress')
+                          ? 'bg-green-50 text-green-700 font-bold'
+                          : 'text-gray-550 hover:bg-gray-50 hover:text-gray-800'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>Tutee Progress</span>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -341,6 +365,8 @@ export const MainLayout = () => {
                 <BarChart3 size={20} />
                 <span>Reports</span>
               </Link>
+
+
 
               {/* Communications Accordion */}
               <div className="space-y-1">
@@ -479,6 +505,19 @@ export const MainLayout = () => {
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
                   isActive('/') && location.pathname === '/'
+                    ? 'bg-green-55 text-green-700 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <LayoutDashboard size={20} />
+                <span>Dashboard</span>
+              </Link>
+
+              <Link
+                to="/my-children"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
+                  isActive('/my-children')
                     ? 'bg-green-55 text-green-700 font-semibold'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`}
@@ -632,6 +671,18 @@ export const MainLayout = () => {
                       <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                       <span>Payments</span>
                     </Link>
+                    <Link
+                      to="/tutee-progress"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                        isActive('/tutee-progress')
+                          ? 'bg-green-50 text-green-700 font-bold'
+                          : 'text-gray-550 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span>Tutee Progress</span>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -648,6 +699,8 @@ export const MainLayout = () => {
                 <BarChart3 size={20} />
                 <span>Reports</span>
               </Link>
+
+
 
               {/* Mobile Communications Accordion */}
               <div className="space-y-1">
