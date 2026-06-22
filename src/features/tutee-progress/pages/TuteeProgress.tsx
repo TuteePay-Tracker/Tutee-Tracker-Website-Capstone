@@ -11,7 +11,59 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  AreaChart,
+  Area,
+  Cell,
 } from 'recharts';
+
+const ProgressTrendTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-800 text-white p-3 rounded-xl shadow-xl text-xs font-sans">
+        <p className="font-semibold text-slate-400 border-b border-slate-800 pb-1 mb-1">{data.month}</p>
+        <div className="flex items-center justify-between gap-6 mt-1">
+          <span className="text-slate-400">Class Average:</span>
+          <span className="font-bold text-indigo-400">{payload[0].value}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+const SubjectPerformanceTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-800 text-white p-3 rounded-xl shadow-xl text-xs font-sans">
+        <p className="font-semibold text-slate-400 border-b border-slate-800 pb-1 mb-1">{data.subject}</p>
+        <div className="flex items-center justify-between gap-6 mt-1">
+          <span className="text-slate-400">Class Average:</span>
+          <span className="font-bold text-emerald-400">{payload[0].value}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+const MiniScoreTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-800 text-white p-2.5 rounded-lg shadow-lg text-[10px] font-sans">
+        <p className="font-semibold text-slate-400 border-b border-slate-800 pb-0.5 mb-0.5">{new Date(data.date).toLocaleDateString()}</p>
+        <div className="flex items-center justify-between gap-4 mt-0.5">
+          <span className="text-slate-400">Score:</span>
+          <span className="font-bold text-emerald-400">{payload[0].value}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 import {
   TrendingUp,
   TrendingDown,
@@ -611,27 +663,27 @@ function DashboardSection({
   return (
     <div className="space-y-6">
       {/* KPI Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
             label: 'Overall Avg Score',
             value: `${overallAvg}%`,
             icon: Activity,
-            color: 'bg-green-700',
+            color: 'from-purple-600 to-violet-800',
             sub: `${assessments.length} total records`,
           },
           {
             label: 'Students Tracked',
             value: allStudents.length,
             icon: BookOpen,
-            color: 'bg-indigo-600',
+            color: 'from-blue-600 to-indigo-800',
             sub: `Across ${subjectSummaries.length} subjects`,
           },
           {
             label: 'Most Improved',
             value: mostImproved[0]?.tuteeName?.split(' ')[0] ?? '—',
             icon: Star,
-            color: 'bg-amber-500',
+            color: 'from-orange-500 to-orange-700',
             sub: mostImproved[0]
               ? `+${mostImproved[0].improvement} pts`
               : 'No data yet',
@@ -640,7 +692,7 @@ function DashboardSection({
             label: 'Need Attention',
             value: needsIntervention.length,
             icon: AlertTriangle,
-            color: needsIntervention.length > 0 ? 'bg-red-500' : 'bg-gray-400',
+            color: needsIntervention.length > 0 ? 'from-red-600 to-red-800' : 'from-gray-700 to-gray-800',
             sub: needsIntervention.length > 0 ? 'Students flagged' : 'All on track',
           },
         ].map((card) => {
@@ -648,16 +700,16 @@ function DashboardSection({
           return (
             <div
               key={card.label}
-              className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow"
+              className={`bg-gradient-to-br ${card.color} text-white p-5 rounded-2xl shadow-sm hover:shadow-md transition-all`}
             >
               <div className="flex items-center justify-between mb-3">
-                <div className={`${card.color} p-2.5 rounded-xl shadow-sm`}>
-                  <Icon size={18} className="text-white" />
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Icon size={20} />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-              <p className="text-xs text-gray-500 mt-1">{card.label}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{card.sub}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/90">{card.label}</p>
+              <p className="text-2xl font-black mt-1">{card.value}</p>
+              <p className="text-[10px] text-white/70 mt-2 font-medium">{card.sub}</p>
             </div>
           );
         })}
@@ -677,25 +729,27 @@ function DashboardSection({
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(val: number) => [`${val}%`, 'Avg Score']}
-                  contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb' }}
-                />
-                <ReferenceLine y={75} stroke="#f59e0b" strokeDasharray="4 2" label={{ value: '75', fontSize: 10 }} />
-                <Line
+              <AreaChart data={monthlyTrend} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="tuteeProgressTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <Tooltip content={<ProgressTrendTooltip />} />
+                <ReferenceLine y={75} stroke="#f59e0b" strokeDasharray="4 2" label={{ value: '75', fontSize: 10, fill: '#f59e0b', position: 'insideBottomLeft' }} />
+                <Area
                   type="monotone"
                   dataKey="average"
-                  stroke="#15803d"
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: '#15803d' }}
-                  activeDot={{ r: 6 }}
+                  stroke="#8b5cf6"
+                  strokeWidth={3}
+                  fill="url(#tuteeProgressTrendGrad)"
                   name="Avg Score"
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
@@ -703,7 +757,7 @@ function DashboardSection({
         {/* Subject Performance Bar Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
-            <BarChart2 size={18} className="text-indigo-600" />
+            <BarChart2 size={18} className="text-indigo-650" />
             <h2 className="font-semibold text-gray-900">Subject Performance Summary</h2>
           </div>
           {subjectSummaries.length === 0 ? (
@@ -712,15 +766,17 @@ function DashboardSection({
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={subjectSummaries} barSize={32}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="subject" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(val: number) => [`${val}%`, 'Avg Score']}
-                  contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb' }}
-                />
-                <Bar dataKey="averageScore" fill="#4f46e5" radius={[6, 6, 0, 0]} name="Avg Score" />
+              <BarChart data={subjectSummaries} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="subject" tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <Tooltip content={<SubjectPerformanceTooltip />} />
+                <Bar dataKey="averageScore" radius={[6, 6, 0, 0]} barSize={28}>
+                  {subjectSummaries.map((_, index) => {
+                    const colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
+                    return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                  })}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -1081,22 +1137,26 @@ function SubjectSection({
                     <div>
                       <p className="text-xs font-bold uppercase text-gray-400 mb-2">Score Trend</p>
                       <ResponsiveContainer width="100%" height={120}>
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
-                          <XAxis dataKey="date" tick={{ fontSize: 9 }} />
-                          <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} width={28} />
-                          <Tooltip
-                            formatter={(v: number) => [`${v}%`, 'Score']}
-                            contentStyle={{ borderRadius: 8, fontSize: 11 }}
-                          />
-                          <Line
+                        <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id={`miniScoreGrad-${student.tuteeId}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                              <stop offset="100%" stopColor="#10b981" stopOpacity={0.0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 9 }} />
+                          <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 9 }} />
+                          <Tooltip content={<MiniScoreTooltip />} />
+                          <Area
                             type="monotone"
                             dataKey="score"
-                            stroke="#15803d"
-                            strokeWidth={2}
-                            dot={{ r: 3 }}
+                            stroke="#10b981"
+                            strokeWidth={2.5}
+                            fill={`url(#miniScoreGrad-${student.tuteeId})`}
+                            dot={{ r: 3, fill: '#10b981', stroke: '#fff', strokeWidth: 1 }}
                           />
-                        </LineChart>
+                        </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (
@@ -1323,7 +1383,7 @@ export function TuteeProgress() {
         <SubjectSection
           assessments={assessments}
           tutees={tutees}
-          tutorId={tutorId}
+          tutorId={tutorId || undefined}
           isTutor={isTutor}
           subjects={subjectNames}
         />

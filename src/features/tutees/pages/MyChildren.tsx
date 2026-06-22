@@ -7,6 +7,7 @@ import { Link } from 'react-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { ScheduleItem } from '@/features/tutees/types/tutee';
+import { formatTime12h } from '@/shared/utils/formatDate';
 
 export const MyChildren = () => {
   const { tutees, isLoading } = useTutees();
@@ -167,12 +168,12 @@ export const MyChildren = () => {
       return schedule.map((slot, index) => {
         if (typeof slot === 'object' && slot !== null && 'startTime' in slot && 'endTime' in slot) {
           return (
-            <div key={index}>{slot.day}: {slot.startTime} - {slot.endTime}</div>
+            <div key={index}>{slot.day}: {formatTime12h(slot.startTime)} - {formatTime12h(slot.endTime)}</div>
           );
         }
         else if (typeof slot === 'object' && slot !== null && 'time' in slot) {
           return (
-            <div key={index}>{(slot as any).day} - {(slot as any).time}</div>
+            <div key={index}>{(slot as any).day} - {formatTime12h((slot as any).time)}</div>
           );
         }
         return <div key={index}>{typeof slot === 'string' ? slot : (slot as any).day}</div>;

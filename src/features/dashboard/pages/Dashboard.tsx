@@ -5,7 +5,60 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell, CheckSquare } from 'lucide-react';
 import { Link } from 'react-router';
-import { LineChart, Line, BarChart, Bar, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+
+const DashboardWeeklyIncomeTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-800 text-white p-3 rounded-xl shadow-xl text-xs font-sans">
+        <p className="font-semibold text-slate-400 border-b border-slate-800 pb-1 mb-1">{data.week}</p>
+        <div className="flex items-center justify-between gap-6 mt-1">
+          <span className="text-slate-400 font-medium">Income:</span>
+          <span className="font-bold text-emerald-400">{formatCurrency(payload[0].value)}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+const DashboardProgressHistoryTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 text-white p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-sans">
+        <p className="font-semibold text-slate-400 border-b border-slate-800 pb-1 mb-1">{label}</p>
+        {payload.map((item: any) => (
+          <div key={item.name} className="flex items-center justify-between gap-6">
+            <span className="flex items-center gap-1.5" style={{ color: item.color || item.stroke }}>
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color || item.stroke }} />
+              {item.name}
+            </span>
+            <span className="font-bold text-white">{item.value}%</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
+const DashboardSubjectAveragesTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-800 text-white p-3 rounded-xl shadow-xl text-xs font-sans">
+        <p className="font-semibold text-slate-400 border-b border-slate-800 pb-1 mb-1">{data.subject}</p>
+        <div className="flex items-center justify-between gap-6 mt-1">
+          <span className="text-slate-400 font-medium">Average Score:</span>
+          <span className="font-bold text-emerald-400">{payload[0].value}%</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
@@ -14,6 +67,7 @@ import { announcementService } from '@/features/announcements/services/announcem
 import { toast } from 'sonner';
 import { ScheduleItem } from '@/features/tutees/types/tutee';
 import { Assessment } from '@/features/tutee-progress/types/assessment';
+import { formatTime12h } from '@/shared/utils/formatDate';
 
 // Parent portal view: aggregated summary of all children
 const ParentDashboard = () => {
@@ -223,7 +277,7 @@ const ParentDashboard = () => {
               childName,
               subject: firstSubject,
               day: slot.day,
-              time: `${slot.startTime} - ${slot.endTime}`,
+              time: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
             });
           } else if ('time' in slot) {
             combinedSchedule.push({
@@ -231,7 +285,7 @@ const ParentDashboard = () => {
               childName,
               subject: firstSubject,
               day: (slot as any).day,
-              time: (slot as any).time,
+              time: formatTime12h((slot as any).time),
             });
           } else {
             combinedSchedule.push({
@@ -245,12 +299,15 @@ const ParentDashboard = () => {
         } else if (typeof slot === 'string') {
           const parts = (slot as string).split(':');
           if (parts.length >= 2) {
+            const timePart = parts.slice(1).join(':').trim();
+            const timeSubparts = timePart.split('-');
+            const formattedTime = timeSubparts.map(p => formatTime12h(p.trim())).join(' - ');
             combinedSchedule.push({
               id: `${tutee.id}-s-${index}`,
               childName,
               subject: firstSubject,
               day: parts[0].trim(),
-              time: parts.slice(1).join(':').trim(),
+              time: formattedTime,
             });
           } else {
             combinedSchedule.push({
@@ -270,12 +327,15 @@ const ParentDashboard = () => {
         if (!trimmed) return;
         const parts = trimmed.split(':');
         if (parts.length >= 2) {
+          const timePart = parts.slice(1).join(':').trim();
+          const timeSubparts = timePart.split('-');
+          const formattedTime = timeSubparts.map(p => formatTime12h(p.trim())).join(' - ');
           combinedSchedule.push({
             id: `${tutee.id}-string-${index}`,
             childName,
             subject: firstSubject,
             day: parts[0].trim(),
-            time: parts.slice(1).join(':').trim(),
+            time: formattedTime,
           });
         } else {
           combinedSchedule.push({
@@ -364,46 +424,48 @@ const ParentDashboard = () => {
         <>
           {/* KPI Dashboard Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="bg-green-100 p-3.5 rounded-2xl text-green-700 shrink-0">
-                <Users size={24} />
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Users size={20} />
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Linked Children</p>
-                <p className="text-2xl font-black text-gray-900 mt-1">{totalChildren}</p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-blue-100">Linked Children</p>
+              <p className="text-2xl font-black mt-1">{totalChildren}</p>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="bg-emerald-100 p-3.5 rounded-2xl text-emerald-700 shrink-0">
-                <DollarSign size={24} />
+            <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <DollarSign size={20} />
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Paid</p>
-                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(totalPaid)}</p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Total Paid</p>
+              <p className="text-2xl font-black mt-1">{formatCurrency(totalPaid)}</p>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="bg-orange-100 p-3.5 rounded-2xl text-orange-700 shrink-0">
-                <AlertCircle size={24} />
+            <div className="bg-gradient-to-br from-orange-500 to-orange-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <AlertCircle size={20} />
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Outstanding Balance</p>
-                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(totalOutstandingBalance)}</p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-orange-100">Outstanding Balance</p>
+              <p className="text-2xl font-black mt-1">{formatCurrency(totalOutstandingBalance)}</p>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-              <div className="bg-indigo-100 p-3.5 rounded-2xl text-indigo-700 shrink-0">
-                <CheckSquare size={24} />
+            <div className="bg-gradient-to-br from-purple-600 to-violet-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <CheckSquare size={20} />
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Average Attendance</p>
-                <p className="text-2xl font-black text-gray-900 mt-1">{overallAttendanceRate}%</p>
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-purple-100">Average Attendance</p>
+              <p className="text-2xl font-black mt-1">{overallAttendanceRate}%</p>
             </div>
           </div>
+
+
 
           {/* Recharts Analytics Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -423,13 +485,13 @@ const ParentDashboard = () => {
                 <div className="h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={performanceChartData} margin={{ left: -15, right: 10, top: 10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(val) => [`${val}%`, 'Score']} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6b7280', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<DashboardProgressHistoryTooltip />} />
+                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontWeight: 500 }} />
                       {childNames.map((name, index) => {
-                        const colors = ['#15803d', '#4f46e5', '#d97706', '#2563eb', '#db2777'];
+                        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
                         const strokeColor = colors[index % colors.length];
                         return (
                           <Line
@@ -439,8 +501,8 @@ const ParentDashboard = () => {
                             stroke={strokeColor}
                             strokeWidth={3}
                             connectNulls
-                            activeDot={{ r: 6 }}
-                            dot={{ r: 3, strokeWidth: 2 }}
+                            activeDot={{ r: 6, stroke: strokeColor, strokeWidth: 2, fill: '#fff' }}
+                            dot={{ r: 3.5, stroke: strokeColor, strokeWidth: 2, fill: '#fff' }}
                           />
                         );
                       })}
@@ -451,9 +513,9 @@ const ParentDashboard = () => {
             </div>
 
             {/* Subject Average Scores */}
-            <div className="bg-white p-6 rounded-2xl border shadow-sm">
+            <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm">
               <div className="mb-4">
-                <h3 className="text-lg font-bold text-gray-900">Subject Performance Averages</h3>
+                <h3 className="text-base font-bold text-gray-900">Subject Performance Averages</h3>
                 <p className="text-xs text-gray-500">Average grades across all subjects studied</p>
               </div>
               {!hasAssessments || subjectChartData.length === 0 ? (
@@ -466,13 +528,13 @@ const ParentDashboard = () => {
                 <div className="h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={subjectChartData} margin={{ left: -15, right: 10, top: 10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="subject" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(val) => [`${val}%`, 'Avg Score']} contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb' }} />
-                      <Bar dataKey="average" radius={[6, 6, 0, 0]} barSize={36}>
+                      <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="subject" tick={{ fontSize: 11, fill: '#6b7280', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<DashboardSubjectAveragesTooltip />} />
+                      <Bar dataKey="average" radius={[6, 6, 0, 0]} barSize={28}>
                         {subjectChartData.map((_entry, index) => {
-                          const colors = ['#16a34a', '#4f46e5', '#ea580c', '#2563eb', '#db2777'];
+                          const colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
                           return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
                         })}
                       </Bar>
@@ -695,29 +757,31 @@ export const Dashboard = () => {
       title: 'Total Earnings This Month',
       value: formatCurrency(reportData.totalEarningsThisMonth),
       icon: DollarSign,
-      color: 'bg-green-700',
+      color: 'from-emerald-600 to-emerald-800 shadow-emerald-600/10',
       trend: '+12%',
     },
     {
       title: 'Total Lifetime Earnings',
       value: formatCurrency(totalLifetimeEarnings),
       icon: TrendingUp,
-      color: 'bg-green-700',
+      color: 'from-teal-600 to-teal-800 shadow-teal-600/10',
     },
     {
       title: 'Total Tutees',
       value: reportData.totalTutees.toString(),
       icon: Users,
-      color: 'bg-green-700',
+      color: 'from-blue-600 to-indigo-800 shadow-blue-600/10',
     },
     {
       title: 'Pending Balances',
       value: formatCurrency(reportData.totalPendingBalance),
       icon: AlertCircle,
-      color: 'bg-green-700',
+      color: 'from-orange-500 to-orange-700 shadow-orange-550/10',
       link: '/tutees',
     },
   ];
+
+
 
   return (
     <div className="space-y-6">
@@ -746,22 +810,22 @@ export const Dashboard = () => {
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div key={card.title} className="bg-white p-6 rounded-lg border shadow-sm">
+            <div key={card.title} className={`bg-gradient-to-br ${card.color} text-white p-5 rounded-xl shadow-md hover:shadow-lg transition-all`}>
               <div className="flex items-center justify-between mb-4">
-                <div className={`${card.color} p-3 rounded-lg`}>
-                  <Icon size={24} className="text-white" />
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Icon size={20} className="text-white" />
                 </div>
                 {card.trend && (
-                  <span className="text-green-700 text-sm flex items-center gap-1">
-                    <TrendingUp size={16} />
+                  <span className="text-emerald-100 bg-white/10 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <TrendingUp size={12} />
                     {card.trend}
                   </span>
                 )}
               </div>
-              <h3 className="text-gray-600 text-sm">{card.title}</h3>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{card.value}</p>
+              <h3 className="text-white/80 text-xs font-semibold uppercase tracking-wider">{card.title}</h3>
+              <p className="text-2xl font-black mt-1">{card.value}</p>
               {card.link && (
-                <Link to={card.link} className="text-green-700 text-sm mt-2 inline-block hover:underline">
+                <Link to={card.link} className="text-white/90 text-xs font-medium mt-3 inline-block hover:underline">
                   View details →
                 </Link>
               )}
@@ -771,30 +835,37 @@ export const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-lg border">
-          <h2 className="text-lg font-semibold mb-4">Weekly Income Trend</h2>
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+          <div className="mb-4">
+            <h2 className="text-base font-bold text-gray-900">Weekly Income Trend</h2>
+            <p className="text-xs text-gray-500">Revenue trend across the last 4 weeks</p>
+          </div>
           {reportData.weeklyIncome.every(w => w.income === 0) ? (
-            <div className="h-[250px] flex items-center justify-center text-gray-400">
+            <div className="h-[230px] flex items-center justify-center text-gray-400 text-xs border border-dashed border-gray-200 rounded-xl bg-gray-50 p-4">
               No payment data for the last 4 weeks
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={reportData.weeklyIncome}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="week" />
-                <YAxis tickFormatter={(value) => `₱${value}`} />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                <Line
-                  key="income-line"
+            <ResponsiveContainer width="100%" height={230}>
+              <AreaChart data={reportData.weeklyIncome} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dashboardWeeklyIncomeGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="week" tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <YAxis tickFormatter={(value) => `₱${value}`} tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <Tooltip content={<DashboardWeeklyIncomeTooltip />} />
+                <Area
                   type="monotone"
                   dataKey="income"
-                  stroke="#15803d"
-                  strokeWidth={2}
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  fill="url(#dashboardWeeklyIncomeGrad)"
                   name="Income"
-                  dot={{ r: 4 }}
-                  activeDot={{ r: 6 }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </div>

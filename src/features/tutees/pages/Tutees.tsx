@@ -5,9 +5,11 @@ import { logActivity } from '@/shared/utils/auditLogger';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
-import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS } from '@/features/tutees/types/tutee';
+import { formatTime12h } from '@/shared/utils/formatDate';
+import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { toast } from 'sonner';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, firebaseConfig } from '@/shared/lib/firebase/config';
@@ -28,7 +30,7 @@ interface CreatedParentCredentials {
 }
 
 export const Tutees = () => {
-  const { tutees, addTutee, updateTutee, deleteTutee, isLoading } = useTutees();
+  const { tutees, addTutee, updateTutee, deleteTutee, archiveTutee, unarchiveTutee, isLoading } = useTutees();
   const { subjects } = useSubjects();
   const { payments } = usePayments();
   const { user } = useAuth();
@@ -40,6 +42,15 @@ export const Tutees = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingTutee, setEditingTutee] = useState<Tutee | null>(null);
   const [createdParentCredentials, setCreatedParentCredentials] = useState<CreatedParentCredentials | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Close card menus on outside click
+  useEffect(() => {
+    const closeMenus = () => setActiveMenuId(null);
+    document.addEventListener('click', closeMenus);
+    return () => document.removeEventListener('click', closeMenus);
+  }, []);
 
   // Helper to format schedule (handles both old string and new array format)
   const formatSchedule = (schedule: string | ScheduleItem[]) => {
@@ -58,14 +69,14 @@ export const Tutees = () => {
       );
 
       if (hasSameTime && 'startTime' in firstItem && 'endTime' in firstItem) {
-        return `${days} • ${firstItem.startTime}-${firstItem.endTime}`;
+        return `${days} • ${formatTime12h(firstItem.startTime)} - ${formatTime12h(firstItem.endTime)}`;
       }
 
       // If times differ, show first day's time as example
       if ('startTime' in firstItem && 'endTime' in firstItem) {
-        return `${days} • ${firstItem.startTime}-${firstItem.endTime}`;
+        return `${days} • ${formatTime12h(firstItem.startTime)} - ${formatTime12h(firstItem.endTime)}`;
       } else if ('time' in firstItem) {
-        return `${days} • ${(firstItem as any).time}`;
+        return `${days} • ${formatTime12h((firstItem as any).time)}`;
       }
 
       return days;
@@ -85,6 +96,13 @@ export const Tutees = () => {
 
   const filteredAndSortedTutees = tutees
     .filter(tutee => {
+      const isArchived = !!tutee.archived;
+      if (showArchived) {
+        if (!isArchived) return false;
+      } else {
+        if (isArchived) return false;
+      }
+
       const fullName = `${tutee.firstName} ${tutee.surname}`.toLowerCase();
       const allSubjects = tutee.subjects?.length ? tutee.subjects : [tutee.subject];
       const matchesSearch = fullName.includes(searchQuery.toLowerCase()) ||
@@ -111,10 +129,31 @@ export const Tutees = () => {
   const handleDelete = async (id: string) => {
     const studentToDelete = tutees.find(t => t.id === id);
     const studentName = studentToDelete ? `${studentToDelete.firstName} ${studentToDelete.surname}` : 'Student';
-    if (window.confirm('Are you sure you want to delete this tutee?')) {
+    if (window.confirm('Are you sure you want to permanently delete this tutee? (All records will be lost)')) {
       try {
         await deleteTutee(id);
-        toast.success('Tutee deleted successfully');
+        toast.success('Tutee deleted permanently');
+        if (user) {
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Student Deleted',
+            'Students',
+            `Permanently deleted student ${studentName}`
+          );
+        }
+      } catch (error) {
+        toast.error('Failed to delete tutee');
+      }
+    }
+  };
+
+  const handleArchive = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to archive ${name}?`)) {
+      try {
+        await archiveTutee(id);
+        toast.success(`${name} archived successfully`);
         if (user) {
           await logActivity(
             user.id,
@@ -122,20 +161,31 @@ export const Tutees = () => {
             user.role,
             'Student Archived',
             'Students',
-            `Archived student ${studentName}`
-          );
-          await logActivity(
-            user.id,
-            user.name,
-            user.role,
-            'Schedule Deleted',
-            'Scheduling',
-            `Deleted schedule for archived student ${studentName}`
+            `Archived student ${name}`
           );
         }
       } catch (error) {
-        toast.error('Failed to delete tutee');
+        toast.error('Failed to archive student');
       }
+    }
+  };
+
+  const handleUnarchive = async (id: string, name: string) => {
+    try {
+      await unarchiveTutee(id);
+      toast.success(`${name} unarchived successfully`);
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Student Updated',
+          'Students',
+          `Unarchived student ${name}`
+        );
+      }
+    } catch (error) {
+      toast.error('Failed to unarchive student');
     }
   };
 
@@ -212,6 +262,16 @@ export const Tutees = () => {
             <option value="balance">Sort by Balance</option>
             <option value="grade">Sort by Grade</option>
           </select>
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all border shrink-0 ${
+              showArchived
+                ? 'bg-amber-50 border-amber-300 text-amber-850 hover:bg-amber-100'
+                : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {showArchived ? 'Show Active Students' : 'Show Archived Students'}
+          </button>
         </div>
       </div>
 
@@ -437,69 +497,139 @@ export const Tutees = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredAndSortedTutees.map((tutee) => {
             const tuteePayments = payments.filter(p => p.tuteeId === tutee.id);
-          const verifiedTotalPaid = tuteePayments
-            .filter(p => p.status === 'verified' || !p.status)
-            .reduce((sum, p) => sum + (p.amount || 0), 0);
-          const totalBilled = (tutee.totalPaid || 0) + (tutee.balance || 0);
-          const calculatedBalance = Math.max(0, totalBilled - verifiedTotalPaid);
+            const verifiedTotalPaid = tuteePayments
+              .filter(p => p.status === 'verified' || !p.status)
+              .reduce((sum, p) => sum + (p.amount || 0), 0);
+            const totalBilled = (tutee.totalPaid || 0) + (tutee.balance || 0);
+            const calculatedBalance = Math.max(0, totalBilled - verifiedTotalPaid);
+            const tuteeFullName = `${tutee.firstName} ${tutee.surname}`;
 
           return (
-            <div key={tutee.id} className="bg-white rounded-lg border p-6 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="font-semibold text-lg">{tutee.firstName} {tutee.surname}</h3>
-                  <div className="flex flex-wrap gap-1 mt-1">
+            <div key={tutee.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all ${tutee.archived ? 'opacity-75 border-amber-200 bg-amber-50/30' : 'border-gray-200'}`}>
+              {/* Card Header with avatar + name + 3-dot menu */}
+              <div className="flex items-center gap-3 p-5 pb-3">
+                <div className="shrink-0">
+                  {tutee.photoUrl ? (
+                    <img
+                      src={tutee.photoUrl}
+                      alt={tuteeFullName}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-gray-100 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-gray-100 shadow-sm">
+                      <User size={22} className="text-green-700" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-gray-900 truncate">{tuteeFullName}</h3>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
                     {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
-                      <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 text-xs font-semibold rounded-full border border-green-200">
+                      <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
                         {s}
                       </span>
                     ))}
                   </div>
+                  {tutee.archived && (
+                    <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200">
+                      Archived
+                    </span>
+                  )}
                 </div>
-                <div className="flex gap-2">
-                  <Link to={`/tutees/${tutee.id}`} className="text-green-700 hover:text-green-800 p-1">
-                    <Eye size={18} />
-                  </Link>
-                  <button onClick={() => handleEdit(tutee)} className="text-gray-600 hover:text-gray-700 p-1">
-                    <Pencil size={18} />
+                {/* 3-dot menu */}
+                <div className="relative shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMenuId(activeMenuId === tutee.id ? null : tutee.id);
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <MoreVertical size={18} />
                   </button>
-                  <button onClick={() => handleDelete(tutee.id)} className="text-red-600 hover:text-red-700 p-1">
-                    <Trash2 size={18} />
-                  </button>
+                  {activeMenuId === tutee.id && (
+                    <div
+                      className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-xl border border-gray-150 py-1.5 w-44 animate-in fade-in duration-100 slide-in-from-top-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Link
+                        to={`/tutees/${tutee.id}`}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                        onClick={() => setActiveMenuId(null)}
+                      >
+                        <Eye size={15} className="text-gray-400" />
+                        View Details
+                      </Link>
+                      <button
+                        onClick={() => { handleEdit(tutee); setActiveMenuId(null); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left font-medium"
+                      >
+                        <Pencil size={15} className="text-gray-400" />
+                        Edit
+                      </button>
+                      {tutee.archived ? (
+                        <button
+                          onClick={() => { handleUnarchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
+                        >
+                          <Users size={15} className="text-amber-400" />
+                          Unarchive
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { handleArchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
+                        >
+                          <Users size={15} className="text-amber-400" />
+                          Archive
+                        </button>
+                      )}
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => { handleDelete(tutee.id); setActiveMenuId(null); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors text-left font-medium"
+                      >
+                        <Trash2 size={15} className="text-red-400" />
+                        Delete Permanently
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="space-y-2 text-sm">
+              <div className="px-5 pb-4 space-y-2 text-sm border-t border-gray-50 pt-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Rate:</span>
-                  <span className="font-medium">{formatCurrency(tutee.ratePerSession)}/month</span>
+                  <span className="text-gray-500">Rate:</span>
+                  <span className="font-semibold text-gray-800">{formatCurrency(tutee.ratePerSession)}/month</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Schedule:</span>
-                  <span className="text-right">{formatSchedule(tutee.schedule)}</span>
+                  <span className="text-gray-500">Schedule:</span>
+                  <span className="text-right font-medium text-gray-700 max-w-[180px] truncate">{formatSchedule(tutee.schedule)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Sessions:</span>
-                  <span>{tutee.totalSessions}</span>
+                  <span className="text-gray-500">Sessions:</span>
+                  <span className="font-semibold text-gray-800">{tutee.totalSessions}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Total Paid:</span>
-                  <span className="font-medium">{formatCurrency(tutee.totalPaid)}</span>
+                  <span className="text-gray-500">Total Paid:</span>
+                  <span className="font-semibold text-gray-800">{formatCurrency(tutee.totalPaid)}</span>
                 </div>
-                <div className="flex justify-between pt-2 border-t">
-                  <span className="text-gray-600">Balance:</span>
-                  <span className={`font-semibold ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                <div className="flex justify-between pt-2 border-t border-gray-100">
+                  <span className="text-gray-500 font-medium">Balance:</span>
+                  <span className={`font-bold ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                     {formatCurrency(tutee.balance)}
                   </span>
                 </div>
               </div>
 
-              <Link
-                to={`/tutees/${tutee.id}`}
-                className="mt-4 block text-center bg-green-50 text-green-700 py-2 rounded-lg hover:bg-blue-100"
-              >
-                View Details
-              </Link>
+              <div className="px-5 pb-4">
+                <Link
+                  to={`/tutees/${tutee.id}`}
+                  className="block text-center bg-green-50 text-green-700 font-semibold text-sm py-2 rounded-xl hover:bg-green-100 transition-colors border border-green-100"
+                >
+                  View Details
+                </Link>
+              </div>
             </div>
           );
           })}
@@ -627,6 +757,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
     guardianEmail: tutee?.guardianEmail || '',
     address: tutee?.address || '',
     parentId: tutee?.parentId || undefined,
+    photoUrl: tutee?.photoUrl || '',
   });
 
   const prevGuardianNumberRef = useRef(formData.guardianNumber);
@@ -751,6 +882,46 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
         {tutee ? 'Edit Tutee' : 'Add New Tutee'}
       </h2>
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Profile Photo Upload */}
+        <div className="flex flex-col items-center gap-3 pb-4 border-b border-gray-100">
+          <label className="block text-sm font-semibold text-gray-700 w-full">Profile Photo <span className="font-normal text-gray-400">(optional)</span></label>
+          <div className="flex items-center gap-5">
+            <div className="shrink-0">
+              {formData.photoUrl ? (
+                <img
+                  src={formData.photoUrl}
+                  alt="Profile preview"
+                  className="w-20 h-20 rounded-full object-cover border-2 border-green-200 shadow"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-green-200 shadow">
+                  <User size={36} className="text-green-700" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <ImageUpload
+                currentUrl={formData.photoUrl || ''}
+                onUpload={(url) => setFormData({ ...formData, photoUrl: url })}
+                folder="tutee-photos"
+                label="Upload Photo"
+                shape="circle"
+                size="md"
+              />
+              {formData.photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, photoUrl: '' })}
+                  className="text-xs text-red-500 hover:text-red-700 underline text-left"
+                >
+                  Remove photo
+                </button>
+              )}
+              <p className="text-xs text-gray-400">JPG, PNG or GIF · Max 2 MB</p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm mb-2">First Name *</label>
@@ -1193,7 +1364,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
 
             {formData.schedule.length > 0 && (
               <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
-                <strong>Selected Schedule:</strong> {formData.schedule.map(s => s.day).join(', ')} at {scheduleTime.startTime} - {scheduleTime.endTime}
+                <strong>Selected Schedule:</strong> {formData.schedule.map(s => s.day).join(', ')} at {formatTime12h(scheduleTime.startTime)} - {formatTime12h(scheduleTime.endTime)}
               </div>
             )}
           </div>

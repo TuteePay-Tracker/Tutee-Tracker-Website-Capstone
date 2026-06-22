@@ -4,16 +4,18 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
-import { formatDate } from '@/shared/utils/formatDate';
+import { formatDate, formatTime12h } from '@/shared/utils/formatDate';
 import {
   ArrowLeft, Mail, Phone, Calendar, DollarSign, BookOpen, Users,
   X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
-  Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash
+  Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash,
+  Pencil, GraduationCap
 } from 'lucide-react';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { PaymentHistory } from '@/features/payments/components/PaymentHistory';
 import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
-import { ScheduleItem } from '@/features/tutees/types/tutee';
+import { ScheduleItem, GRADE_LEVELS } from '@/features/tutees/types/tutee';
+import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { PaymentRecord } from '@/features/attendance/types/dayPayment';
 import { PaymentMethod } from '@/features/payments/types/payment';
 import { ProgressReport, ProgressReportFormData, AssessmentScore } from '@/features/progress-reports/types/progressReport';
@@ -28,11 +30,84 @@ import { logActivity } from '@/shared/utils/auditLogger';
 export const TuteeDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { getTuteeById, tutees, isLoading: loadingTutees } = useTutees();
+  const { getTuteeById, tutees, updateTutee, isLoading: loadingTutees } = useTutees();
   const { getPaymentsByTuteeId, deletePayment, loadPaymentsForTutee, addPayment, isLoading: loadingPayments } = usePayments();
+  const { subjects } = useSubjects();
+
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [editForm, setEditForm] = useState({
+    firstName: '',
+    surname: '',
+    email: '',
+    guardianNumber: '',
+    guardianEmail: '',
+    address: '',
+    gradeLevel: '',
+    ratePerSession: 0,
+    subjects: [] as string[],
+  });
 
   const tutee = id ? getTuteeById(id) : undefined;
   const payments = id ? getPaymentsByTuteeId(id) : [];
+
+  const handleStartEdit = () => {
+    if (!tutee) return;
+    setEditForm({
+      firstName: tutee.firstName || '',
+      surname: tutee.surname || '',
+      email: tutee.email || '',
+      guardianNumber: tutee.guardianNumber || '',
+      guardianEmail: tutee.guardianEmail || '',
+      address: tutee.address || '',
+      gradeLevel: tutee.gradeLevel || '',
+      ratePerSession: tutee.ratePerSession || 0,
+      subjects: tutee.subjects?.length ? tutee.subjects : (tutee.subject ? [tutee.subject] : []),
+    });
+    setIsEditingInfo(true);
+  };
+
+  const handleSaveInfo = async () => {
+    if (!tutee || !updateTutee) return;
+    try {
+      if (!editForm.firstName.trim() || !editForm.surname.trim()) {
+        toast.error('First name and surname are required');
+        return;
+      }
+      if (editForm.subjects.length === 0) {
+        toast.error('Please select at least one subject');
+        return;
+      }
+      const updates = {
+        firstName: editForm.firstName.trim(),
+        surname: editForm.surname.trim(),
+        email: editForm.email.trim(),
+        guardianNumber: editForm.guardianNumber.trim(),
+        guardianEmail: editForm.guardianEmail.trim(),
+        address: editForm.address.trim(),
+        gradeLevel: editForm.gradeLevel,
+        ratePerSession: Number(editForm.ratePerSession),
+        subjects: editForm.subjects,
+        subject: editForm.subjects[0] || '', // primary subject
+      };
+      await updateTutee(tutee.id, updates);
+      setIsEditingInfo(false);
+      toast.success('Personal information updated successfully');
+
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Student Updated',
+          'Students',
+          `Updated personal information for student ${updates.firstName} ${updates.surname}`
+        );
+      }
+    } catch (error) {
+      console.error('Failed to update tutee details:', error);
+      toast.error('Failed to update personal information');
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'reports'>('overview');
   const [showParentModal, setShowParentModal] = useState(false);
@@ -251,13 +326,13 @@ export const TuteeDetails = () => {
         // Handle new format with startTime/endTime
         if (typeof slot === 'object' && slot !== null && 'startTime' in slot && 'endTime' in slot) {
           return (
-            <div key={index}>{slot.day}: {slot.startTime} - {slot.endTime}</div>
+            <div key={index}>{slot.day}: {formatTime12h(slot.startTime)} - {formatTime12h(slot.endTime)}</div>
           );
         }
         // Handle old format with just time
         else if (typeof slot === 'object' && slot !== null && 'time' in slot) {
           return (
-            <div key={index}>{(slot as any).day} - {(slot as any).time}</div>
+            <div key={index}>{(slot as any).day} - {formatTime12h((slot as any).time)}</div>
           );
         }
         return <div key={index}>{typeof slot === 'string' ? slot : (slot as any).day}</div>;
@@ -400,61 +475,247 @@ export const TuteeDetails = () => {
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-2xl border p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-950 mb-4">Personal Information</h2>
-              <div className="space-y-4">
-                {tutee.email && (
-                  <div className="flex items-center gap-3 text-sm text-gray-700">
-                    <Mail size={18} className="text-gray-400 shrink-0" />
-                    <span>{tutee.email}</span>
-                  </div>
-                )}
-                {tutee.guardianNumber && (
-                  <div className="flex items-center gap-3 text-sm text-gray-700">
-                    <Phone size={18} className="text-gray-400 shrink-0" />
-                    <div>
-                      <div className="text-xs text-gray-400 font-medium">Guardian/Parent</div>
-                      <div className="font-medium mt-0.5">{tutee.guardianNumber}</div>
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-start gap-3 text-sm text-gray-700">
-                  <Calendar size={18} className="text-gray-400 mt-1 shrink-0" />
-                  <div>
-                    <div className="text-xs text-gray-400 font-medium mb-1">Schedule</div>
-                    <div className="space-y-1 font-medium">{renderSchedule(tutee.schedule)}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-gray-700">
-                  <DollarSign size={18} className="text-gray-400 shrink-0" />
-                  <span>₱{tutee.ratePerSession.toLocaleString()}/month</span>
-                </div>
-
-                {user?.role !== 'parent' && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
-                    {tutee.parentId ? (
-                      <>
-                        <div className="flex items-center gap-2 text-xs text-green-700 font-semibold bg-green-50 px-2.5 py-1.5 rounded-lg border border-green-200 w-fit">
-                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                          Parent Portal Linked
-                        </div>
-                        <button
-                          onClick={handleViewParent}
-                          className="w-full flex items-center justify-center gap-2 border border-green-700 text-green-700 px-3 py-2 rounded-xl hover:bg-green-50 text-sm font-medium transition-colors mt-1"
-                        >
-                          <Users size={16} />
-                          Show Parent Account
-                        </button>
-                      </>
-                    ) : (
-                      <div className="mt-2 text-xs text-gray-500 flex items-center gap-1.5">
-                        <Users size={14} className="text-gray-400" />
-                        No parent portal account linked
-                      </div>
-                    )}
-                  </div>
+            <div className="bg-white rounded-2xl border p-6 shadow-sm font-sans">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-gray-950">Personal Information</h2>
+                {user?.role === 'tutor' && !isEditingInfo && (
+                  <button
+                    onClick={handleStartEdit}
+                    className="p-1.5 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors border border-transparent hover:border-gray-250"
+                    title="Edit Personal Information"
+                  >
+                    <Pencil size={16} />
+                  </button>
                 )}
               </div>
+
+              {isEditingInfo ? (
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">First Name *</label>
+                    <input
+                      type="text"
+                      value={editForm.firstName}
+                      onChange={e => setEditForm({ ...editForm, firstName: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Surname *</label>
+                    <input
+                      type="text"
+                      value={editForm.surname}
+                      onChange={e => setEditForm({ ...editForm, surname: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Guardian Number</label>
+                    <input
+                      type="text"
+                      value={editForm.guardianNumber}
+                      onChange={e => setEditForm({ ...editForm, guardianNumber: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Guardian Email</label>
+                    <input
+                      type="email"
+                      value={editForm.guardianEmail}
+                      onChange={e => setEditForm({ ...editForm, guardianEmail: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Address</label>
+                    <input
+                      type="text"
+                      value={editForm.address}
+                      onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Grade Level</label>
+                    <select
+                      value={editForm.gradeLevel}
+                      onChange={e => setEditForm({ ...editForm, gradeLevel: e.target.value })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none bg-white"
+                    >
+                      <option value="">Select grade level</option>
+                      {GRADE_LEVELS.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Rate per Month (₱)</label>
+                    <input
+                      type="number"
+                      value={editForm.ratePerSession}
+                      onChange={e => setEditForm({ ...editForm, ratePerSession: Number(e.target.value) })}
+                      className="w-full p-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-700 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Subjects</label>
+                    <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-xl min-h-[42px] bg-white">
+                      {subjects.map(s => {
+                        const isSelected = editForm.subjects.includes(s.name);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setEditForm({
+                                  ...editForm,
+                                  subjects: editForm.subjects.filter(name => name !== s.name)
+                                });
+                              } else {
+                                setEditForm({
+                                  ...editForm,
+                                  subjects: [...editForm.subjects, s.name]
+                                });
+                              }
+                            }}
+                            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-all ${
+                              isSelected
+                                ? 'bg-green-700 border-green-700 text-white shadow-sm'
+                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5 pt-3">
+                    <button
+                      onClick={handleSaveInfo}
+                      className="flex-1 bg-green-700 hover:bg-green-800 text-white font-bold text-sm py-2.5 rounded-xl transition-colors shadow-sm"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setIsEditingInfo(false)}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm py-2.5 rounded-xl transition-colors border border-gray-250"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {tutee.email && (
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <Mail size={18} className="text-gray-400 shrink-0" />
+                      <span>{tutee.email}</span>
+                    </div>
+                  )}
+                  {tutee.guardianNumber && (
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <Phone size={18} className="text-gray-400 shrink-0" />
+                      <div>
+                        <div className="text-xs text-gray-400 font-medium">Guardian/Parent Phone</div>
+                        <div className="font-semibold mt-0.5">{tutee.guardianNumber}</div>
+                      </div>
+                    </div>
+                  )}
+                  {tutee.guardianEmail && (
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <Mail size={18} className="text-gray-400 shrink-0" />
+                      <div>
+                        <div className="text-xs text-gray-400 font-medium">Guardian/Parent Email</div>
+                        <div className="font-semibold mt-0.5">{tutee.guardianEmail}</div>
+                      </div>
+                    </div>
+                  )}
+                  {tutee.address && (
+                    <div className="flex items-start gap-3 text-sm text-gray-700">
+                      <Smartphone size={18} className="text-gray-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs text-gray-400 font-medium">Address</div>
+                        <div className="font-semibold mt-0.5 leading-relaxed">{tutee.address}</div>
+                      </div>
+                    </div>
+                  )}
+                  {tutee.gradeLevel && (
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <GraduationCap size={18} className="text-gray-400 shrink-0" />
+                      <div>
+                        <div className="text-xs text-gray-400 font-medium">Grade Level</div>
+                        <div className="font-semibold mt-0.5">{tutee.gradeLevel}</div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-3 text-sm text-gray-700">
+                    <BookOpen size={18} className="text-gray-400 mt-1 shrink-0" />
+                    <div>
+                      <div className="text-xs text-gray-400 font-medium mb-1">Subjects</div>
+                      <div className="flex flex-wrap gap-1">
+                        {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
+                          <span key={s} className="px-2.5 py-0.5 bg-green-50 text-green-700 text-xs font-semibold rounded-full border border-green-200">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm text-gray-700">
+                    <Calendar size={18} className="text-gray-400 mt-1 shrink-0" />
+                    <div>
+                      <div className="text-xs text-gray-400 font-medium mb-1">Schedule</div>
+                      <div className="space-y-1 font-medium">{renderSchedule(tutee.schedule)}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-700">
+                    <DollarSign size={18} className="text-gray-400 shrink-0" />
+                    <div>
+                      <div className="text-xs text-gray-400 font-medium">Rate / Month</div>
+                      <div className="font-semibold mt-0.5">₱{tutee.ratePerSession.toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  {user?.role !== 'parent' && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
+                      {tutee.parentId ? (
+                        <>
+                          <div className="flex items-center gap-2 text-xs text-green-700 font-semibold bg-green-50 px-2.5 py-1.5 rounded-lg border border-green-200 w-fit">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                            Parent Portal Linked
+                          </div>
+                          <button
+                            onClick={handleViewParent}
+                            className="w-full flex items-center justify-center gap-2 border border-green-700 text-green-700 px-3 py-2 rounded-xl hover:bg-green-50 text-sm font-medium transition-colors mt-1"
+                          >
+                            <Users size={16} />
+                            Show Parent Account
+                          </button>
+                        </>
+                      ) : (
+                        <div className="mt-2 text-xs text-gray-500 flex items-center gap-1.5">
+                          <Users size={14} className="text-gray-400" />
+                          No parent portal account linked
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

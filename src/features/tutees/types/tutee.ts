@@ -19,6 +19,7 @@ export interface Tutee {
   address?: string;
   parentId?: string;
   photoUrl?: string;
+  archived?: boolean;
   totalSessions: number;
   totalPaid: number;
   balance: number;

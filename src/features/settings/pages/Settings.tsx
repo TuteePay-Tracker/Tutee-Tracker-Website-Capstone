@@ -28,7 +28,9 @@ const MODULE_ACTIONS: Record<string, string[]> = {
 export const Settings = () => {
   const { user, updateProfilePhoto, updatePaymentMethods } = useAuth();
   const { subjects, addSubject, deleteSubject, isLoading: subjectsLoading } = useSubjects();
-  const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'payments' | 'subjects' | 'logs' | 'backup'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'payments' | 'subjects' | 'logs' | 'backup'>(() => {
+    return (sessionStorage.getItem('settingsActiveTab') as any) || 'account';
+  });
 
   // Notification states
   const [notifications, setNotifications] = useState(true);
@@ -48,7 +50,10 @@ export const Settings = () => {
 
   // Audit Logs states
   const [logs, setLogs] = useState<any[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(() => {
+    const tab = sessionStorage.getItem('settingsActiveTab');
+    return tab === 'logs';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [filterModule, setFilterModule] = useState('all');
   const [filterRole, setFilterRole] = useState('all');
@@ -103,46 +108,55 @@ export const Settings = () => {
     }
   }, [user]);
 
-  // Enforce role guard
+  // Enforce role guard and persist active tab
   useEffect(() => {
-    if (user && user.role !== 'tutor') {
-      if (activeTab !== 'account' && activeTab !== 'notifications') {
-        setActiveTab('account');
+    if (user) {
+      if (user.role !== 'tutor') {
+        if (activeTab !== 'account' && activeTab !== 'notifications') {
+          setActiveTab('account');
+          sessionStorage.setItem('settingsActiveTab', 'account');
+          return;
+        }
       }
+      sessionStorage.setItem('settingsActiveTab', activeTab);
     }
   }, [user, activeTab]);
 
   // Subscribe to Audit Logs when logs tab is active
   useEffect(() => {
-    if (activeTab === 'logs' && user?.id && user?.role === 'tutor') {
-      setLoadingLogs(true);
-      const q = query(
-        collection(db, 'audit_logs'),
-        where('tutorId', '==', user.id),
-        orderBy('timestamp', 'desc')
-      );
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          const fetchedLogs = snapshot.docs.map((docSnap) => {
-            const data = docSnap.data();
-            return {
-              id: docSnap.id,
-              ...data,
-              timestamp: data.timestamp ? data.timestamp.toDate() : new Date(),
-            };
-          });
-          setLogs(fetchedLogs);
-          setLoadingLogs(false);
-        },
-        (error) => {
-          console.error('Error fetching audit logs:', error);
-          setLoadingLogs(false);
-        }
-      );
-      return () => unsubscribe();
+    if (activeTab === 'logs') {
+      if (user?.id && user?.role === 'tutor') {
+        setLoadingLogs(true);
+        const q = query(
+          collection(db, 'audit_logs'),
+          where('tutorId', '==', user.id),
+          orderBy('timestamp', 'desc')
+        );
+        const unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            const fetchedLogs = snapshot.docs.map((docSnap) => {
+              const data = docSnap.data();
+              return {
+                id: docSnap.id,
+                ...data,
+                timestamp: data.timestamp ? data.timestamp.toDate() : new Date(),
+              };
+            });
+            setLogs(fetchedLogs);
+            setLoadingLogs(false);
+          },
+          (error) => {
+            console.error('Error fetching audit logs:', error);
+            setLoadingLogs(false);
+          }
+        );
+        return () => unsubscribe();
+      } else if (user === null) {
+        setLoadingLogs(false);
+      }
     }
-  }, [activeTab, user?.id, user?.role]);
+  }, [activeTab, user]);
 
   // Reset action filter if module changes
   useEffect(() => {

@@ -267,6 +267,14 @@ class TuteeService {
       throw error;
     }
   }
+
+  async archive(id: string): Promise<Tutee> {
+    return this.update(id, { archived: true });
+  }
+
+  async unarchive(id: string): Promise<Tutee> {
+    return this.update(id, { archived: false });
+  }
 }
 
 export const tuteeService = new TuteeService();

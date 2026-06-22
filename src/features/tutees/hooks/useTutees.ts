@@ -118,6 +118,30 @@ export const useTutees = () => {
     }
   };
 
+  const archiveTutee = async (id: string) => {
+    try {
+      await tuteeService.archive(id);
+      // Real-time listener handles the state update automatically.
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to archive tutee';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      throw err;
+    }
+  };
+
+  const unarchiveTutee = async (id: string) => {
+    try {
+      await tuteeService.unarchive(id);
+      // Real-time listener handles the state update automatically.
+    } catch (err: any) {
+      const errorMessage = err?.message || 'Failed to unarchive tutee';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      throw err;
+    }
+  };
+
   const getTuteeById = (id: string): Tutee | undefined => {
     return tutees.find(t => t.id === id);
   };
@@ -129,6 +153,8 @@ export const useTutees = () => {
     addTutee,
     updateTutee,
     deleteTutee,
+    archiveTutee,
+    unarchiveTutee,
     getTuteeById,
     refreshTutees: loadTutees,
   };
