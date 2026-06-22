@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import logoUrl from '@/assets/logo.jpg';
 import {
   LayoutDashboard,
   Users,
@@ -161,9 +162,7 @@ export const MainLayout = () => {
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 fixed top-0 bottom-0 left-0 z-45 shadow-sm">
         {/* Branding header */}
         <div className="h-20 border-b border-gray-100 flex items-center px-6 gap-3">
-          <div className="bg-green-700 p-2.5 rounded-xl shadow-md shadow-green-700/20">
-            <GraduationCap size={24} className="text-white" />
-          </div>
+          <img src={logoUrl} alt="Tutor Track Logo" className="w-10 h-10 object-contain rounded-xl shadow-md" />
           <div>
             <h1 className="font-bold text-lg text-gray-900 tracking-tight leading-none">Tutor Track</h1>
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mt-1 block">Tracker</span>
@@ -470,9 +469,7 @@ export const MainLayout = () => {
       {/* Mobile Sticky Navbar */}
       <header className="md:hidden flex justify-between items-center h-16 bg-white border-b border-gray-200 px-4 sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <div className="bg-green-700 p-2 rounded-lg">
-            <GraduationCap size={20} className="text-white" />
-          </div>
+          <img src={logoUrl} alt="Tutor Track Logo" className="w-9 h-9 object-contain rounded-lg shadow-sm" />
           <span className="font-bold text-base text-gray-900">TuteePay Tracker</span>
         </div>
         <button

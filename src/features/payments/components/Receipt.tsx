@@ -51,8 +51,8 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle2 className="text-green-700" size={24} />
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+              <CheckCircle2 className="text-emerald-700" size={24} />
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900">Payment Receipt</h2>
@@ -119,7 +119,7 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
                           </td>
                           <td className="p-3 text-right">
                             <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
-                              day.status === 'paid' ? 'bg-green-100 text-green-700' :
+                              day.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                               day.status === 'partial' ? 'bg-orange-100 text-orange-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
@@ -142,7 +142,7 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
             <div className="border-t-2 border-gray-200 pt-4 mb-6">
               <div className="flex justify-between items-center">
                 <p className="text-lg font-semibold text-gray-900">Total Amount Paid</p>
-                <p className="text-2xl font-bold text-green-700">{formatCurrency(receipt.totalAmount)}</p>
+                <p className="text-2xl font-bold text-emerald-700">{formatCurrency(receipt.totalAmount)}</p>
               </div>
             </div>
 
@@ -156,7 +156,7 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Type</p>
                 <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg border ${
                   receipt.coverageType === 'full'
-                    ? 'bg-green-50 border-green-200 text-green-700'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                     : 'bg-orange-50 border-orange-200 text-orange-700'
                 }`}>
                   {receipt.coverageType === 'full' ? 'Full Payment' : 'Partial Payment'}

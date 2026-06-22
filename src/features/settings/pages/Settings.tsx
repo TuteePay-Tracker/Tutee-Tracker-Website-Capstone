@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
-import { 
-  User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard, 
-  Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X, 
+import {
+  User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
+  Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
   Download, Eye, Calendar, Clock, Activity, FileText, CheckCircle2, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
+import { logActivity } from '@/shared/utils/auditLogger';
 
 const MODULE_ACTIONS: Record<string, string[]> = {
   all: [],
@@ -28,16 +29,22 @@ export const Settings = () => {
   const { user, updateProfilePhoto, updatePaymentMethods } = useAuth();
   const { subjects, addSubject, deleteSubject, isLoading: subjectsLoading } = useSubjects();
   const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'payments' | 'subjects' | 'logs' | 'backup'>('account');
-  
+
   // Notification states
   const [notifications, setNotifications] = useState(true);
   const [emailReminders, setEmailReminders] = useState(true);
-  
+
   // Clearing/adding states
   const [isClearing, setIsClearing] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Backup Recovery states
+  const [isImporting, setIsImporting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [parsedBackupData, setParsedBackupData] = useState<any | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Audit Logs states
   const [logs, setLogs] = useState<any[]>([]);
@@ -149,13 +156,13 @@ export const Settings = () => {
         try {
           const twoYearsAgo = new Date();
           twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-          
+
           const q = query(
             collection(db, 'audit_logs'),
             where('tutorId', '==', user.id),
             where('timestamp', '<', twoYearsAgo)
           );
-          
+
           const snapshot = await getDocs(q);
           if (!snapshot.empty) {
             const deletePromises = snapshot.docs.map(docSnap => deleteDoc(docSnap.ref));
@@ -166,7 +173,7 @@ export const Settings = () => {
           console.error('Error cleaning up old audit logs:', error);
         }
       };
-      
+
       cleanupOldLogs();
     }
   }, [activeTab, user?.id, user?.role]);
@@ -226,35 +233,174 @@ export const Settings = () => {
       toast.info('Preparing your data backup...');
       const collectionsToExport = ['tutees', 'payments', 'sessions', 'paymentRecords', 'paymentTransactions', 'subjects', 'assessments', 'progressReports', 'announcements'];
       const backupData: Record<string, any[]> = {};
-      
+
       for (const col of collectionsToExport) {
         const colRef = collection(db, 'users', user.id, col);
         const snap = await getDocs(colRef);
         backupData[col] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       }
 
+      // Export parent accounts
+      const parentsQuery = query(
+        collection(db, 'users'),
+        where('createdByTutorId', '==', user.id),
+        where('role', '==', 'parent')
+      );
+      const parentsSnap = await getDocs(parentsQuery);
+      backupData['parentAccounts'] = parentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
       backupData['profile'] = [{
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
-        paymentMethods: user.paymentMethods || {}
+        paymentMethods: user.paymentMethods || {},
+        exportedAt: new Date().toISOString()
       }];
 
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `tuteepay_backup_${new Date().toISOString().split('T')[0]}.json`);
+      downloadAnchor.setAttribute("download", `tutor_track_backups_${new Date().toISOString().split('T')[0]}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-      
+
+      // Log audit activity
+      await logActivity(
+        user.id,
+        user.name,
+        user.role,
+        'Database Exported',
+        'Backup & Recovery',
+        'Exported database records backup JSON containing parent accounts'
+      );
+
       toast.success('Backup exported successfully!');
     } catch (error) {
       console.error('Export backup error:', error);
       toast.error('Failed to export data backup');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    setImportError(null);
+    setParsedBackupData(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+
+        // Simple schema validation
+        const hasTutees = 'tutees' in json;
+        const hasProfile = 'profile' in json;
+
+        if (!hasTutees && !hasProfile) {
+          setImportError('Invalid backup file format. Missing core data keys.');
+          return;
+        }
+
+        setParsedBackupData(json);
+      } catch (err) {
+        setImportError('Failed to parse JSON file. Ensure it is a valid backup JSON.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const convertTimestamps = (data: any, collectionName?: string) => {
+    const result = { ...data };
+    const timestampFields = ['createdAt', 'updatedAt', 'lastUpdated', 'lastPaymentDate'];
+    
+    for (const field of timestampFields) {
+      if (collectionName === 'subjects' && field === 'createdAt') {
+        continue;
+      }
+      if (result[field] && typeof result[field] === 'string') {
+        try {
+          result[field] = Timestamp.fromDate(new Date(result[field]));
+        } catch (e) {
+          console.warn(`Failed to convert field ${field} to Timestamp:`, e);
+        }
+      }
+    }
+    return result;
+  };
+
+  const handleRestoreBackup = async () => {
+    if (!user || !parsedBackupData) return;
+
+    if (!window.confirm('Are you sure you want to restore data from this backup? Existing records with the same IDs will be overwritten.')) {
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      toast.info('Restoring records to cloud...');
+
+      const collectionsToRestore = ['tutees', 'payments', 'sessions', 'paymentRecords', 'paymentTransactions', 'subjects', 'assessments', 'progressReports', 'announcements'];
+
+      // 1. Restore subcollections
+      for (const col of collectionsToRestore) {
+        const items = parsedBackupData[col];
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            const { id, ...data } = item;
+            if (id) {
+              const docRef = doc(db, 'users', user.id, col, id);
+              try {
+                await setDoc(docRef, convertTimestamps(data, col));
+              } catch (e: any) {
+                console.error(`Error restoring to ${col}/${id}:`, e);
+                throw new Error(`Failed to restore ${col} (${id}): ${e.message}`);
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Restore parent accounts
+      const parentAccounts = parsedBackupData['parentAccounts'];
+      if (Array.isArray(parentAccounts)) {
+        for (const parent of parentAccounts) {
+          const { id, ...data } = parent;
+          if (id) {
+            const docRef = doc(db, 'users', id);
+            try {
+              await setDoc(docRef, data);
+            } catch (e: any) {
+              console.error(`Error restoring parent account ${id}:`, e);
+              throw new Error(`Failed to restore parent account (${id}): ${e.message}`);
+            }
+          }
+        }
+      }
+
+      // Log activity
+      await logActivity(
+        user.id,
+        user.name,
+        user.role,
+        'Database Restored',
+        'Backup & Recovery',
+        'Restored database records from backup JSON'
+      );
+
+      toast.success('Backup data restored successfully! Please refresh the page to view updates.');
+      setParsedBackupData(null);
+      setSelectedFile(null);
+    } catch (error: any) {
+      console.error('Restore error:', error);
+      toast.error(error.message || 'Failed to restore backup data.');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -286,6 +432,31 @@ export const Settings = () => {
         const transactionsRef = collection(db, 'users', user.id, 'paymentTransactions');
         const transactionsSnapshot = await getDocs(transactionsRef);
         await Promise.all(transactionsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+        const subjectsRef = collection(db, 'users', user.id, 'subjects');
+        const subjectsSnapshot = await getDocs(subjectsRef);
+        await Promise.all(subjectsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+        const assessmentsRef = collection(db, 'users', user.id, 'assessments');
+        const assessmentsSnapshot = await getDocs(assessmentsRef);
+        await Promise.all(assessmentsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+        const progressRef = collection(db, 'users', user.id, 'progressReports');
+        const progressSnapshot = await getDocs(progressRef);
+        await Promise.all(progressSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+        const announcementsRef = collection(db, 'users', user.id, 'announcements');
+        const announcementsSnapshot = await getDocs(announcementsRef);
+        await Promise.all(announcementsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+        // Parent accounts created by this tutor
+        const parentsQuery = query(
+          collection(db, 'users'),
+          where('createdByTutorId', '==', user.id),
+          where('role', '==', 'parent')
+        );
+        const parentsSnapshot = await getDocs(parentsQuery);
+        await Promise.all(parentsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
 
         toast.success('All data cleared successfully. Please refresh the page.');
       } catch (error) {
@@ -333,7 +504,7 @@ export const Settings = () => {
 
     if (searchQuery.trim()) {
       const queryLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(log => 
+      filtered = filtered.filter(log =>
         (log.userName || '').toLowerCase().includes(queryLower) ||
         (log.actionType || '').toLowerCase().includes(queryLower) ||
         (log.module || '').toLowerCase().includes(queryLower) ||
@@ -362,7 +533,7 @@ export const Settings = () => {
       end = new Date(start);
       end.setHours(23, 59, 59, 999);
     } else if (dateFilter === 'this_week') {
-      const day = now.getDay() || 7; 
+      const day = now.getDay() || 7;
       start = new Date(now);
       start.setHours(0, 0, 0, 0);
       start.setDate(now.getDate() - day + 1);
@@ -435,11 +606,10 @@ export const Settings = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap lg:whitespace-normal w-fit lg:w-full border ${
-                  isActive
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap lg:whitespace-normal w-fit lg:w-full border ${isActive
                     ? 'bg-green-50 text-green-700 shadow-sm border-green-150/70'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-transparent'
-                }`}
+                  }`}
               >
                 <Icon size={18} className={isActive ? 'text-green-700' : 'text-gray-400'} />
                 <span>{tab.label}</span>
@@ -450,7 +620,7 @@ export const Settings = () => {
 
         {/* Content Pane */}
         <div className="flex-1 w-full space-y-6">
-          
+
           {/* 1. Account Information Tab */}
           {activeTab === 'account' && (
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm animate-in fade-in-50 duration-200">
@@ -581,9 +751,9 @@ export const Settings = () => {
                 {(['gcash', 'maya', 'bank', 'other'] as const).map((method) => {
                   const config = paymentMethods[method];
                   const label = method === 'gcash' ? 'GCash' :
-                                method === 'maya' ? 'Maya' :
-                                method === 'bank' ? 'Bank Transfer' : 'Other Payment Method';
-                  
+                    method === 'maya' ? 'Maya' :
+                      method === 'bank' ? 'Bank Transfer' : 'Other Payment Method';
+
                   return (
                     <div key={method} className="p-5 border rounded-2xl bg-gray-50/50 space-y-4 shadow-inner">
                       <div className="flex items-center justify-between">
@@ -772,7 +942,7 @@ export const Settings = () => {
           {/* 5. Audit Logs Tab */}
           {activeTab === 'logs' && user?.role === 'tutor' && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
-              
+
               {/* Stat Cards Grid */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Total activities card */}
@@ -1018,9 +1188,8 @@ export const Settings = () => {
                                 {log.userName || 'System User'}
                               </td>
                               <td className="p-4">
-                                <span className={`text-[10px] px-2 py-0.5 font-bold uppercase rounded-full border tracking-wide ${
-                                  isTutor ? 'bg-emerald-50 border-emerald-250 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-755'
-                                }`}>
+                                <span className={`text-[10px] px-2 py-0.5 font-bold uppercase rounded-full border tracking-wide ${isTutor ? 'bg-emerald-50 border-emerald-250 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-755'
+                                  }`}>
                                   {log.userRole || 'User'}
                                 </span>
                               </td>
@@ -1060,7 +1229,7 @@ export const Settings = () => {
                         <X size={20} />
                       </button>
                     </div>
-                    
+
                     <div className="p-6 space-y-4">
                       {/* Log ID */}
                       <div className="pb-3 border-b border-gray-100 flex justify-between items-center">
@@ -1089,9 +1258,8 @@ export const Settings = () => {
                       {/* User Role */}
                       <div className="pb-3 border-b border-gray-100 flex justify-between items-center">
                         <span className="text-xs uppercase font-extrabold text-gray-400 tracking-wider">User Role</span>
-                        <span className={`text-[10px] px-2.5 py-0.5 font-bold uppercase rounded-full border tracking-wide ${
-                          selectedLog.userRole === 'tutor' ? 'bg-emerald-50 border-emerald-250 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-755'
-                        }`}>{selectedLog.userRole}</span>
+                        <span className={`text-[10px] px-2.5 py-0.5 font-bold uppercase rounded-full border tracking-wide ${selectedLog.userRole === 'tutor' ? 'bg-emerald-50 border-emerald-250 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-755'
+                          }`}>{selectedLog.userRole}</span>
                       </div>
 
                       {/* System Module */}
@@ -1136,48 +1304,160 @@ export const Settings = () => {
                 <Database size={24} className="text-gray-600" />
                 <h2 className="text-xl font-bold text-gray-900">Backup & Recovery</h2>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Export Data Box */}
-                <div className="border border-gray-200 p-5 rounded-2xl bg-gray-50/50 space-y-3 flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-                      <Download size={18} className="text-green-700" />
-                      <span>Export Data Backup</span>
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Download a complete, offline snapshot of your entire classroom, including tutee lists, logs, subjects, progress reports, payment histories, and billing settings.
-                    </p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Side: Backup & Wipe */}
+                <div className="space-y-6">
+                  {/* Export Data Box */}
+                  <div className="border border-gray-200 p-5 rounded-2xl bg-gray-50/50 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
+                        <Download size={18} className="text-green-700" />
+                        <span>Export Data Backup</span>
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Download a complete, offline snapshot of your entire classroom, including tutee lists, logs, subjects, progress reports, payment histories, parent accounts, and billing settings.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleExportData}
+                      disabled={isExporting}
+                      className="w-full flex items-center justify-center gap-2 bg-green-755 hover:bg-green-800 text-white font-bold py-2.5 rounded-xl text-sm transition-all shadow-md shadow-green-700/10 disabled:bg-gray-400 cursor-pointer"
+                    >
+                      <Download size={16} />
+                      {isExporting ? 'Exporting Backup...' : 'Generate JSON Backup'}
+                    </button>
                   </div>
-                  <button
-                    onClick={handleExportData}
-                    disabled={isExporting}
-                    className="w-full flex items-center justify-center gap-2 bg-green-755 hover:bg-green-800 text-white font-bold py-2.5 rounded-xl text-sm transition-all shadow-md shadow-green-700/10 disabled:bg-gray-400"
-                  >
-                    <Download size={16} />
-                    {isExporting ? 'Exporting Backup...' : 'Generate JSON Backup'}
-                  </button>
+
+                  {/* Wipe Data Box */}
+                  <div className="border border-red-200 p-5 rounded-2xl bg-red-50/10 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-bold text-red-700 text-base flex items-center gap-2">
+                        <Trash2 size={18} className="text-red-600" />
+                        <span>Clear Cloud Data</span>
+                      </h3>
+                      <p className="text-sm text-red-900/60 mt-1">
+                        Wipe all cloud data records associated with your account from Firebase. This will permanently delete your students, schedules, billing transactions, and messages.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleClearData}
+                      disabled={isClearing}
+                      className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-sm transition-all shadow-md shadow-red-700/10 disabled:bg-gray-400 cursor-pointer"
+                    >
+                      <Trash2 size={16} />
+                      {isClearing ? 'Clearing Data...' : 'Wipe Account Data'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Wipe Data Box */}
-                <div className="border border-red-200 p-5 rounded-2xl bg-red-50/10 space-y-3 flex flex-col justify-between">
+                {/* Right Side: Restore / Recovery */}
+                <div className="border border-gray-200 p-5 rounded-2xl bg-gray-50/50 space-y-4 flex flex-col justify-between">
                   <div>
-                    <h3 className="font-bold text-red-700 text-base flex items-center gap-2">
-                      <Trash2 size={18} className="text-red-600" />
-                      <span>Clear Cloud Data</span>
+                    <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
+                      <SlidersHorizontal size={18} className="text-green-700" />
+                      <span>Restore Data Backup</span>
                     </h3>
-                    <p className="text-sm text-red-900/60 mt-1">
-                      Wipe all cloud data records associated with your account from Firebase. This will permanently delete your students, schedules, billing transactions, and messages.
+                    <p className="text-sm text-gray-500 mt-1">
+                      Upload a previously exported JSON backup file to restore your database records in Firebase. Overwrites existing documents matching backup IDs.
+                    </p>
+
+                    <div className="mt-4">
+                      {!parsedBackupData ? (
+                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-6 bg-white hover:bg-gray-50 transition-colors cursor-pointer text-center">
+                          <Download size={28} className="text-gray-400 mb-2" />
+                          <span className="text-sm font-semibold text-gray-700">Select Backup file (.json)</span>
+                          <span className="text-xs text-gray-400 mt-1">Click to browse or drop file here</span>
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                      ) : (
+                        <div className="bg-white border rounded-xl p-4 space-y-3 shadow-inner">
+                          <div className="flex justify-between items-center pb-2 border-b">
+                            <span className="text-xs font-bold text-green-755 truncate max-w-[200px]">{selectedFile?.name}</span>
+                            <button
+                              onClick={() => {
+                                setParsedBackupData(null);
+                                setSelectedFile(null);
+                              }}
+                              className="text-xs text-red-500 hover:text-red-700 font-bold"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                          <div className="space-y-1.5 text-xs text-gray-600 font-semibold">
+                            <p className="font-bold text-gray-900 mb-1">Backup Contents Preview:</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>• Tutees: {parsedBackupData.tutees?.length || 0}</div>
+                              <div>• Parent Accounts: {parsedBackupData.parentAccounts?.length || 0}</div>
+                              <div>• Schedules: {parsedBackupData.sessions?.length || 0}</div>
+                              <div>• Payments: {parsedBackupData.payments?.length || 0}</div>
+                              <div>• Attendance Records: {parsedBackupData.paymentRecords?.length || 0}</div>
+                              <div>• Tutee Assessments: {parsedBackupData.assessments?.length || 0}</div>
+                              <div>• Progress Reports: {parsedBackupData.progressReports?.length || 0}</div>
+                              <div>• Announcements: {parsedBackupData.announcements?.length || 0}</div>
+                              <div>• Custom Subjects: {parsedBackupData.subjects?.length || 0}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {importError && (
+                        <p className="text-xs font-semibold text-red-600 mt-2">{importError}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleRestoreBackup}
+                    disabled={isImporting || !parsedBackupData}
+                    className="w-full flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 text-white font-bold py-2.5 rounded-xl text-sm transition-all shadow-md shadow-green-700/10 cursor-pointer"
+                  >
+                    <Activity size={16} className={isImporting ? 'animate-spin' : ''} />
+                    {isImporting ? 'Restoring Backup...' : 'Restore Database Records'}
+                  </button>
+                </div>
+              </div>
+
+              {/* How it works documentation */}
+              <div className="border border-green-200 bg-green-50/30 rounded-2xl p-6 space-y-4">
+                <h3 className="font-bold text-green-950 text-base flex items-center gap-2">
+                  <Info size={20} className="text-green-700" />
+                  <span>How Backup & Recovery Works</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-green-900 font-semibold leading-relaxed">
+                  <div className="space-y-2">
+                    <p className="font-bold text-green-950">Real-time Cloud Storage</p>
+                    <p className="font-normal text-xs text-green-800">
+                      All operational data (students, attendance, schedules, payments) is stored in Google Firebase Firestore.
+                      Since records are kept in the cloud, your data is inherently protected against local device hardware damage or file corruption.
+                    </p>
+                    <p className="font-bold text-green-950">Periodic Database Exports</p>
+                    <p className="font-normal text-xs text-green-800">
+                      We recommend exporting database records weekly or monthly. Click "Generate JSON Backup" above to download
+                      an offline backup file containing all structured records of your classroom.
                     </p>
                   </div>
-                  <button
-                    onClick={handleClearData}
-                    disabled={isClearing}
-                    className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-sm transition-all shadow-md shadow-red-700/10 disabled:bg-gray-400"
-                  >
-                    <Trash2 size={16} />
-                    {isClearing ? 'Clearing Data...' : 'Wipe Account Data'}
-                  </button>
+                  <div className="space-y-2">
+                    <p className="font-bold text-green-950">Dedicated Google Drive Archive</p>
+                    <p className="font-normal text-xs text-green-800">
+                      For secondary storage:
+                      <br />
+                      1. Create a dedicated folder in your Google Drive named <code className="bg-green-100 px-1 py-0.5 rounded font-mono font-bold text-green-950">Tutor Track Backups</code>.
+                      <br />
+                      2. Drag and upload your exported JSON backup file into this Google Drive folder after every weekly or monthly export.
+                    </p>
+                    <p className="font-bold text-green-950">Restoration Flow</p>
+                    <p className="font-normal text-xs text-green-800">
+                      If records are accidentally modified or deleted, locate your secondary backup folder in Google Drive.
+                      Download the latest backup file, upload it in the "Restore Data Backup" card above, and click restore to synchronize the records back into Firebase.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -1188,7 +1468,7 @@ export const Settings = () => {
                   <div>
                     <h3 className="font-bold text-green-900 mb-1">Firebase Sync Connected</h3>
                     <p className="text-sm text-green-800 leading-relaxed font-semibold">
-                      Your TuteePay Tracker is synchronized in real-time with your Google Firebase Cloud. 
+                      Your TuteePay Tracker is synchronized in real-time with your Google Firebase Cloud.
                       All security updates, automated hourly backups, and database transaction tracking are active.
                     </p>
                   </div>

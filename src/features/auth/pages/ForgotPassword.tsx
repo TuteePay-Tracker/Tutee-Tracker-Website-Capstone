@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Link } from 'react-router';
+import logoUrl from '@/assets/logo.jpg';
 import { GraduationCap, ArrowLeft, Mail, Send, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -40,13 +41,13 @@ export const ForgotPassword = () => {
       <div className="relative z-10 w-full max-w-md">
         <div className="bg-white backdrop-blur-xl rounded-3xl shadow-2xl p-8 lg:p-10 border border-green-200">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-700 rounded-2xl mb-4 shadow-lg">
-              {emailSent ? (
+            {emailSent ? (
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-700 rounded-2xl mb-4 shadow-lg mx-auto">
                 <CheckCircle size={32} className="text-white" />
-              ) : (
-                <GraduationCap size={32} className="text-white" />
-              )}
-            </div>
+              </div>
+            ) : (
+              <img src={logoUrl} alt="TuteePay Logo" className="w-16 h-16 object-contain rounded-2xl mb-4 shadow-lg bg-white p-1 mx-auto" />
+            )}
             <h2 className="text-3xl font-bold text-gray-900 mb-2">
               {emailSent ? 'Check Your Email' : 'Reset Password'}
             </h2>

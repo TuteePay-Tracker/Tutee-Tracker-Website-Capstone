@@ -179,7 +179,7 @@ export const Attendance = () => {
       {/* Header */}
       <div>
         <h1 className="text-4xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-          <CheckCircle2 className="text-green-700" size={36} />
+          <CheckCircle2 className="text-emerald-700" size={36} />
           Attendance
         </h1>
         <p className="text-gray-500 mt-2">Mark Present or Absent for each student's scheduled sessions</p>
@@ -231,8 +231,8 @@ export const Attendance = () => {
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs font-semibold text-gray-600">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-green-100 border-2 border-green-400 flex items-center justify-center">
-            <CheckCircle2 size={14} className="text-green-600" />
+          <div className="w-8 h-8 rounded-lg bg-emerald-100 border-2 border-emerald-400 flex items-center justify-center">
+            <CheckCircle2 size={14} className="text-emerald-600" />
           </div>
           <span>Present — click to mark absent</span>
         </div>
@@ -274,7 +274,7 @@ export const Attendance = () => {
                 {/* Student Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 bg-gray-50/60">
                   <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center shadow-md shadow-green-700/20 text-white font-bold text-sm">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 text-white font-bold text-sm">
                       {tutee.firstName.slice(0, 1)}{tutee.surname.slice(0, 1)}
                     </div>
                     <div>
@@ -291,9 +291,9 @@ export const Attendance = () => {
 
                   {/* Summary Badges */}
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-xl px-3 py-1.5">
-                      <CheckCircle2 size={14} className="text-green-600" />
-                      <span className="text-xs font-bold text-green-700">{presentCount} Present</span>
+                    <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-1.5">
+                      <CheckCircle2 size={14} className="text-emerald-600" />
+                      <span className="text-xs font-bold text-emerald-700">{presentCount} Present</span>
                     </div>
                     <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-xl px-3 py-1.5">
                       <XCircle size={14} className="text-red-500" />
@@ -333,8 +333,8 @@ export const Attendance = () => {
                         let statusLabel = 'Unmarked';
 
                         if (day.status === 'present') {
-                          cardClass = 'border-green-300 bg-green-50 hover:bg-green-100 text-green-800';
-                          statusIcon = <CheckCircle2 size={14} className="text-green-600" />;
+                          cardClass = 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800';
+                          statusIcon = <CheckCircle2 size={14} className="text-emerald-600" />;
                           statusLabel = 'Present';
                         } else if (day.status === 'absent') {
                           cardClass = 'border-red-300 bg-red-50 hover:bg-red-100 text-red-700';
@@ -347,7 +347,7 @@ export const Attendance = () => {
                             key={day.date}
                             onClick={() => handleToggleDay(tutee, day.date, day.status)}
                             disabled={isToggling}
-                            className={`relative flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl border-2 transition-all cursor-pointer active:scale-95 ${cardClass} ${isToday ? 'ring-2 ring-green-500 ring-offset-1' : ''} ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`relative flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl border-2 transition-all cursor-pointer active:scale-95 ${cardClass} ${isToday ? 'ring-2 ring-primary ring-offset-1' : ''} ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={`${format(baseDate, 'EEEE, MMM dd')} — Click to mark ${day.status === 'none' ? 'Present' : day.status === 'present' ? 'Absent' : 'Unmarked'}`}
                           >
                             {isToggling ? (
@@ -358,8 +358,8 @@ export const Attendance = () => {
                             <span className="text-[10px] font-bold leading-none">{format(baseDate, 'EEE')}</span>
                             <span className="text-[9px] leading-none opacity-75">{format(baseDate, 'MMM d')}</span>
                             <span className={`text-[8px] font-extrabold uppercase tracking-wider leading-none mt-0.5 ${
-                              day.status === 'present' ? 'text-green-700' : day.status === 'absent' ? 'text-red-600' : 'text-gray-400'
-                            }`}>{statusLabel}</span>
+                              day.status === 'present' ? 'text-emerald-700' : day.status === 'absent' ? 'text-red-600' : 'text-gray-400'
+                          }`}>{statusLabel}</span>
                           </button>
                         );
                       })}
@@ -378,7 +378,7 @@ export const Attendance = () => {
                     </div>
                     <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500"
+                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500"
                         style={{ width: `${totalDays > 0 ? (presentCount / totalDays) * 100 : 0}%` }}
                       />
                     </div>

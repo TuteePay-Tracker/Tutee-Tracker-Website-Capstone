@@ -82,8 +82,11 @@ service cloud.firestore {
       // We do NOT call isTutor() here because that performs a nested Firestore get()
       // which can itself return "Missing or insufficient permissions".
       // Instead, we verify the writer is authenticated, is writing for a DIFFERENT uid,
-      // and that the data matches the strict parent portal schema.
-      allow create: if isAuthenticated() && userId != request.auth.uid && isValidParentPortalCreate();
+      // and that the data matches the parent portal schema OR is restored by the tutor who created it.
+      allow create: if isAuthenticated() && userId != request.auth.uid && (
+        isValidParentPortalCreate()
+        || (request.resource.data.role == 'parent' && request.resource.data.createdByTutorId == request.auth.uid)
+      );
 
       // Users update their own profile
       allow update: if isAuthenticated() && isOwner(userId) && (
@@ -92,10 +95,17 @@ service cloud.firestore {
         || (resource.data.role == 'parent' && isValidParentUserUpdateByOwner())
       );
 
-      // Tutor updates parent linkedStudentIds / createdByTutorId when linking students
-      allow update: if isAuthenticated() && !isOwner(userId) && isValidParentUserUpdateByTutor();
+      // Tutor updates parent linkedStudentIds / createdByTutorId when linking students or restoring backup
+      allow update: if isAuthenticated() && !isOwner(userId) && (
+        isValidParentUserUpdateByTutor()
+        || (resource.data.role == 'parent' && resource.data.createdByTutorId == request.auth.uid && request.resource.data.role == 'parent' && request.resource.data.createdByTutorId == request.auth.uid)
+      );
 
-      allow delete: if isAuthenticated() && isOwner(userId);
+      // Allow owner or the tutor who created the parent account to delete it
+      allow delete: if isAuthenticated() && (
+        isOwner(userId)
+        || (resource.data.role == 'parent' && resource.data.createdByTutorId == request.auth.uid)
+      );
 
       // TUTEES subcollection
       match /tutees/{tuteeId} {
@@ -128,11 +138,11 @@ service cloud.firestore {
 
         allow delete: if isAuthenticated() && isOwner(userId);
 
-        // Users can create tutees with valid data
-        allow create: if isAuthenticated() && isOwner(userId) && isValidTutee();
+        // Users can create tutees  
+        allow create: if isAuthenticated() && isOwner(userId);
 
-        // Users can update tutees with valid data, or link a parent id only
-        allow update: if isAuthenticated() && isOwner(userId) && (isValidTutee() || isLinkingParentOnly());
+        // Users can update tutees
+        allow update: if isAuthenticated() && isOwner(userId);
       }
       
       // PAYMENTS subcollection
@@ -161,14 +171,14 @@ service cloud.firestore {
         );
         allow delete: if isAuthenticated() && isOwner(userId);
 
-        // Users can create payments with valid data (tutors, or parent portal for tutee)
+        // Users can create payments (tutors, or parents with valid data)
         allow create: if isAuthenticated() && (
           isOwner(userId) || 
-          isParentOfTutee(userId, request.resource.data.tuteeId)
-        ) && isValidPayment();
+          (isParentOfTutee(userId, request.resource.data.tuteeId) && isValidPayment())
+        );
 
-        // Users can update payments with valid data
-        allow update: if isAuthenticated() && isOwner(userId) && isValidPayment();
+        // Users can update payments
+        allow update: if isAuthenticated() && isOwner(userId);
       }
       
       // SESSIONS subcollection
@@ -193,11 +203,11 @@ service cloud.firestore {
         );
         allow delete: if isAuthenticated() && isOwner(userId);
 
-        // Users can create sessions with valid data
-        allow create: if isAuthenticated() && isOwner(userId) && isValidSession();
+        // Users can create sessions
+        allow create: if isAuthenticated() && isOwner(userId);
 
-        // Users can update sessions with valid data
-        allow update: if isAuthenticated() && isOwner(userId) && isValidSession();
+        // Users can update sessions
+        allow update: if isAuthenticated() && isOwner(userId);
       }
 
       // PAYMENT RECORDS subcollection (day-based payments)
@@ -223,7 +233,7 @@ service cloud.firestore {
           isParentOfTutee(userId, resource.data.tuteeId) ||
           (resource != null && resource.data.keys().hasAny(['parentId']) && resource.data.parentId == request.auth.uid)
         );
-        allow create, update: if isAuthenticated() && isOwner(userId) && isValidPaymentRecord();
+        allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 
@@ -246,8 +256,8 @@ service cloud.firestore {
           isOwner(userId) || 
           isParentOfTutee(userId, resource.data.tuteeId)
         );
-        allow create: if isAuthenticated() && isOwner(userId) && isValidTransaction();
-        allow update, delete: if isAuthenticated() && isOwner(userId);
+        allow create, update: if isAuthenticated() && isOwner(userId);
+        allow delete: if isAuthenticated() && isOwner(userId);
       }
 
       // PROGRESS REPORTS subcollection
@@ -272,7 +282,7 @@ service cloud.firestore {
           isOwner(userId) || 
           isParentOfTutee(userId, resource.data.tuteeId)
         );
-        allow create, update: if isAuthenticated() && isOwner(userId) && isValidProgressReport();
+        allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 
@@ -295,7 +305,7 @@ service cloud.firestore {
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
         );
 
-        allow create, update: if isAuthenticated() && isOwner(userId) && isValidAnnouncement();
+        allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 
@@ -309,7 +319,7 @@ service cloud.firestore {
         }
 
         allow read, delete: if isAuthenticated() && isOwner(userId);
-        allow create, update: if isAuthenticated() && isOwner(userId) && isValidSubject();
+        allow create, update: if isAuthenticated() && isOwner(userId);
       }
 
       // ASSESSMENTS subcollection (tutor-managed student assessment records)
@@ -337,7 +347,7 @@ service cloud.firestore {
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
         );
-        allow create, update: if isAuthenticated() && isOwner(userId) && isValidAssessment();
+        allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
       }
     }

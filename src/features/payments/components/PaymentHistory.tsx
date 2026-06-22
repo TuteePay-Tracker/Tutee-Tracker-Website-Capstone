@@ -91,7 +91,7 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
     // verified or no status
     if (payment.coverageType) {
       return payment.coverageType === 'full' ? (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full border border-emerald-200">
           <CheckCircle2 size={10} /> Full Payment
         </span>
       ) : (
@@ -105,7 +105,7 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
       : (tuteeRate && tuteeRate > 0 ? payment.amount / tuteeRate : 0);
     if (coverage === 0 && payment.amount > 0) return null;
     return coverage >= 0.99 ? (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full border border-emerald-200">
         <CheckCircle2 size={10} /> Full Payment
       </span>
     ) : (

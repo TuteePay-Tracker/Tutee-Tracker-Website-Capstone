@@ -207,9 +207,9 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
             <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Total Due</p>
             <p className="text-2xl font-bold text-blue-900">{formatCurrency(record.totalDue)}</p>
           </div>
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-xs font-semibold text-green-700 uppercase mb-1">Total Paid</p>
-            <p className="text-2xl font-bold text-green-900">{formatCurrency(record.totalPaid)}</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Total Paid</p>
+            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(record.totalPaid)}</p>
           </div>
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
             <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Balance</p>
@@ -232,10 +232,10 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
             let icon = <AlertCircle size={18} className="text-gray-400" />;
 
             if (isPaid) {
-              colorClass = 'bg-green-50 border-green-200';
-              textColorClass = 'text-green-700';
+              colorClass = 'bg-emerald-50 border-emerald-200';
+              textColorClass = 'text-emerald-700';
               statusLabel = 'Fully Paid';
-              icon = <CheckCircle2 size={18} className="text-green-600" />;
+              icon = <CheckCircle2 size={18} className="text-emerald-600" />;
             } else if (isPartial) {
               colorClass = 'bg-orange-50 border-orange-200';
               textColorClass = 'text-orange-700';

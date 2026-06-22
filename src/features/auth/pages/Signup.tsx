@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useNavigate } from 'react-router';
 import { Link } from 'react-router';
+import logoUrl from '@/assets/logo.jpg';
 import { GraduationCap, User, Mail, Lock, ArrowRight, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -122,9 +123,7 @@ export const Signup = () => {
             {!accountCreated ? (
               <>
                 <div className="text-center mb-8">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-green-700 rounded-2xl mb-4 shadow-lg">
-                    <GraduationCap size={32} className="text-white" />
-                  </div>
+                  <img src={logoUrl} alt="TuteePay Logo" className="w-16 h-16 object-contain rounded-2xl mb-4 shadow-lg bg-white p-1 mx-auto" />
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
                   <p className="text-gray-600">Start managing your tutoring business</p>
                 </div>
