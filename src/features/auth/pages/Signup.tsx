@@ -124,13 +124,11 @@ export const Signup = () => {
               <>
                 <div className="text-center mb-8">
                   <img src={logoUrl} alt="TuteePay Logo" className="w-16 h-16 object-contain rounded-2xl mb-4 shadow-lg bg-white p-1 mx-auto" />
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
-                  <p className="text-gray-600">Start managing your tutoring business</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account for Tutor</h2>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">I am a...</label>
                     <div className="grid grid-cols-2 gap-4">
                       <button
                         type="button"
@@ -143,17 +141,7 @@ export const Signup = () => {
                       >
                         Tutor
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setRole('parent')}
-                        className={`py-3 px-4 rounded-xl border-2 transition-all ${
-                          role === 'parent'
-                            ? 'border-green-700 bg-green-50 text-green-700 font-semibold'
-                            : 'border-gray-200 hover:border-green-200 text-gray-500'
-                        }`}
-                      >
-                        Parent
-                      </button>
+                      
                     </div>
                   </div>
 
@@ -168,7 +156,7 @@ export const Signup = () => {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent transition-all bg-white"
-                        placeholder="John Doe"
+                        placeholder="Enter your name"
                         required
                       />
                     </div>
@@ -185,7 +173,7 @@ export const Signup = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent transition-all bg-white"
-                        placeholder="john@example.com"
+                        placeholder="Enter your email address"
                         required
                       />
                     </div>

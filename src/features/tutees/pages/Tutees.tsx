@@ -1014,17 +1014,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
               required
             />
           </div>
-
-          <div>
-            <label className="block text-sm mb-2">Email</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full p-2 border rounded-lg"
-            />
-          </div>
-
+          
           <div>
             <label className="block text-sm mb-2">Guardian/Parents Number</label>
             <input

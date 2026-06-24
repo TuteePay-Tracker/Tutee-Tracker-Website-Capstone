@@ -251,6 +251,7 @@ function AssessmentModal({
     subject: editing?.subject ?? defaultSubject ?? subjects[0] ?? '',
     date: editing?.date ?? new Date().toISOString().slice(0, 10),
     assessmentScores: editing?.assessmentScores ?? [{ name: '', score: 0 }],
+    totalScore: editing?.totalScore ?? undefined,
     topicsCovered: editing?.topicsCovered ?? '',
     notes: editing?.notes ?? '',
     recommendations: editing?.recommendations ?? '',
@@ -258,6 +259,21 @@ function AssessmentModal({
     remarks: editing?.remarks ?? 'Good',
   });
   const [saving, setSaving] = useState(false);
+
+  const calculateScoreAndRemarks = (scores: { name: string; score: number }[], totalScore?: number) => {
+    const validScores = scores.map((s) => s.score).filter((s) => !isNaN(s));
+    let avgScore = 0;
+    if (totalScore && totalScore > 0) {
+      const sum = validScores.reduce((sum, s) => sum + s, 0);
+      avgScore = Math.round((sum / totalScore) * 100);
+    } else {
+      avgScore = validScores.length ? Math.round(validScores.reduce((sum, s) => sum + s, 0) / validScores.length) : 0;
+    }
+    return {
+      score: avgScore,
+      remarks: scoreToRemarks(avgScore),
+    };
+  };
 
   const handleTuteeChange = (id: string) => {
     const found = tutees.find((t) => t.id === id);
@@ -274,14 +290,12 @@ function AssessmentModal({
         if (idx !== index) return score;
         return { ...score, [field]: value };
       });
-      // Calculate dynamic average score
-      const validScores = newScores.map((s) => s.score).filter((s) => !isNaN(s));
-      const avgScore = validScores.length ? Math.round(validScores.reduce((sum, s) => sum + s, 0) / validScores.length) : 0;
+      const { score, remarks } = calculateScoreAndRemarks(newScores, prev.totalScore);
       return {
         ...prev,
         assessmentScores: newScores,
-        score: avgScore,
-        remarks: scoreToRemarks(avgScore),
+        score,
+        remarks,
       };
     });
   };
@@ -298,13 +312,12 @@ function AssessmentModal({
       const newScores = prev.assessmentScores.length === 1
         ? [{ name: '', score: 0 }]
         : prev.assessmentScores.filter((_, idx) => idx !== index);
-      const validScores = newScores.map((s) => s.score).filter((s) => !isNaN(s));
-      const avgScore = validScores.length ? Math.round(validScores.reduce((sum, s) => sum + s, 0) / validScores.length) : 0;
+      const { score, remarks } = calculateScoreAndRemarks(newScores, prev.totalScore);
       return {
         ...prev,
         assessmentScores: newScores,
-        score: avgScore,
-        remarks: scoreToRemarks(avgScore),
+        score,
+        remarks,
       };
     });
   };
@@ -323,9 +336,20 @@ function AssessmentModal({
       toast.error('Please enter a name for all assessment scores');
       return;
     }
-    if (form.assessmentScores.some(s => s.score < 0 || s.score > 100)) {
-      toast.error('Scores must be between 0 and 100');
+    if (form.totalScore !== undefined && (isNaN(form.totalScore) || form.totalScore <= 0)) {
+      toast.error('Max score must be a positive number');
       return;
+    }
+    if (form.totalScore && form.totalScore > 0) {
+      if (form.assessmentScores.some(s => s.score < 0 || s.score > form.totalScore!)) {
+        toast.error(`Scores must be between 0 and ${form.totalScore}`);
+        return;
+      }
+    } else {
+      if (form.assessmentScores.some(s => s.score < 0 || s.score > 100)) {
+        toast.error('Scores must be between 0 and 100');
+        return;
+      }
     }
 
     setSaving(true);
@@ -402,7 +426,7 @@ function AssessmentModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Student selection + Date & Subject */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
                 Student
@@ -455,6 +479,27 @@ function AssessmentModal({
                 className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
               />
             </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
+                Max Score
+              </label>
+              <input
+                type="number"
+                min="1"
+                placeholder="Optional"
+                value={form.totalScore ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? undefined : Number(e.target.value);
+                  setForm((prev) => {
+                    const next = { ...prev, totalScore: val };
+                    const { score, remarks } = calculateScoreAndRemarks(next.assessmentScores, val);
+                    return { ...next, score, remarks };
+                  });
+                }}
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
+              />
+            </div>
           </div>
 
           {/* Assessment scores dynamic layout */}
@@ -486,15 +531,15 @@ function AssessmentModal({
                   <input
                     type="number"
                     min="0"
-                    max="100"
+                    max={form.totalScore !== undefined && form.totalScore > 0 ? form.totalScore : 100}
                     required
                     value={score.score}
                     onChange={(e) => updateAssessmentScore(index, 'score', Number(e.target.value))}
                     placeholder="0"
                     className="w-20 px-2 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold text-sm"
                   />
-                  <div className="flex items-center justify-center w-12 h-12 text-blue-500 border border-gray-200 rounded-xl bg-gray-50 font-semibold text-sm shrink-0">
-                    %
+                  <div className="flex items-center justify-center px-2 min-w-12 h-12 text-blue-500 border border-gray-200 rounded-xl bg-gray-50 font-semibold text-sm shrink-0">
+                    {form.totalScore !== undefined && form.totalScore > 0 ? 'pts' : '%'}
                   </div>
                   <button
                     type="button"
@@ -1221,12 +1266,23 @@ function SubjectSection({
                             <div className="px-4 pb-3.5 pt-2 border-t border-gray-100 bg-white space-y-3 text-xs text-gray-700">
                               {a.assessmentScores && a.assessmentScores.length > 0 && (
                                 <div>
-                                  <span className="font-bold text-gray-400 uppercase text-[10px] tracking-wider block mb-1">Scores Breakdown:</span>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-bold text-gray-400 uppercase text-[10px] tracking-wider block">
+                                      Scores Breakdown:
+                                    </span>
+                                    {a.totalScore !== undefined && a.totalScore > 0 && (
+                                      <span className="font-bold text-[10px] text-gray-500">
+                                        Total: {a.assessmentScores.reduce((sum, s) => sum + s.score, 0)} / {a.totalScore} pts ({a.score}%)
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {a.assessmentScores.map((s, idx) => (
                                       <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 flex justify-between items-center">
                                         <span className="font-semibold text-gray-650 truncate">{s.name || `Score ${idx+1}`}</span>
-                                        <span className="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px]">{s.score}%</span>
+                                        <span className="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[10px]">
+                                          {a.totalScore !== undefined && a.totalScore > 0 ? `${s.score} pts` : `${s.score}%`}
+                                        </span>
                                       </div>
                                     ))}
                                   </div>

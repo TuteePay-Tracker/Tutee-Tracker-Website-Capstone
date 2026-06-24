@@ -77,6 +77,7 @@ class ReportService {
         subject: data.subject || '',
         date: data.date || '',
         assessmentScores: data.assessmentScores || [],
+        totalScore: typeof data.totalScore === 'number' ? data.totalScore : undefined,
         topicsCovered: data.topicsCovered || '',
         notes: data.notes || '',
         recommendations: data.recommendations || '',
@@ -125,8 +126,9 @@ class ReportService {
 
       tuteeRecords.forEach((record) => {
         const days = record.dayPayments || [];
-        const scheduled = days.length;
-        const paid = days.filter((d) => d.status === 'paid').length;
+        const activeDays = days.filter((d) => d.status !== 'no-class');
+        const scheduled = activeDays.length;
+        const paid = activeDays.filter((d) => d.status === 'paid').length;
         totalScheduled += scheduled;
         totalPaid += paid;
 

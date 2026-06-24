@@ -15,13 +15,14 @@ import {
   Filter,
   User,
   Calendar,
+  CalendarX,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
 import { toast } from 'sonner';
 import { db, auth } from '@/shared/lib/firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
-type AttendanceStatus = 'present' | 'absent' | 'none';
+type AttendanceStatus = 'present' | 'absent' | 'no-class' | 'none';
 
 interface DayAttendance {
   date: string;
@@ -32,12 +33,14 @@ interface DayAttendance {
 const toAttendance = (status: string): AttendanceStatus => {
   if (status === 'paid') return 'present';
   if (status === 'partial') return 'absent';
+  if (status === 'no-class') return 'no-class';
   return 'none';
 };
 
 const fromAttendance = (current: AttendanceStatus): string => {
   if (current === 'present') return 'partial'; // paid -> partial means toggling to absent
-  if (current === 'absent') return 'unpaid';   // partial -> unpaid means back to none
+  if (current === 'absent') return 'no-class';   // partial -> no-class
+  if (current === 'no-class') return 'unpaid'; // no-class -> unpaid
   return 'paid';                                // none -> paid means present
 };
 
@@ -131,12 +134,18 @@ export const Attendance = () => {
 
     try {
       await dayPaymentService.toggleDayStatus(tutee.id, monthKey, date);
-      const label = currentStatus === 'none' ? 'Marked Present ✓' : currentStatus === 'present' ? 'Marked Absent ✗' : 'Status cleared';
+      const label = 
+        currentStatus === 'none' ? 'Marked Present ✓' : 
+        currentStatus === 'present' ? 'Marked Absent ✗' : 
+        currentStatus === 'absent' ? 'Marked No Class' : 'Status cleared';
       toast.success(label);
 
       if (user) {
         const isNew = currentStatus === 'none';
-        const newStatusStr = currentStatus === 'none' ? 'Present' : currentStatus === 'present' ? 'Absent' : 'None';
+        const newStatusStr = 
+          currentStatus === 'none' ? 'Present' : 
+          currentStatus === 'present' ? 'Absent' : 
+          currentStatus === 'absent' ? 'No Class' : 'None';
         await logActivity(
           user.id,
           user.name,
@@ -240,7 +249,13 @@ export const Attendance = () => {
           <div className="w-8 h-8 rounded-lg bg-red-100 border-2 border-red-400 flex items-center justify-center">
             <XCircle size={14} className="text-red-500" />
           </div>
-          <span>Absent — click to clear</span>
+          <span>Absent — click to mark no class</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-purple-100 border-2 border-purple-400 flex items-center justify-center">
+            <CalendarX size={14} className="text-purple-600" />
+          </div>
+          <span>No Class — click to clear</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
@@ -263,7 +278,7 @@ export const Attendance = () => {
             const days = getScheduledDays(tutee);
             const presentCount = days.filter(d => d.status === 'present').length;
             const absentCount = days.filter(d => d.status === 'absent').length;
-            const totalDays = days.length;
+            const totalDays = days.filter(d => d.status !== 'no-class').length;
             const isLoadingThis = loadingRecords[tutee.id];
 
             return (
@@ -340,6 +355,10 @@ export const Attendance = () => {
                           cardClass = 'border-red-300 bg-red-50 hover:bg-red-100 text-red-700';
                           statusIcon = <XCircle size={14} className="text-red-500" />;
                           statusLabel = 'Absent';
+                        } else if (day.status === 'no-class') {
+                          cardClass = 'border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-800';
+                          statusIcon = <CalendarX size={14} className="text-purple-650" />;
+                          statusLabel = 'No Class';
                         }
 
                         return (
@@ -348,7 +367,7 @@ export const Attendance = () => {
                             onClick={() => handleToggleDay(tutee, day.date, day.status)}
                             disabled={isToggling}
                             className={`relative flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl border-2 transition-all cursor-pointer active:scale-95 ${cardClass} ${isToday ? 'ring-2 ring-primary ring-offset-1' : ''} ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={`${format(baseDate, 'EEEE, MMM dd')} — Click to mark ${day.status === 'none' ? 'Present' : day.status === 'present' ? 'Absent' : 'Unmarked'}`}
+                            title={`${format(baseDate, 'EEEE, MMM dd')} — Click to mark ${day.status === 'none' ? 'Present' : day.status === 'present' ? 'Absent' : day.status === 'absent' ? 'No Class' : 'Unmarked'}`}
                           >
                             {isToggling ? (
                               <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
@@ -358,8 +377,8 @@ export const Attendance = () => {
                             <span className="text-[10px] font-bold leading-none">{format(baseDate, 'EEE')}</span>
                             <span className="text-[9px] leading-none opacity-75">{format(baseDate, 'MMM d')}</span>
                             <span className={`text-[8px] font-extrabold uppercase tracking-wider leading-none mt-0.5 ${
-                              day.status === 'present' ? 'text-emerald-700' : day.status === 'absent' ? 'text-red-600' : 'text-gray-400'
-                          }`}>{statusLabel}</span>
+                              day.status === 'present' ? 'text-emerald-700' : day.status === 'absent' ? 'text-red-600' : day.status === 'no-class' ? 'text-purple-700' : 'text-gray-400'
+                            }`}>{statusLabel}</span>
                           </button>
                         );
                       })}

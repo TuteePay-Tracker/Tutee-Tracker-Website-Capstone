@@ -128,7 +128,7 @@ const ParentDashboard = () => {
             const dayPayments = (recData.dayPayments || []) as any[];
             dayPayments.forEach((dp) => {
               if (dp.status === 'paid') present++;
-              total++;
+              if (dp.status !== 'no-class') total++;
             });
           });
           setTuteeAttendance((prev) => ({

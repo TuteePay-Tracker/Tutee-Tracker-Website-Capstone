@@ -6,7 +6,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { formatDate, formatTime12h } from '@/shared/utils/formatDate';
 import {
-  ArrowLeft, Mail, Phone, Calendar, DollarSign, BookOpen, Users,
+  ArrowLeft, Mail, Phone, Calendar, CalendarX, DollarSign, BookOpen, Users,
   X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
   Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash,
   Pencil, GraduationCap
@@ -815,7 +815,7 @@ export const TuteeDetails = () => {
               {attendanceRecords.map((record) => {
                 const presentCount = record.dayPayments.filter(d => d.status === 'paid').length;
                 const absentCount = record.dayPayments.filter(d => d.status === 'partial').length;
-                const totalSessions = record.dayPayments.length;
+                const totalSessions = record.dayPayments.filter(d => d.status !== 'no-class').length;
                 return (
                   <div key={record.id} className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50 space-y-4">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-gray-200 pb-3">
@@ -857,6 +857,11 @@ export const TuteeDetails = () => {
                             statusLabel = 'Absent';
                             statusIcon = <XCircle size={14} className="text-red-505" />;
                             labelColorClass = 'text-red-600';
+                          } else if (day.status === 'no-class') {
+                            cardClass = 'bg-purple-50 border-purple-200 text-purple-800';
+                            statusLabel = 'No Class';
+                            statusIcon = <CalendarX size={14} className="text-purple-600" />;
+                            labelColorClass = 'text-purple-650';
                           }
 
                           return (

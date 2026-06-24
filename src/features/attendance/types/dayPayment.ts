@@ -1,4 +1,4 @@
-export type PaymentStatus = 'unpaid' | 'partial' | 'paid';
+export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'no-class';
 
 export interface DayPayment {
   date: string; // YYYY-MM-DD format

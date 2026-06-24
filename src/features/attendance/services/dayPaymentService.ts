@@ -286,6 +286,7 @@ class DayPaymentService {
           let newStatus: PaymentStatus;
           if (day.status === 'unpaid') newStatus = 'paid';
           else if (day.status === 'paid') newStatus = 'partial';
+          else if (day.status === 'partial') newStatus = 'no-class';
           else newStatus = 'unpaid';
           return { ...day, status: newStatus };
         }

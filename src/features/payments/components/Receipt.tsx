@@ -121,9 +121,10 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
                             <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
                               day.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                               day.status === 'partial' ? 'bg-orange-100 text-orange-700' :
+                              day.status === 'no-class' ? 'bg-purple-100 text-purple-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
-                              {day.status === 'paid' ? 'Full' : day.status === 'partial' ? 'Partial' : 'Unpaid'}
+                              {day.status === 'paid' ? 'Full' : day.status === 'partial' ? 'Partial' : day.status === 'no-class' ? 'No Class' : 'Unpaid'}
                             </span>
                           </td>
                         </tr>

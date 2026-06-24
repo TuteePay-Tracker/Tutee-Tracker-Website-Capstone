@@ -66,7 +66,10 @@ export const Login = () => {
           <h1 className="text-5xl lg:text-6xl font-bold leading-tight text-gray-900">
             Welcome to
             <span className="block text-green-700">
-              TUTOR TRACK
+              TUTOR {' '}
+              <span className="text-green-700">
+                TRACK
+              </span>
             </span>
           </h1>
 
@@ -134,7 +137,7 @@ export const Login = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent transition-all bg-white"
-                    placeholder="john@example.com or 09171234567"
+                    placeholder="Email or phone number"
                     required
                   />
                 </div>
@@ -221,27 +224,6 @@ export const Login = () => {
                 <span>Create an account</span>
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </Link>
-            </div>
-          </div>
-
-          {/* Trust Indicators */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-700 mb-3">Trusted by tutors across the Philippines</p>
-            <div className="flex items-center justify-center gap-6">
-              <div className="text-gray-700 text-xs">
-                <div className="font-semibold text-lg text-green-700">1000+</div>
-                <div>Active Users</div>
-              </div>
-              <div className="w-px h-10 bg-green-300"></div>
-              <div className="text-gray-700 text-xs">
-                <div className="font-semibold text-lg text-green-700">₱10M+</div>
-                <div>Payments Tracked</div>
-              </div>
-              <div className="w-px h-10 bg-green-300"></div>
-              <div className="text-gray-700 text-xs">
-                <div className="font-semibold text-lg text-green-700">99.9%</div>
-                <div>Uptime</div>
-              </div>
             </div>
           </div>
         </div>

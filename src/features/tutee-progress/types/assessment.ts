@@ -12,10 +12,11 @@ export interface Assessment {
   subject: string;
   date: string; // ISO date string e.g. "2026-06-18"
   assessmentScores: AssessmentScore[];
+  totalScore?: number; // Optional overall total / max score for this assessment
   topicsCovered: string;
   notes: string;
   recommendations?: string;
-  score: number; // calculated average score (0–100)
+  score: number; // calculated average score (0–100) or total average if totalScore is set
   remarks: Remarks;
   createdAt: string;
   updatedAt: string;
@@ -27,6 +28,7 @@ export interface AssessmentFormData {
   subject: string;
   date: string;
   assessmentScores: AssessmentScore[];
+  totalScore?: number;
   topicsCovered: string;
   notes: string;
   recommendations?: string;

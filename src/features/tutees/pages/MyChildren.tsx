@@ -104,7 +104,8 @@ export const MyChildren = () => {
             dayPayments.forEach((dp) => {
               if (dp.status === 'paid') present++;
               else if (dp.status === 'partial') absent++;
-              total++;
+              
+              if (dp.status !== 'no-class') total++;
             });
           });
 

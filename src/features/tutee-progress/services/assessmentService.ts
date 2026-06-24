@@ -44,6 +44,7 @@ class AssessmentService {
               subject: data.subject || '',
               date: data.date || '',
               assessmentScores: data.assessmentScores || [],
+              totalScore: typeof data.totalScore === 'number' ? data.totalScore : undefined,
               topicsCovered: data.topicsCovered || '',
               notes: data.notes || '',
               recommendations: data.recommendations || '',

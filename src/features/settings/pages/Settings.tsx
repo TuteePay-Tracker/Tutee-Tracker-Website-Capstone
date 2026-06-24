@@ -619,7 +619,12 @@ export const Settings = () => {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  if (tab.id === 'logs') {
+                    setLoadingLogs(true);
+                  }
+                }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap lg:whitespace-normal w-fit lg:w-full border ${isActive
                     ? 'bg-green-50 text-green-700 shadow-sm border-green-150/70'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-transparent'
