@@ -4,6 +4,7 @@ import { paymentService } from '@/features/payments/services/paymentService';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 
 export const usePayments = () => {
   const { user } = useAuth();
@@ -39,7 +40,7 @@ export const usePayments = () => {
       const errorMessage = err?.message || 'Failed to load payments';
       setError(errorMessage);
       console.error(err);
-      if (err?.message !== 'User not authenticated') {
+      if (shouldShowFirestoreError(err)) {
         toast.error(errorMessage);
       }
     } finally {

@@ -4,6 +4,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/shared/lib/firebase/config';
 import { registerUser, loginUser, logoutUser, resetPassword as resetUserPassword } from '@/shared/lib/firebase/auth';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { setLoggingOut } from '@/shared/utils/firestoreErrors';
 
 interface User {
   id: string;
@@ -206,18 +207,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
-    if (user) {
-      await logActivity(
-        user.id,
-        user.name,
-        user.role,
-        'Logout',
-        'Authentication',
-        `User ${user.name} logged out`
-      );
+    setLoggingOut(true);
+    try {
+      if (user) {
+        try {
+          await logActivity(
+            user.id,
+            user.name,
+            user.role,
+            'Logout',
+            'Authentication',
+            `User ${user.name} logged out`
+          );
+        } catch (error) {
+          console.error('Failed to log activity during logout:', error);
+        }
+      }
+      // Set user state to null first to trigger active hook cleanup and unsubscribe listeners
+      setUser(null);
+      // Yield to let React commit the render tree update and execute effect cleanups
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await logoutUser();
+    } finally {
+      setLoggingOut(false);
     }
-    await logoutUser();
-    setUser(null);
   };
 
   const resetPassword = async (email: string) => {

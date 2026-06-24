@@ -4,6 +4,7 @@ import { Tutee } from '@/features/tutees/types/tutee';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 
 export const useTutees = () => {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ export const useTutees = () => {
       const errorMessage = err?.message || 'Failed to load tutees';
       setError(errorMessage);
       console.error(err);
-      if (err?.message !== 'User not authenticated') {
+      if (shouldShowFirestoreError(err)) {
         toast.error(errorMessage);
       }
     } finally {

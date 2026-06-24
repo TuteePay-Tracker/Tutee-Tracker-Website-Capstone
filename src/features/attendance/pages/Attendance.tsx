@@ -19,8 +19,9 @@ import {
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
 import { toast } from 'sonner';
-import { db, auth } from '@/shared/lib/firebase/config';
+import { db } from '@/shared/lib/firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 
 type AttendanceStatus = 'present' | 'absent' | 'no-class' | 'none';
 
@@ -60,10 +61,9 @@ export const Attendance = () => {
 
   // Load attendance records for all visible tutees in real-time when month changes
   useEffect(() => {
-    if (tutees.length === 0) return;
+    if (tutees.length === 0 || !user?.id) return;
 
-    const userId = auth.currentUser?.uid;
-    if (!userId) return;
+    const userId = user.id;
 
     setLoadingRecords(
       tutees.reduce((acc, t) => ({ ...acc, [t.id]: true }), {})
@@ -95,12 +95,14 @@ export const Attendance = () => {
       setLoadingRecords({});
     }, (error) => {
       console.error('Error listening to all records:', error);
-      toast.error('Failed to load attendance records');
+      if (shouldShowFirestoreError(error)) {
+        toast.error('Failed to load attendance records');
+      }
       setLoadingRecords({});
     });
 
     return () => unsubscribe();
-  }, [tutees, monthKey]);
+  }, [tutees, monthKey, user?.id]);
 
   const getScheduledDays = (tutee: Tutee): DayAttendance[] => {
     const record = records[`${tutee.id}_${monthKey}`];

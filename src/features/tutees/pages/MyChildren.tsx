@@ -227,9 +227,17 @@ export const MyChildren = () => {
               <div key={tutee.id} className="bg-white rounded-2xl border p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div>
                   <div className="flex items-start gap-4 mb-5">
-                    <div className="w-14 h-14 bg-green-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shrink-0 shadow-lg shadow-green-700/20">
-                      {tutee.firstName.charAt(0)}{tutee.surname.charAt(0)}
-                    </div>
+                    {tutee.photoUrl ? (
+                      <img
+                        src={tutee.photoUrl}
+                        alt={`${tutee.firstName} ${tutee.surname}`}
+                        className="w-14 h-14 rounded-2xl object-cover shrink-0 border-2 border-gray-100 shadow-md shadow-emerald-700/10"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 bg-green-700 rounded-2xl flex items-center justify-center text-white text-xl font-bold shrink-0 shadow-lg shadow-green-700/20">
+                        {tutee.firstName.charAt(0)}{tutee.surname.charAt(0)}
+                      </div>
+                    )}
                     <div>
                       <h2 className="text-xl font-bold text-gray-900">{tutee.firstName} {tutee.surname}</h2>
                       <p className="text-gray-500 text-sm">{tutee.gradeLevel}</p>

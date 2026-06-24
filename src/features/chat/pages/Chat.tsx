@@ -16,6 +16,7 @@ import {
   Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { logActivity } from '@/shared/utils/auditLogger';
@@ -32,7 +33,9 @@ export const Chat = () => {
   const [isSending, setIsSending] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [parentNames, setParentNames] = useState<Record<string, string>>({});
+  const [parentPhotos, setParentPhotos] = useState<Record<string, string>>({});
   const [tutorName, setTutorName] = useState<string>('Tutor');
+  const [tutorPhoto, setTutorPhoto] = useState<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListenerRef = useRef<(() => void) | null>(null);
@@ -49,11 +52,15 @@ export const Chat = () => {
           where('createdByTutorId', '==', user.id)
         );
         const snap = await getDocs(q);
-        const mapping: Record<string, string> = {};
+        const nameMapping: Record<string, string> = {};
+        const photoMapping: Record<string, string> = {};
         snap.docs.forEach(docSnap => {
-          mapping[docSnap.id] = docSnap.data().name || 'Parent';
+          const data = docSnap.data();
+          nameMapping[docSnap.id] = data.name || 'Parent';
+          photoMapping[docSnap.id] = data.photoUrl || '';
         });
-        setParentNames(mapping);
+        setParentNames(nameMapping);
+        setParentPhotos(photoMapping);
       } catch (err) {
         console.error('Error loading parents list:', err);
       }
@@ -70,7 +77,9 @@ export const Chat = () => {
       try {
         const tutorSnap = await getDoc(doc(db, 'users', user.createdByTutorId as string));
         if (tutorSnap.exists()) {
-          setTutorName(tutorSnap.data().name || 'Tutor');
+          const data = tutorSnap.data();
+          setTutorName(data.name || 'Tutor');
+          setTutorPhoto(data.photoUrl || '');
         }
       } catch (err) {
         console.error('Error loading tutor details:', err);
@@ -102,7 +111,9 @@ export const Chat = () => {
       (error) => {
         console.error('Error loading chat threads:', error);
         setLoadingThreads(false);
-        toast.error('Failed to load chat conversations');
+        if (shouldShowFirestoreError(error)) {
+          toast.error('Failed to load chat conversations');
+        }
       }
     );
 
@@ -246,6 +257,20 @@ export const Chat = () => {
     }
   };
 
+  const getTuteePhoto = (tuteeId: string) => {
+    const found = tutees.find(t => t.id === tuteeId);
+    return found?.photoUrl || null;
+  };
+
+  const getChatPartnerPhoto = () => {
+    if (!activeThread) return null;
+    if (user?.role === 'tutor') {
+      return parentPhotos[activeThread.parentId] || null;
+    } else {
+      return tutorPhoto || null;
+    }
+  };
+
   // Filter threads and listable contacts
   const getFilteredList = () => {
     const list: Array<{
@@ -375,9 +400,17 @@ export const Chat = () => {
                     isSelected ? 'bg-green-50/70 border-l-4 border-green-700 pl-3' : 'hover:bg-gray-100 bg-white'
                   }`}
                 >
-                  <div className="w-11 h-11 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center shrink-0 shadow-inner uppercase text-sm">
-                    {item.studentName.slice(0, 2)}
-                  </div>
+                  {getTuteePhoto(item.threadData?.tuteeId || item.tuteeData?.id || '') ? (
+                    <img
+                      src={getTuteePhoto(item.threadData?.tuteeId || item.tuteeData?.id || '')!}
+                      alt={item.studentName}
+                      className="w-11 h-11 rounded-full object-cover shrink-0 border border-gray-250 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center shrink-0 shadow-inner uppercase text-sm">
+                      {item.studentName.slice(0, 2)}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-0.5">
                       <span className="font-semibold text-gray-900 text-sm truncate">{item.title}</span>
@@ -423,9 +456,17 @@ export const Chat = () => {
                 >
                   <ArrowLeft size={18} />
                 </button>
-                <div className="w-10 h-10 rounded-full bg-green-700 text-white font-bold flex items-center justify-center shrink-0 uppercase text-xs">
-                  {(user?.role === 'tutor' ? activeThread.parentName : activeThread.tutorName).slice(0, 2)}
-                </div>
+                {getChatPartnerPhoto() ? (
+                  <img
+                    src={getChatPartnerPhoto()!}
+                    alt={user?.role === 'tutor' ? activeThread.parentName : activeThread.tutorName}
+                    className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-250 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-green-700 text-white font-bold flex items-center justify-center shrink-0 uppercase text-xs">
+                    {(user?.role === 'tutor' ? activeThread.parentName : activeThread.tutorName).slice(0, 2)}
+                  </div>
+                )}
                 <div className="min-w-0">
                   <h3 className="font-bold text-gray-900 text-sm leading-tight truncate">
                     {user?.role === 'tutor' ? activeThread.parentName : activeThread.tutorName}

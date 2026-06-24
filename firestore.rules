@@ -50,11 +50,7 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return resource.data.role == 'parent'
         && data.role == 'parent'
-        && (
-          changed.hasOnly(['mustChangePassword'])
-          || changed.hasOnly(['name', 'mustChangePassword'])
-          || changed.hasOnly(['contactNumber', 'mustChangePassword'])
-        );
+        && changed.hasOnly(['mustChangePassword', 'name', 'contactNumber', 'photoUrl']);
     }
 
     function isValidParentUserUpdateByTutor() {
