@@ -3,6 +3,7 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { Tutee, ScheduleItem } from '@/features/tutees/types/tutee';
 import { Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
+import { formatTime12h } from '@/shared/utils/formatDate';
 
 export const Schedule = () => {
   const { tutees, isLoading } = useTutees();
@@ -10,10 +11,10 @@ export const Schedule = () => {
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
 
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 }); // Sunday
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = Array.from({ length: 14 }, (_, i) => {
     const hour = i + 7; // Start from 7 AM
     return `${hour.toString().padStart(2, '0')}:00`;
@@ -151,13 +152,24 @@ export const Schedule = () => {
                 {daysOfWeek.map((day, index) => {
                   const date = weekDays[index];
                   const isToday = isSameDay(date, new Date());
+                  const isWeekend = day === 'Sunday' || day === 'Saturday';
                   return (
                     <div
                       key={day}
-                      className={`p-3 text-center ${isToday ? 'bg-green-50' : ''}`}
+                      className={`p-3 text-center ${
+                        isToday 
+                          ? 'bg-green-50' 
+                          : isWeekend 
+                            ? 'bg-red-50/40' 
+                            : ''
+                      }`}
                     >
-                      <div className="text-sm font-semibold text-gray-900">{day.slice(0, 3)}</div>
-                      <div className={`text-xs ${isToday ? 'text-green-700 font-semibold' : 'text-gray-500'}`}>
+                      <div className={`text-sm font-semibold ${isWeekend ? 'text-red-600' : 'text-gray-900'}`}>{day.slice(0, 3)}</div>
+                      <div className={`text-xs ${
+                        isToday 
+                          ? (isWeekend ? 'text-red-700 font-semibold' : 'text-green-700 font-semibold') 
+                          : (isWeekend ? 'text-red-400 font-semibold' : 'text-gray-500')
+                      }`}>
                         {format(date, 'MMM dd')}
                       </div>
                     </div>
@@ -169,12 +181,13 @@ export const Schedule = () => {
               <div className="divide-y">
                 {timeSlots.map(time => (
                   <div key={time} className="grid grid-cols-8">
-                    <div className="p-3 text-sm text-gray-600 border-r bg-gray-50">
-                      {time}
+                    <div className="p-3 text-sm text-gray-600 border-r bg-gray-50 flex items-center">
+                      {formatTime12h(time)}
                     </div>
                     {daysOfWeek.map((day, index) => {
                       const date = weekDays[index];
                       const isToday = isSameDay(date, new Date());
+                      const isWeekend = day === 'Sunday' || day === 'Saturday';
                       const schedules = getScheduleForDay(day);
                       const sessionsInSlot = schedules.filter(({ schedule }) => {
                         const slotHour = parseInt(time.split(':')[0]);
@@ -187,20 +200,28 @@ export const Schedule = () => {
                         <div
                           key={`${day}-${time}`}
                           className={`p-2 border-r min-h-[60px] ${
-                            isToday ? 'bg-green-50/30' : ''
+                            isToday 
+                              ? 'bg-green-50/20' 
+                              : isWeekend 
+                                ? 'bg-red-50/10' 
+                                : ''
                           }`}
                         >
                           {sessionsInSlot.map(({ tutee, schedule }) => (
                             <div
                               key={tutee.id}
-                              className="bg-green-100 border border-green-300 rounded px-2 py-1 mb-1 text-xs"
+                              className={`border rounded px-2 py-1 mb-1 text-xs ${
+                                isWeekend
+                                  ? 'bg-red-50 border-red-200 text-red-950 shadow-sm'
+                                  : 'bg-green-100 border-green-300 text-green-950'
+                              }`}
                             >
-                              <div className="font-semibold text-green-900">
+                              <div className={`font-semibold ${isWeekend ? 'text-red-900' : 'text-green-900'}`}>
                                 {tutee.firstName} {tutee.surname}
                               </div>
-                              <div className="text-green-700">{tutee.subject}</div>
-                              <div className="text-green-600 text-xs">
-                                {schedule.startTime} - {schedule.endTime}
+                              <div className={isWeekend ? 'text-red-700 font-medium' : 'text-green-700'}>{tutee.subject}</div>
+                              <div className={`${isWeekend ? 'text-red-600' : 'text-green-600'} text-[10px] mt-0.5`}>
+                                {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
                               </div>
                             </div>
                           ))}
@@ -216,55 +237,64 @@ export const Schedule = () => {
       ) : (
         // Day View - List of sessions for current day
         <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Calendar size={20} className="text-green-700" />
-            {format(currentDate, 'EEEE, MMMM dd, yyyy')}
-          </h2>
-
           {(() => {
             const dayName = format(currentDate, 'EEEE');
+            const isWeekend = dayName === 'Sunday' || dayName === 'Saturday';
             const schedules = getScheduleForDay(dayName);
 
-            if (schedules.length === 0) {
-              return (
-                <p className="text-gray-500 text-center py-8">
-                  No sessions scheduled for this day
-                </p>
-              );
-            }
-
             return (
-              <div className="space-y-3">
-                {schedules
-                  .sort((a, b) => a.schedule.startTime.localeCompare(b.schedule.startTime))
-                  .map(({ tutee, schedule }) => (
-                    <div
-                      key={tutee.id}
-                      className="flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex-shrink-0 w-20 text-center">
-                        <div className="text-sm font-semibold text-gray-900">
-                          {schedule.startTime}
+              <>
+                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <Calendar size={20} className={isWeekend ? 'text-red-600' : 'text-green-700'} />
+                  <span className={isWeekend ? 'text-red-950 font-bold' : ''}>
+                    {format(currentDate, 'EEEE, MMMM dd, yyyy')}
+                  </span>
+                </h2>
+
+                {schedules.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">
+                    No sessions scheduled for this day
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {schedules
+                      .sort((a, b) => a.schedule.startTime.localeCompare(b.schedule.startTime))
+                      .map(({ tutee, schedule }) => (
+                        <div
+                          key={tutee.id}
+                          className={`flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50/80 transition-colors ${
+                            isWeekend ? 'border-red-150 bg-red-50/10' : ''
+                          }`}
+                        >
+                          <div className="flex-shrink-0 w-24 text-center">
+                            <div className={`text-sm font-semibold ${isWeekend ? 'text-red-700' : 'text-gray-900'}`}>
+                              {formatTime12h(schedule.startTime)}
+                            </div>
+                            <div className="text-xs text-gray-500">{formatTime12h(schedule.endTime)}</div>
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">
+                              {tutee.firstName} {tutee.surname}
+                            </h3>
+                            <p className="text-sm text-gray-600">{tutee.subject}</p>
+                            {tutee.gradeLevel && (
+                              <p className="text-xs text-gray-500">{tutee.gradeLevel}</p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${
+                              isWeekend 
+                                ? 'bg-red-50 text-red-700 border-red-200' 
+                                : 'bg-green-50 text-green-700 border-green-200'
+                            }`}>
+                              Scheduled
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500">{schedule.endTime}</div>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">
-                          {tutee.firstName} {tutee.surname}
-                        </h3>
-                        <p className="text-sm text-gray-600">{tutee.subject}</p>
-                        {tutee.gradeLevel && (
-                          <p className="text-xs text-gray-500">{tutee.gradeLevel}</p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <span className="inline-block px-3 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-full border border-green-200">
-                          Scheduled
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+                      ))}
+                  </div>
+                )}
+              </>
             );
           })()}
         </div>

@@ -79,38 +79,40 @@ export const AcademicTab = ({ studentPerformance, subjectReports, monthlyAcademi
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <Award size={20} className="text-green-700" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-green-700">{improved}</p>
-              <p className="text-xs text-gray-500">Most Improved</p>
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Most Improved Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-green-50 text-green-700 flex items-center justify-center relative shrink-0">
+            <Award size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Most Improved</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{improved}</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-yellow-50 rounded-lg">
-              <Target size={20} className="text-yellow-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-yellow-600">{stable}</p>
-              <p className="text-xs text-gray-500">Stable / Average</p>
-            </div>
+
+        {/* Stable / Average Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-yellow-50 text-yellow-700 flex items-center justify-center relative shrink-0">
+            <Target size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Stable / Average</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{stable}</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-red-50 rounded-lg">
-              <BookOpen size={20} className="text-red-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-red-600">{needsWork}</p>
-              <p className="text-xs text-gray-500">Needs Improvement</p>
-            </div>
+
+        {/* Needs Improvement Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-red-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center relative shrink-0">
+            <BookOpen size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Needs Improvement</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{needsWork}</p>
           </div>
         </div>
       </div>

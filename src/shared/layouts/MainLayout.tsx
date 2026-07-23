@@ -295,7 +295,7 @@ export const MainLayout = () => {
                   <div className="pl-6 space-y-1 transition-all duration-300">
                     <Link
                       to="/tutees"
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/tutees')
                           ? 'bg-green-50 text-green-700 font-bold'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
@@ -306,7 +306,7 @@ export const MainLayout = () => {
                     </Link>
                     <Link
                       to="/schedule"
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/schedule')
                           ? 'bg-green-50 text-green-700 font-bold'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
@@ -317,7 +317,7 @@ export const MainLayout = () => {
                     </Link>
                     <Link
                       to="/attendance"
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/attendance')
                           ? 'bg-green-50 text-green-700 font-bold'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
@@ -328,7 +328,7 @@ export const MainLayout = () => {
                     </Link>
                     <Link
                       to="/payments"
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/payments')
                           ? 'bg-green-50 text-green-700 font-bold'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
@@ -339,10 +339,10 @@ export const MainLayout = () => {
                     </Link>
                     <Link
                       to="/tutee-progress"
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/tutee-progress')
                           ? 'bg-green-50 text-green-700 font-bold'
-                          : 'text-gray-550 hover:bg-gray-50 hover:text-gray-800'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
                       }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
@@ -386,7 +386,7 @@ export const MainLayout = () => {
                   <div className="pl-6 space-y-1 transition-all duration-300">
                     <Link
                       to="/announcements"
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/announcements')
                           ? 'bg-green-50 text-green-700 font-bold'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
@@ -397,7 +397,7 @@ export const MainLayout = () => {
                     </Link>
                     <Link
                       to="/chat"
-                      className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all font-medium text-xs ${
+                      className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all font-medium text-sm ${
                         isActive('/chat')
                           ? 'bg-green-50 text-green-700 font-bold'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'

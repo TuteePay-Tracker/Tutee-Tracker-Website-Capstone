@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Payment } from '@/features/payments/types/payment';
+import { Tutee } from '@/features/tutees/types/tutee';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { formatDate } from '@/shared/utils/formatDate';
 import { PaymentMethodBadge } from '@/features/payments/components/PaymentMethodBadge';
-import { Trash2, CheckCircle2, AlertCircle, Clock, XCircle, Eye, X } from 'lucide-react';
+import { Trash2, CheckCircle2, AlertCircle, Clock, XCircle, Eye, X, User } from 'lucide-react';
 import { Receipt } from '@/features/payments/components/Receipt';
 import { PaymentStatus, ReceiptData } from '@/features/attendance/types/dayPayment';
 
@@ -12,11 +13,12 @@ interface PaymentHistoryProps {
   onDelete?: (id: string) => void;
   showTuteeName?: boolean;
   tuteeRate?: number;
+  tutees?: Tutee[];
 }
 
 const PAGE_SIZE = 3;
 
-export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tuteeRate }: PaymentHistoryProps) => {
+export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tuteeRate, tutees }: PaymentHistoryProps) => {
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
   const [viewingProofUrl, setViewingProofUrl] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -119,19 +121,38 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
     <div className="space-y-4">
       {/* Restore original vertical list style */}
       <div className="space-y-3">
-        {visiblePayments.map((payment) => (
-          <div
-            key={payment.id}
-            className="p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer group relative active:scale-[0.99] bg-white"
-            onClick={() => handleViewPayment(payment)}
-          >
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                {showTuteeName && (
-                  <p className="font-medium text-gray-900">{payment.tuteeName}</p>
-                )}
-                <p className="text-sm text-gray-600">{formatDate(payment.paymentDate)}</p>
-              </div>
+        {visiblePayments.map((payment) => {
+          const tutee = tutees?.find(t => t.id === payment.tuteeId);
+          return (
+            <div
+              key={payment.id}
+              className="p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer group relative active:scale-[0.99] bg-white"
+              onClick={() => handleViewPayment(payment)}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-3">
+                  {showTuteeName && (
+                    <div className="shrink-0">
+                      {tutee?.photoUrl ? (
+                        <img
+                          src={tutee.photoUrl}
+                          alt={payment.tuteeName}
+                          className="w-10 h-10 rounded-full object-cover border border-gray-200 shadow-sm"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border border-gray-100 shadow-sm">
+                          <User size={18} className="text-green-700" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    {showTuteeName && (
+                      <p className="font-medium text-gray-900">{payment.tuteeName}</p>
+                    )}
+                    <p className="text-sm text-gray-600">{formatDate(payment.paymentDate)}</p>
+                  </div>
+                </div>
               <div className="text-right flex items-start gap-3">
                 <div className="flex flex-col items-end">
                   <p className="text-lg font-semibold text-gray-900">{formatCurrency(payment.amount)}</p>
@@ -177,7 +198,8 @@ export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tutee
               )}
             </div>
           </div>
-        ))}
+        );
+      })}
       </div>
 
       {/* Pagination */}

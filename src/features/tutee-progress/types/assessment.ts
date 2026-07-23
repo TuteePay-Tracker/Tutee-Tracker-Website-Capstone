@@ -3,6 +3,7 @@ export type Remarks = 'Excellent' | 'Good' | 'Needs Improvement';
 export interface AssessmentScore {
   name: string;
   score: number;
+  totalScore: number;
 }
 
 export interface Assessment {
@@ -11,6 +12,7 @@ export interface Assessment {
   tuteeName: string;
   subject: string;
   date: string; // ISO date string e.g. "2026-06-18"
+  topic: string;
   assessmentScores: AssessmentScore[];
   totalScore?: number; // Optional overall total / max score for this assessment
   topicsCovered: string;
@@ -27,6 +29,7 @@ export interface AssessmentFormData {
   tuteeName: string;
   subject: string;
   date: string;
+  topic: string;
   assessmentScores: AssessmentScore[];
   totalScore?: number;
   topicsCovered: string;

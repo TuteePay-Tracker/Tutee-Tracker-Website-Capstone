@@ -9,7 +9,7 @@ import {
   ArrowLeft, Mail, Phone, Calendar, CalendarX, DollarSign, BookOpen, Users,
   X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
   Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash,
-  Pencil, GraduationCap
+  Pencil, GraduationCap, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { PaymentHistory } from '@/features/payments/components/PaymentHistory';
@@ -18,11 +18,11 @@ import { ScheduleItem, GRADE_LEVELS } from '@/features/tutees/types/tutee';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { PaymentRecord } from '@/features/attendance/types/dayPayment';
 import { PaymentMethod } from '@/features/payments/types/payment';
-import { ProgressReport, ProgressReportFormData, AssessmentScore } from '@/features/progress-reports/types/progressReport';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
-import { progressReportService } from '@/features/progress-reports/services/progressReportService';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
+import gcashLogo from '@/assets/gcash-com-logo.png';
+import mayaLogo from '@/assets/id5dWPPLkV_logos.jpeg';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { logActivity } from '@/shared/utils/auditLogger';
@@ -110,6 +110,7 @@ export const TuteeDetails = () => {
   };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'reports'>('overview');
+  const [expandedAssessmentId, setExpandedAssessmentId] = useState<string | null>(null);
   const [showParentModal, setShowParentModal] = useState(false);
   const [parentData, setParentData] = useState<any>(null);
   const [loadingParent, setLoadingParent] = useState(false);
@@ -144,29 +145,12 @@ export const TuteeDetails = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<PaymentRecord[]>([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
 
-  // Progress Report states
-  const [progressReports, setProgressReports] = useState<ProgressReport[]>([]);
-  const [loadingReports, setLoadingReports] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [submittingReport, setSubmittingReport] = useState(false);
-  const [reportForm, setReportForm] = useState<ProgressReportFormData>({
-    date: new Date().toISOString().split('T')[0],
-    subject: '',
-    topicsCovered: '',
-    performance: 'good',
-    behavior: 'good',
-    assessmentScores: [{ name: '', score: 0 }],
-    notes: '',
-    recommendations: '',
-  });
-
-  // Load progress reports, payments, and attendance when tutee changes
+  // Load payments and attendance when tutee changes
   useEffect(() => {
     let unsubscribeAttendance: (() => void) | undefined;
     let unsubscribePayments: (() => void) | undefined;
 
     if (tutee) {
-      loadProgressReports();
       // Always subscribe to attendance and payments to ensure accurate financial summary
       unsubscribeAttendance = loadAttendance();
 
@@ -175,17 +159,13 @@ export const TuteeDetails = () => {
           unsubscribePayments = loadPaymentsForTutee(tutee.id, user.createdByTutorId);
         }
       }
-      setReportForm(prev => ({
-        ...prev,
-        subject: tutee.subject,
-      }));
     }
 
     return () => {
       unsubscribeAttendance?.();
       unsubscribePayments?.();
     };
-  }, [tutee]);
+  }, [tutee, user]);
 
   const loadAttendance = () => {
     if (!tutee) return;
@@ -200,20 +180,6 @@ export const TuteeDetails = () => {
       },
       tutorId
     );
-  };
-
-  const loadProgressReports = async () => {
-    if (!tutee) return;
-    try {
-      setLoadingReports(true);
-      const tutorId = user?.role === 'parent' ? user.createdByTutorId : undefined;
-      const data = await progressReportService.getAll(tutee.id, tutorId);
-      setProgressReports(data);
-    } catch (error) {
-      console.error('Error loading progress reports:', error);
-    } finally {
-      setLoadingReports(false);
-    }
   };
 
   const { assessments } = useAssessments();
@@ -293,32 +259,6 @@ export const TuteeDetails = () => {
     return s ? `${s.firstName} ${s.surname}` : studentId;
   };
 
-  const updateAssessmentScore = (index: number, field: keyof AssessmentScore, value: string | number) => {
-    setReportForm(prev => ({
-      ...prev,
-      assessmentScores: prev.assessmentScores.map((score, scoreIndex) => {
-        if (scoreIndex !== index) return score;
-        return { ...score, [field]: value };
-      }),
-    }));
-  };
-
-  const addAssessmentScore = () => {
-    setReportForm(prev => ({
-      ...prev,
-      assessmentScores: [...prev.assessmentScores, { name: '', score: 0 }],
-    }));
-  };
-
-  const removeAssessmentScore = (index: number) => {
-    setReportForm(prev => ({
-      ...prev,
-      assessmentScores: prev.assessmentScores.length === 1
-        ? [{ name: '', score: 0 }]
-        : prev.assessmentScores.filter((_, scoreIndex) => scoreIndex !== index),
-    }));
-  };
-
   // Helper to render schedule (handles both old string and new array format)
   const renderSchedule = (schedule: string | ScheduleItem[]) => {
     if (Array.isArray(schedule)) {
@@ -339,57 +279,6 @@ export const TuteeDetails = () => {
       });
     }
     return <div>{schedule}</div>; // Old string format
-  };
-
-  const handleSubmitReport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tutee) return;
-    if (!reportForm.topicsCovered.trim() || !reportForm.notes.trim()) {
-      toast.error('Please fill out all required fields');
-      return;
-    }
-    if (!reportForm.assessmentScores.some(score => score.score > 0)) {
-      toast.error('Please add at least one assessment score');
-      return;
-    }
-
-    try {
-      setSubmittingReport(true);
-      await progressReportService.create({
-        tuteeId: tutee.id,
-        tutorId: user?.id || '',
-        ...reportForm,
-      });
-      toast.success('Progress report added successfully');
-      if (user) {
-        await logActivity(
-          user.id,
-          user.name,
-          user.role,
-          'Progress Updated',
-          'Tutee Progress',
-          `Created a progress report for student ${tutee.firstName} ${tutee.surname} in ${reportForm.subject}`
-        );
-      }
-      setShowReportModal(false);
-      // Reset form fields
-      setReportForm({
-        date: new Date().toISOString().split('T')[0],
-        subject: tutee.subject,
-        topicsCovered: '',
-        performance: 'good',
-        behavior: 'good',
-        assessmentScores: [{ name: '', score: 0 }],
-        notes: '',
-        recommendations: '',
-      });
-      loadProgressReports();
-    } catch (error) {
-      console.error('Error creating progress report:', error);
-      toast.error('Failed to save progress report');
-    } finally {
-      setSubmittingReport(false);
-    }
   };
 
   if (loadingTutees || loadingPayments) {
@@ -1001,151 +890,190 @@ export const TuteeDetails = () => {
           </div>
 
           {assessmentSummary && (
-            <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-2xl p-6 text-white shadow-lg shadow-blue-700/10">
-              <div className="flex items-center gap-3 mb-2">
-                <Star size={24} className="text-blue-200" />
-                <h3 className="font-bold text-lg">Academic Performance Overview</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                <Star size={16} className="text-gray-400" />
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Academic Performance Overview</h3>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
-                <div>
-                  <p className="text-sm font-medium text-blue-200 mb-1">Average Score</p>
-                  <p className="text-3xl font-extrabold text-white">{assessmentSummary.avg}%</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Average Score */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center relative shrink-0">
+                    <Star size={22} />
+                  </div>
+                  <div className="relative">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Average Score</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-0.5">{assessmentSummary.avg}%</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-blue-200 mb-1">Latest Score</p>
-                  <p className="text-3xl font-extrabold text-white">{assessmentSummary.latestScore}%</p>
+
+                {/* Latest Score */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center relative shrink-0">
+                    <CheckCircle2 size={22} />
+                  </div>
+                  <div className="relative">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Latest Score</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-0.5">{assessmentSummary.latestScore}%</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-blue-200 mb-1">Max Improvement</p>
-                  <p className="text-3xl font-extrabold text-emerald-300">+{assessmentSummary.improvement}%</p>
+
+                {/* Max Improvement */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-teal-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+                  <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center relative shrink-0">
+                    <TrendingUp size={22} />
+                  </div>
+                  <div className="relative">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Max Improvement</p>
+                    <p className="text-2xl font-bold text-emerald-600 mt-0.5">+{assessmentSummary.improvement}%</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-blue-200 mb-1">Score Trend</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-3xl font-extrabold text-white">{Math.abs(assessmentSummary.trend)}</p>
-                    {assessmentSummary.trend > 1 ? (
-                      <TrendingUp size={24} className="text-emerald-400" />
-                    ) : assessmentSummary.trend < -1 ? (
-                      <TrendingDown size={24} className="text-red-400" />
-                    ) : (
-                      <Minus size={24} className="text-gray-300" />
-                    )}
+
+                {/* Score Trend */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+                  <div className={`absolute top-0 right-0 w-24 h-24 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300 ${
+                    assessmentSummary.trend > 1 ? 'bg-emerald-50' : assessmentSummary.trend < -1 ? 'bg-red-50' : 'bg-gray-50'
+                  }`} />
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative shrink-0 ${
+                    assessmentSummary.trend > 1 ? 'bg-emerald-50 text-emerald-700' : assessmentSummary.trend < -1 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
+                  }`}>
+                    {assessmentSummary.trend > 1 ? <TrendingUp size={22} /> : assessmentSummary.trend < -1 ? <TrendingDown size={22} /> : <Minus size={22} />}
+                  </div>
+                  <div className="relative">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Score Trend</p>
+                    <p className={`text-2xl font-bold mt-0.5 ${
+                      assessmentSummary.trend > 1 ? 'text-emerald-600' : assessmentSummary.trend < -1 ? 'text-red-600' : 'text-gray-500'
+                    }`}>{Math.abs(assessmentSummary.trend)}</p>
                   </div>
                 </div>
               </div>
-              <p className="text-blue-200/80 text-xs mt-6 font-medium">Based on {assessmentSummary.totalAssessments} recorded assessments from the Tutee Progress tracker.</p>
+              <p className="text-gray-400 text-xs px-1 font-medium">Based on {assessmentSummary.totalAssessments} recorded assessments from the Tutee Progress tracker.</p>
             </div>
           )}
 
           {subjectSummaries.length > 0 && (
-            <div className="bg-white border rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-3 mb-4">
-                <BookOpen size={20} className="text-gray-400" />
-                <h3 className="font-bold text-lg text-gray-900">Subject Breakdown</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                <BookOpen size={16} className="text-gray-400" />
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Subject Breakdown</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {subjectSummaries.map((subject, idx) => (
-                  <div key={idx} className="bg-gray-50 border border-gray-100 rounded-xl p-4 flex justify-between items-center hover:bg-gray-100 transition-colors">
-                    <div>
-                      <p className="font-bold text-gray-900">{subject.subject}</p>
-                      <p className="text-xs font-semibold text-gray-500 mt-0.5 flex items-center gap-1">
-                        <Hash size={12} /> {subject.count} {subject.count === 1 ? 'assessment' : 'assessments'}
-                      </p>
+                {subjectSummaries.map((subject, idx) => {
+                  const isExcellent = subject.avg >= 90;
+                  const isGood = subject.avg >= 75;
+                  const bgCircle = isExcellent ? 'bg-emerald-50' : isGood ? 'bg-blue-50' : 'bg-red-50';
+                  const iconBg = isExcellent ? 'bg-emerald-50 text-emerald-700' : isGood ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700';
+                  const scoreColor = isExcellent ? 'text-emerald-600' : isGood ? 'text-blue-600' : 'text-red-600';
+                  return (
+                    <div key={idx} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+                      <div className={`absolute top-0 right-0 w-24 h-24 ${bgCircle} rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300`} />
+                      <div className={`w-12 h-12 rounded-xl ${iconBg} flex items-center justify-center relative shrink-0`}>
+                        <BookOpen size={22} />
+                      </div>
+                      <div className="relative flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider truncate">{subject.subject}</p>
+                        <p className={`text-2xl font-bold mt-0.5 ${scoreColor}`}>{subject.avg}%</p>
+                        <p className="text-[10px] text-gray-400 font-medium mt-0.5 flex items-center gap-1">
+                          <Hash size={9} /> {subject.count} {subject.count === 1 ? 'assessment' : 'assessments'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-400">Average</p>
-                      <p className={`text-xl font-extrabold ${
-                        subject.avg >= 90 ? 'text-emerald-600' :
-                        subject.avg >= 75 ? 'text-blue-600' :
-                        'text-red-600'
-                      }`}>
-                        {subject.avg}%
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {loadingReports ? (
-            <div className="flex items-center justify-center py-12 bg-white rounded-2xl border shadow-sm">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-700 mr-2"></div>
-              <span className="text-gray-500 text-sm">Loading reports...</span>
-            </div>
-          ) : progressReports.length === 0 ? (
+          {studentAssessments.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border shadow-sm">
               <FileText className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500 text-lg">No progress reports filed yet</p>
-              <p className="text-gray-400 text-sm mt-1">Reports will appear here once created by the tutor.</p>
-              {user?.role !== 'parent' && (
-                <button
-                  onClick={() => setShowReportModal(true)}
-                  className="mt-4 bg-green-700 text-white px-4 py-2 rounded-xl text-sm hover:bg-green-800 transition-colors"
-                >
-                  Write First Report
-                </button>
-              )}
+              <p className="text-gray-500 text-lg">No assessments recorded yet</p>
+              <p className="text-gray-400 text-sm mt-1">Assessments will appear here once recorded by the tutor in Tutee Progress.</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {progressReports.map((report) => (
-                <div key={report.id} className="bg-white rounded-2xl border p-6 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-gray-100 pb-3">
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-lg">{report.subject}</h3>
-                      <p className="text-gray-500 text-xs font-medium mt-0.5">Date: {formatDate(report.date)}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${report.performance === 'excellent' ? 'bg-green-50 border-green-200 text-green-800' :
-                          report.performance === 'very-good' ? 'bg-blue-50 border-blue-200 text-blue-800' :
-                            report.performance === 'good' ? 'bg-orange-50 border-orange-200 text-orange-800' :
-                              'bg-red-50 border-red-200 text-red-800'
-                        }`}>
-                        Performance: {report.performance.replace('-', ' ')}
+            <div className="space-y-4">
+              {[...studentAssessments].reverse().map((a) => (
+                <div key={a.id} className="border border-gray-150 rounded-2xl bg-white overflow-hidden shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedAssessmentId(expandedAssessmentId === a.id ? null : a.id)}
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50/55 transition-colors text-left"
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-bold text-gray-500 text-sm">
+                        {new Date(a.date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
                       </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${report.behavior === 'excellent' ? 'bg-green-50 border-green-200 text-green-800' :
-                          report.behavior === 'very-good' ? 'bg-blue-50 border-blue-200 text-blue-800' :
-                            report.behavior === 'good' ? 'bg-orange-50 border-orange-200 text-orange-800' :
-                              'bg-red-50 border-red-200 text-red-800'
-                        }`}>
-                        Behavior: {report.behavior.replace('-', ' ')}
+                      {a.topic && (
+                        <span className="font-bold text-gray-700 bg-gray-100 px-3 py-1 rounded-full text-xs">
+                          {a.topic}
+                        </span>
+                      )}
+                      <span className="text-xs px-2.5 py-1 bg-green-50 text-green-700 font-bold border border-green-200 rounded-full">
+                        {a.subject}
+                      </span>
+                      <span className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${
+                        a.remarks === 'Excellent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        a.remarks === 'Good' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {a.remarks}
                       </span>
                     </div>
-                  </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-black text-blue-600 bg-blue-50/50 px-3 py-1 rounded-xl">
+                        {a.score}%
+                      </span>
+                      <span className="text-gray-400">
+                        {expandedAssessmentId === a.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </span>
+                    </div>
+                  </button>
 
-                  {(report.assessmentScores?.length || 0) > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {report.assessmentScores.map((score, index) => (
-                        <div key={`${score.name}-${index}`} className="bg-green-50 border border-green-100 rounded-xl p-3">
-                          <p className="text-xs uppercase font-extrabold text-green-700 tracking-wider">
-                            {score.name || `Assessment ${index + 1}`}
-                          </p>
-                          <p className="text-2xl font-bold text-green-800 mt-1">
-                            {score.score}{score.maxScore ? `/${score.maxScore}` : '%'}
-                          </p>
+                  {expandedAssessmentId === a.id && (
+                    <div className="px-6 pb-6 pt-4 border-t border-gray-100 bg-gray-50/20 space-y-4 text-sm text-gray-700">
+                      {a.assessmentScores && a.assessmentScores.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="font-bold text-gray-400 uppercase text-[10px] tracking-wider block text-gray-500">
+                            Scores Breakdown:
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {a.assessmentScores.map((s, idx) => {
+                              const rowPct = s.totalScore > 0 
+                                ? Math.round((s.score / s.totalScore) * 100) 
+                                : 0;
+                              return (
+                                <div key={idx} className="bg-white border border-gray-150 rounded-xl px-4 py-3 flex justify-between items-center shadow-sm">
+                                  <span className="font-bold text-gray-800 truncate">{s.name || `Score ${idx+1}`}</span>
+                                  <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg text-xs shrink-0">
+                                    {s.score} / {s.totalScore} pts ({rowPct}%)
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
-                    <div>
-                      <h4 className="text-xs uppercase font-extrabold text-gray-400 tracking-wider">Topics Covered</h4>
-                      <p className="text-gray-800 text-sm mt-1 whitespace-pre-line leading-relaxed font-medium bg-gray-50 rounded-xl p-3 border border-gray-100">{report.topicsCovered}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs uppercase font-extrabold text-gray-400 tracking-wider">Tutor Notes & Progress Observations</h4>
-                      <p className="text-gray-800 text-sm mt-1 whitespace-pre-line leading-relaxed font-medium bg-gray-50 rounded-xl p-3 border border-gray-100">{report.notes}</p>
-                    </div>
-                  </div>
-
-                  {report.recommendations && (
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start">
-                      <AlertCircle className="text-blue-500 mt-0.5 shrink-0" size={18} />
-                      <div>
-                        <h4 className="text-xs uppercase font-extrabold text-blue-600 tracking-wider">Action Items / Recommendations</h4>
-                        <p className="text-blue-900 text-sm mt-1 whitespace-pre-line leading-relaxed font-medium">{report.recommendations}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                        {a.notes && (
+                          <div>
+                            <span className="font-bold text-gray-400 uppercase text-[10px] tracking-wider block text-gray-500">Tutor Notes & Observations:</span>
+                            <p className="mt-1 font-medium whitespace-pre-line bg-white p-3 rounded-xl border border-gray-200/80 shadow-sm leading-relaxed text-sm text-gray-850">{a.notes}</p>
+                          </div>
+                        )}
+                        {a.recommendations && (
+                          <div>
+                            <span className="font-bold text-gray-400 uppercase text-[10px] tracking-wider block text-gray-500">Recommendations:</span>
+                            <p className="mt-1 font-medium whitespace-pre-line bg-blue-50/40 text-blue-900 p-3 rounded-xl border border-blue-100 shadow-sm leading-relaxed text-sm">{a.recommendations}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1206,181 +1134,7 @@ export const TuteeDetails = () => {
         </div>
       )}
 
-      {/* Create Progress Report Modal */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-gray-100 my-8">
-            <div className="bg-gradient-to-br from-green-700 to-green-950 p-6 flex justify-between items-start text-white">
-              <div>
-                <h3 className="font-bold text-lg">Create Progress Report</h3>
-                <p className="text-green-100 text-xs mt-0.5">For {tutee.firstName} {tutee.surname}</p>
-              </div>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="text-white/70 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            <form onSubmit={handleSubmitReport} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={reportForm.date}
-                    onChange={(e) => setReportForm(prev => ({ ...prev, date: e.target.value }))}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Subject *</label>
-                  <input
-                    type="text"
-                    required
-                    value={reportForm.subject}
-                    onChange={(e) => setReportForm(prev => ({ ...prev, subject: e.target.value }))}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Performance *</label>
-                  <select
-                    value={reportForm.performance}
-                    onChange={(e: any) => setReportForm(prev => ({ ...prev, performance: e.target.value }))}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
-                  >
-                    <option value="excellent">Excellent</option>
-                    <option value="very-good">Very Good</option>
-                    <option value="good">Good</option>
-                    <option value="needs-improvement">Needs Improvement</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Behavior / Focus *</label>
-                  <select
-                    value={reportForm.behavior}
-                    onChange={(e: any) => setReportForm(prev => ({ ...prev, behavior: e.target.value }))}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
-                  >
-                    <option value="excellent">Excellent</option>
-                    <option value="very-good">Very Good</option>
-                    <option value="good">Good</option>
-                    <option value="needs-improvement">Needs Improvement</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider">
-                    Assessment Scores *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={addAssessmentScore}
-                    className="text-xs font-semibold text-green-700 hover:text-green-800"
-                  >
-                    + Add Score
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {reportForm.assessmentScores.map((score, index) => (
-                    <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                      <input
-                        type="text"
-                        value={score.name}
-                        onChange={(e) => updateAssessmentScore(index, 'name', e.target.value)}
-                        placeholder="Assessment name"
-                        className="sm:col-span-7 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
-                      />
-                      <div className="sm:col-span-4 flex gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={score.score}
-                          onChange={(e) => updateAssessmentScore(index, 'score', Number(e.target.value))}
-                          placeholder="Score"
-                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold"
-                        />
-                        <span className="flex items-center px-3 text-gray-500 border border-gray-200 rounded-xl bg-gray-50">%</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeAssessmentScore(index)}
-                        className="sm:col-span-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                        title="Remove assessment score"
-                      >
-                        <X size={18} className="mx-auto" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Topics Covered *</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="What concepts, quizzes, or materials did you go through?"
-                  value={reportForm.topicsCovered}
-                  onChange={(e) => setReportForm(prev => ({ ...prev, topicsCovered: e.target.value }))}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Tutor Notes & Observations *</label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="How did the student perform? Any strengths or areas they struggled with?"
-                  value={reportForm.notes}
-                  onChange={(e) => setReportForm(prev => ({ ...prev, notes: e.target.value }))}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1">Recommendations (Optional)</label>
-                <textarea
-                  rows={2}
-                  placeholder="Suggested homework, study plans, or target practices..."
-                  value={reportForm.recommendations}
-                  onChange={(e) => setReportForm(prev => ({ ...prev, recommendations: e.target.value }))}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
-                />
-              </div>
-
-              <div className="pt-4 border-t flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowReportModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold text-sm transition-colors text-gray-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingReport}
-                  className="px-5 py-2 bg-green-700 hover:bg-green-800 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
-                >
-                  {submittingReport ? 'Saving...' : 'Save Report'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -1654,11 +1408,16 @@ const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose,
                     key={m}
                     type="button"
                     onClick={() => setSelectedMethod(m)}
-                    className={`px-4 py-3 rounded-xl border-2 text-sm font-bold text-center transition-all ${selectedMethod === m
+                    className={`px-4 py-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 transition-all ${selectedMethod === m
                         ? 'border-green-600 bg-green-50/50 text-green-800'
                         : 'border-gray-200 text-gray-600 hover:border-gray-300'
                       }`}
                   >
+                    {m === 'gcash' ? (
+                      <img src={gcashLogo} alt="GCash" className="w-5 h-5 rounded object-cover shrink-0" />
+                    ) : m === 'maya' ? (
+                      <img src={mayaLogo} alt="Maya" className="w-5 h-5 rounded object-cover shrink-0" />
+                    ) : null}
                     {methodLabelMap[m]}
                   </button>
                 ))}
@@ -1668,8 +1427,14 @@ const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose,
             {/* Tutor Details & QR */}
             {activeMethodConfig && (
               <div className="border border-gray-150 rounded-xl p-4 bg-gray-50/50 space-y-4">
-                <h4 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
-                  <Smartphone size={16} className="text-green-700" />
+                <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  {selectedMethod === 'gcash' ? (
+                    <img src={gcashLogo} alt="GCash" className="w-5 h-5 rounded object-cover shrink-0" />
+                  ) : selectedMethod === 'maya' ? (
+                    <img src={mayaLogo} alt="Maya" className="w-5 h-5 rounded object-cover shrink-0" />
+                  ) : (
+                    <Smartphone size={16} className="text-green-700" />
+                  )}
                   {methodLabelMap[selectedMethod!]} Payment Instructions
                 </h4>
 

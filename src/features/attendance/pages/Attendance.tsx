@@ -291,9 +291,17 @@ export const Attendance = () => {
                 {/* Student Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 bg-gray-50/60">
                   <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 text-white font-bold text-sm">
-                      {tutee.firstName.slice(0, 1)}{tutee.surname.slice(0, 1)}
-                    </div>
+                    {tutee.photoUrl ? (
+                      <img
+                        src={tutee.photoUrl}
+                        alt={`${tutee.firstName} ${tutee.surname}`}
+                        className="w-11 h-11 rounded-xl object-cover border border-gray-200 shadow-md shadow-primary/10"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 text-white font-bold text-sm">
+                        {tutee.firstName.slice(0, 1)}{tutee.surname.slice(0, 1)}
+                      </div>
+                    )}
                     <div>
                       <h3 className="font-bold text-gray-900 text-base">{tutee.firstName} {tutee.surname}</h3>
                       <p className="text-xs text-gray-500">

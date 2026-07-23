@@ -36,55 +36,57 @@ export const OverviewTab = ({ data }: OverviewTabProps) => {
   return (
     <div className="space-y-6">
       {/* Primary balanced stat cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {/* Earnings Card */}
-        <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <TrendingUp size={20} />
-            </div>
-            <h3 className="font-semibold text-emerald-100 text-sm">Monthly Earnings</h3>
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center relative shrink-0">
+            <TrendingUp size={22} />
           </div>
-          <p className="text-2xl font-bold">{formatCurrency(data.totalEarningsThisMonth)}</p>
-          <p className="text-emerald-200 text-xs mt-1">Received this month</p>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Monthly Earnings</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{formatCurrency(data.totalEarningsThisMonth)}</p>
+          </div>
         </div>
 
         {/* Attendance Card */}
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-800 text-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <Calendar size={20} />
-            </div>
-            <h3 className="font-semibold text-blue-100 text-sm">Overall Attendance</h3>
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center relative shrink-0">
+            <Calendar size={22} />
           </div>
-          <p className="text-2xl font-bold">{overallAttendanceRate}%</p>
-          <p className="text-blue-200 text-xs mt-1">Average present rate</p>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Overall Attendance</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{overallAttendanceRate}%</p>
+          </div>
         </div>
 
         {/* Class Average Academic Score Card */}
-        <div className="bg-gradient-to-br from-purple-600 to-violet-800 text-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <BookOpen size={20} />
-            </div>
-            <h3 className="font-semibold text-purple-100 text-sm">Class Academic Avg</h3>
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center relative shrink-0">
+            <BookOpen size={22} />
           </div>
-          <p className="text-2xl font-bold">{classAverageScore}%</p>
-          <p className="text-purple-200 text-xs mt-1">Across all tutees</p>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Class Academic Avg</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{classAverageScore}%</p>
+          </div>
         </div>
 
         {/* At Risk Card */}
-        <div className={`bg-gradient-to-br text-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all ${
-          atRiskCount > 0 ? 'from-red-600 to-red-800' : 'from-gray-700 to-gray-800'
-        }`}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <ShieldAlert size={20} />
-            </div>
-            <h3 className="font-semibold text-red-100 text-sm">At-Risk Students</h3>
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className={`absolute top-0 right-0 w-24 h-24 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300 ${
+            atRiskCount > 0 ? 'bg-red-50' : 'bg-gray-50'
+          }`} />
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative shrink-0 ${
+            atRiskCount > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
+          }`}>
+            <ShieldAlert size={22} />
           </div>
-          <p className="text-2xl font-bold">{atRiskCount} Student{atRiskCount !== 1 ? 's' : ''}</p>
-          <p className="text-red-200 text-xs mt-1">Needs attention / intervention</p>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">At-Risk Students</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{atRiskCount} Student{atRiskCount !== 1 ? 's' : ''}</p>
+          </div>
         </div>
       </div>
 

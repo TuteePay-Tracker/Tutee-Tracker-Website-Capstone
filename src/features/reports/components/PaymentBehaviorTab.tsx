@@ -45,49 +45,52 @@ export const PaymentBehaviorTab = ({ paymentBehavior, paymentMethodSummary, week
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <DollarSign size={20} className="text-green-700" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
-              <p className="text-xs text-gray-500">Total Revenue</p>
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Total Revenue Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-green-50 text-green-700 flex items-center justify-center relative shrink-0">
+            <DollarSign size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total Revenue</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{formatCurrency(totalRevenue)}</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <CreditCard size={20} className="text-blue-700" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-gray-900">{totalPayments}</p>
-              <p className="text-xs text-gray-500">Total Transactions</p>
-            </div>
+
+        {/* Total Transactions Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center relative shrink-0">
+            <CreditCard size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total Transactions</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{totalPayments}</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-50 rounded-lg">
-              <Clock size={20} className="text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-emerald-600">{avgOnTime}%</p>
-              <p className="text-xs text-gray-500">Avg On-Time Rate</p>
-            </div>
+
+        {/* Avg On-Time Rate Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center relative shrink-0">
+            <Clock size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Avg On-Time Rate</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{avgOnTime}%</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 rounded-lg">
-              <PieChart size={20} className="text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-purple-600">{consistentPayers}</p>
-              <p className="text-xs text-gray-500">Consistent Payers (≥80%)</p>
-            </div>
+
+        {/* Consistent Payers Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center relative shrink-0">
+            <PieChart size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Consistent Payers (≥80%)</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{consistentPayers}</p>
           </div>
         </div>
       </div>

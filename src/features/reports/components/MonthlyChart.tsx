@@ -1,6 +1,5 @@
 import {
   ComposedChart,
-  Bar,
   Line,
   XAxis,
   YAxis,
@@ -47,12 +46,6 @@ export const MonthlyChart = ({ data }: MonthlyChartProps) => {
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-          <defs>
-            <linearGradient id="earningsGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#22c55e" stopOpacity={0.85} />
-              <stop offset="100%" stopColor="#15803d" stopOpacity={0.15} />
-            </linearGradient>
-          </defs>
           <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="month"
@@ -82,13 +75,15 @@ export const MonthlyChart = ({ data }: MonthlyChartProps) => {
             iconSize={8}
             wrapperStyle={{ fontSize: '12px', fontWeight: 500 }}
           />
-          <Bar
+          <Line
             yAxisId="left"
+            type="monotone"
             dataKey="earnings"
-            fill="url(#earningsGrad)"
+            stroke="#22c55e"
+            strokeWidth={3}
+            dot={{ r: 4, stroke: '#22c55e', strokeWidth: 2, fill: '#fff' }}
+            activeDot={{ r: 6, stroke: '#15803d', strokeWidth: 2, fill: '#fff' }}
             name="Earnings (₱)"
-            radius={[6, 6, 0, 0]}
-            barSize={36}
           />
           <Line
             yAxisId="right"

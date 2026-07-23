@@ -97,49 +97,52 @@ export const AttendanceTab = ({ attendanceSummaries }: AttendanceTabProps) => {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <BarChart3 size={20} className="text-blue-700" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{avgRate}%</p>
-              <p className="text-xs text-gray-500">Average Attendance Rate</p>
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Average Attendance Rate Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center relative shrink-0">
+            <BarChart3 size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Average Attendance Rate</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{avgRate}%</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <Calendar size={20} className="text-green-700" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{totalScheduled}</p>
-              <p className="text-xs text-gray-500">Total Scheduled Days</p>
-            </div>
+
+        {/* Total Scheduled Days Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-green-50 text-green-700 flex items-center justify-center relative shrink-0">
+            <Calendar size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total Scheduled Days</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{totalScheduled}</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-50 rounded-lg">
-              <CheckCircle size={20} className="text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-emerald-600">{totalAttended}</p>
-              <p className="text-xs text-gray-500">Days Attended</p>
-            </div>
+
+        {/* Days Attended Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center relative shrink-0">
+            <CheckCircle size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Days Attended</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{totalAttended}</p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-50 rounded-lg">
-              <XCircle size={20} className="text-red-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-red-600">{totalAbsent}</p>
-              <p className="text-xs text-gray-500">Days Absent</p>
-            </div>
+
+        {/* Days Absent Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-red-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center relative shrink-0">
+            <XCircle size={22} />
+          </div>
+          <div className="relative">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Days Absent</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{totalAbsent}</p>
           </div>
         </div>
       </div>

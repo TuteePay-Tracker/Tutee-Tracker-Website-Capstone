@@ -424,44 +424,56 @@ const ParentDashboard = () => {
         <>
           {/* KPI Dashboard Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Users size={20} />
-                </div>
+            {/* Linked Children Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center relative shrink-0">
+                <Users size={22} />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-blue-100">Linked Children</p>
-              <p className="text-2xl font-black mt-1">{totalChildren}</p>
+              <div className="relative">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Linked Children</p>
+                <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{totalChildren}</p>
+              </div>
             </div>
 
-            <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <DollarSign size={20} />
-                </div>
+            {/* Total Paid Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center relative shrink-0">
+                <DollarSign size={22} />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Total Paid</p>
-              <p className="text-2xl font-black mt-1">{formatCurrency(totalPaid)}</p>
+              <div className="relative">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total Paid</p>
+                <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{formatCurrency(totalPaid)}</p>
+              </div>
             </div>
 
-            <div className="bg-gradient-to-br from-orange-500 to-orange-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <AlertCircle size={20} />
-                </div>
+            {/* Outstanding Balance Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className={`absolute top-0 right-0 w-24 h-24 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300 ${
+                totalOutstandingBalance > 0 ? 'bg-orange-50' : 'bg-gray-50'
+              }`} />
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative shrink-0 ${
+                totalOutstandingBalance > 0 ? 'bg-orange-50 text-orange-700' : 'bg-gray-50 text-gray-500'
+              }`}>
+                <AlertCircle size={22} />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-orange-100">Outstanding Balance</p>
-              <p className="text-2xl font-black mt-1">{formatCurrency(totalOutstandingBalance)}</p>
+              <div className="relative">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Outstanding Balance</p>
+                <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{formatCurrency(totalOutstandingBalance)}</p>
+              </div>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-600 to-violet-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <CheckSquare size={20} />
-                </div>
+            {/* Average Attendance Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+              <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center relative shrink-0">
+                <CheckSquare size={22} />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-purple-100">Average Attendance</p>
-              <p className="text-2xl font-black mt-1">{overallAttendanceRate}%</p>
+              <div className="relative">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Average Attendance</p>
+                <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{overallAttendanceRate}%</p>
+              </div>
             </div>
           </div>
 
@@ -757,26 +769,30 @@ export const Dashboard = () => {
       title: 'Total Earnings This Month',
       value: formatCurrency(reportData.totalEarningsThisMonth),
       icon: DollarSign,
-      color: 'from-emerald-600 to-emerald-800 shadow-emerald-600/10',
+      bgCircle: 'bg-emerald-50',
+      iconBg: 'bg-emerald-50 text-emerald-700',
       trend: '+12%',
     },
     {
       title: 'Total Lifetime Earnings',
       value: formatCurrency(totalLifetimeEarnings),
       icon: TrendingUp,
-      color: 'from-teal-600 to-teal-800 shadow-teal-600/10',
+      bgCircle: 'bg-teal-50',
+      iconBg: 'bg-teal-50 text-teal-700',
     },
     {
       title: 'Total Tutees',
       value: reportData.totalTutees.toString(),
       icon: Users,
-      color: 'from-blue-600 to-indigo-800 shadow-blue-600/10',
+      bgCircle: 'bg-blue-50',
+      iconBg: 'bg-blue-50 text-blue-700',
     },
     {
       title: 'Pending Balances',
       value: formatCurrency(reportData.totalPendingBalance),
       icon: AlertCircle,
-      color: 'from-orange-500 to-orange-700 shadow-orange-550/10',
+      bgCircle: reportData.totalPendingBalance > 0 ? 'bg-orange-50' : 'bg-gray-50',
+      iconBg: reportData.totalPendingBalance > 0 ? 'bg-orange-50 text-orange-700' : 'bg-gray-50 text-gray-500',
       link: '/tutees',
     },
   ];
@@ -810,25 +826,28 @@ export const Dashboard = () => {
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div key={card.title} className={`bg-gradient-to-br ${card.color} text-white p-5 rounded-xl shadow-md hover:shadow-lg transition-all`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Icon size={20} className="text-white" />
+            <div key={card.title} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className={`absolute top-0 right-0 w-24 h-24 ${card.bgCircle} rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300`} />
+              <div className={`w-12 h-12 rounded-xl ${card.iconBg} flex items-center justify-center relative shrink-0`}>
+                <Icon size={22} />
+              </div>
+              <div className="relative flex-1">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{card.title}</p>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+                  {card.trend && (
+                    <span className="text-emerald-700 bg-emerald-50 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0 self-center">
+                      <TrendingUp size={10} />
+                      {card.trend}
+                    </span>
+                  )}
                 </div>
-                {card.trend && (
-                  <span className="text-emerald-100 bg-white/10 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <TrendingUp size={12} />
-                    {card.trend}
-                  </span>
+                {card.link && (
+                  <Link to={card.link} className="text-green-700 hover:text-green-800 text-xs font-semibold mt-2 inline-block hover:underline relative z-20">
+                    View details →
+                  </Link>
                 )}
               </div>
-              <h3 className="text-white/80 text-xs font-semibold uppercase tracking-wider">{card.title}</h3>
-              <p className="text-2xl font-black mt-1">{card.value}</p>
-              {card.link && (
-                <Link to={card.link} className="text-white/90 text-xs font-medium mt-3 inline-block hover:underline">
-                  View details →
-                </Link>
-              )}
             </div>
           );
         })}

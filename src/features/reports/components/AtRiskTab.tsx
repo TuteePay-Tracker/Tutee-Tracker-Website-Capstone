@@ -77,29 +77,43 @@ export const AtRiskTab = ({ atRiskStudents }: AtRiskTabProps) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Stacked Risk Level Cards */}
           <div className="space-y-4">
-            <div className="bg-gradient-to-br from-red-650 to-red-800 bg-red-700 text-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-extrabold text-red-100 tracking-wider">Critical Risk</span>
-                <ShieldAlert size={20} />
+            {/* Critical Risk Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-red-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center relative shrink-0">
+                <ShieldAlert size={22} />
               </div>
-              <p className="text-3xl font-black mt-2">{critical}</p>
-              <p className="text-[10px] text-red-100/90 mt-1 font-medium">Students with 4+ risk indicators</p>
+              <div className="relative flex-1">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Critical Risk</p>
+                <p className="text-2xl font-bold text-gray-900 mt-0.5">{critical}</p>
+                <p className="text-[10px] text-gray-500 mt-1 font-medium">Students with 4+ risk indicators</p>
+              </div>
             </div>
-            <div className="bg-gradient-to-br from-orange-500 to-orange-700 text-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-extrabold text-orange-100 tracking-wider">High Risk</span>
-                <AlertTriangle size={20} />
+
+            {/* High Risk Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+              <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center relative shrink-0">
+                <AlertTriangle size={22} />
               </div>
-              <p className="text-3xl font-black mt-2">{high}</p>
-              <p className="text-[10px] text-orange-100/90 mt-1 font-medium">Students with 3 risk indicators</p>
+              <div className="relative flex-1">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">High Risk</p>
+                <p className="text-2xl font-bold text-gray-900 mt-0.5">{high}</p>
+                <p className="text-[10px] text-gray-500 mt-1 font-medium">Students with 3 risk indicators</p>
+              </div>
             </div>
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-extrabold text-yellow-100 tracking-wider">Moderate Risk</span>
-                <UserX size={20} />
+
+            {/* Moderate Risk Card */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+              <div className="w-12 h-12 rounded-xl bg-yellow-50 text-yellow-750 flex items-center justify-center relative shrink-0">
+                <UserX size={22} />
               </div>
-              <p className="text-3xl font-black mt-2">{moderate}</p>
-              <p className="text-[10px] text-yellow-100/90 mt-1 font-medium">Students with 2 risk indicators</p>
+              <div className="relative flex-1">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Moderate Risk</p>
+                <p className="text-2xl font-bold text-gray-900 mt-0.5">{moderate}</p>
+                <p className="text-[10px] text-gray-500 mt-1 font-medium">Students with 2 risk indicators</p>
+              </div>
             </div>
           </div>
 

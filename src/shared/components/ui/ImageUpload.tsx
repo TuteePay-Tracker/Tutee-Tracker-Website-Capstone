@@ -10,6 +10,7 @@ interface ImageUploadProps {
   shape?: 'circle' | 'square';
   size?: 'sm' | 'md' | 'lg';
   label?: string;
+  defaultAvatar?: React.ReactNode;
 }
 
 const SIZES = {
@@ -25,6 +26,7 @@ export const ImageUpload = ({
   shape = 'circle',
   size = 'md',
   label = 'Upload Photo',
+  defaultAvatar,
 }: ImageUploadProps) => {
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -85,10 +87,11 @@ export const ImageUpload = ({
           className={`
             ${s.container} ${shapeClass}
             overflow-hidden cursor-pointer
-            bg-gray-100 border-2 border-dashed border-gray-300
             flex items-center justify-center
             transition-all duration-200
-            group-hover:border-green-500 group-hover:bg-green-50
+            ${!displayUrl && !isUploading && defaultAvatar 
+              ? '' 
+              : 'bg-gray-100 border-2 border-dashed border-gray-300 group-hover:border-green-500 group-hover:bg-green-50'}
             ${isUploading ? 'cursor-not-allowed opacity-70' : ''}
           `}
         >
@@ -100,6 +103,8 @@ export const ImageUpload = ({
             />
           ) : isUploading ? (
             <Loader2 size={s.icon} className="text-green-700 animate-spin" />
+          ) : defaultAvatar ? (
+            defaultAvatar
           ) : (
             <div className="flex flex-col items-center gap-1 text-gray-400 group-hover:text-green-600 transition-colors">
               <Camera size={s.icon} />

@@ -147,7 +147,7 @@ export const Payments = () => {
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">Loading payments...</div>
         ) : (
-          <PaymentHistory payments={filteredPayments} onDelete={handleDelete} />
+          <PaymentHistory payments={filteredPayments} onDelete={handleDelete} tutees={tutees} />
         )}
       </div>
     </div>

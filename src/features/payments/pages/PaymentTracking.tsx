@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { DayPaymentTracker } from '@/features/attendance/components/DayPaymentTracker';
-import { Users, Calendar, DollarSign, BookOpen, X, Eye, CheckCircle2, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import { Users, Calendar, DollarSign, BookOpen, X, Eye, CheckCircle2, XCircle, AlertCircle, ExternalLink, User } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
@@ -133,11 +133,26 @@ export const PaymentTracking = () => {
             <h2 className="text-lg font-bold">Pending Payment Verifications ({pendingPayments.length})</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pendingPayments.map((payment) => (
-              <div key={payment.id} className="border border-amber-100 rounded-xl p-4 bg-amber-50/30 flex flex-col justify-between gap-3 shadow-sm">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-gray-900 text-sm">{payment.tuteeName}</h3>
+            {pendingPayments.map((payment) => {
+              const matchedTutee = tutees.find(t => t.id === payment.tuteeId);
+              return (
+                <div key={payment.id} className="border border-amber-100 rounded-xl p-4 bg-amber-50/30 flex flex-col justify-between gap-3 shadow-sm">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        {matchedTutee?.photoUrl ? (
+                          <img
+                            src={matchedTutee.photoUrl}
+                            alt={payment.tuteeName}
+                            className="w-8 h-8 rounded-full object-cover border border-amber-200 shadow-sm"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border border-amber-200 shadow-sm">
+                            <User size={14} className="text-green-700" />
+                          </div>
+                        )}
+                        <h3 className="font-bold text-gray-900 text-sm">{payment.tuteeName}</h3>
+                      </div>
                     <span className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
                       {payment.paymentMethod}
                     </span>
@@ -161,7 +176,8 @@ export const PaymentTracking = () => {
                   <Eye size={14} /> Review Proof
                 </button>
               </div>
-            ))}
+            );
+          })}
           </div>
         </div>
       )}
@@ -221,9 +237,17 @@ export const PaymentTracking = () => {
               className="bg-white rounded-2xl border-2 border-gray-200 p-6 hover:border-green-500 hover:shadow-xl transition-all text-left group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-700/20">
-                  <Calendar className="text-white" size={24} />
-                </div>
+                {tutee.photoUrl ? (
+                  <img
+                    src={tutee.photoUrl}
+                    alt={`${tutee.firstName} ${tutee.surname}`}
+                    className="w-12 h-12 rounded-xl object-cover border border-gray-200 shadow-md shadow-green-700/10"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-700/20">
+                    <Calendar className="text-white" size={24} />
+                  </div>
+                )}
                 <div className="text-right">
                   <p className="text-xs text-gray-500 font-medium">Status</p>
                   {tutee.totalPaid > 0 && tutee.balance <= 0 ? (
@@ -280,9 +304,25 @@ export const PaymentTracking = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 my-8">
             {/* Header */}
             <div className="bg-gradient-to-br from-amber-600 to-amber-950 p-6 flex justify-between items-start text-white">
-              <div>
-                <h3 className="font-bold text-lg">Verify Parent Payment</h3>
-                <p className="text-amber-100 text-xs mt-0.5">Submitted by parent for {reviewingPayment.tuteeName}</p>
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const t = tutees.find(tuteeItem => tuteeItem.id === reviewingPayment.tuteeId);
+                  return t?.photoUrl ? (
+                    <img
+                      src={t.photoUrl}
+                      alt={reviewingPayment.tuteeName}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-white/50 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/20 shadow-sm">
+                      <User size={22} className="text-white" />
+                    </div>
+                  );
+                })()}
+                <div>
+                  <h3 className="font-bold text-lg">Verify Parent Payment</h3>
+                  <p className="text-amber-100 text-xs mt-0.5">Submitted by parent for {reviewingPayment.tuteeName}</p>
+                </div>
               </div>
               <button
                 type="button"

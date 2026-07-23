@@ -43,6 +43,7 @@ class AssessmentService {
               tuteeName: data.tuteeName || '',
               subject: data.subject || '',
               date: data.date || '',
+              topic: data.topic || '',
               assessmentScores: data.assessmentScores || [],
               totalScore: typeof data.totalScore === 'number' ? data.totalScore : undefined,
               topicsCovered: data.topicsCovered || '',

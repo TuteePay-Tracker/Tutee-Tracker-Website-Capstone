@@ -264,11 +264,10 @@ export const Tutees = () => {
           </select>
           <button
             onClick={() => setShowArchived(!showArchived)}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all border shrink-0 ${
-              showArchived
-                ? 'bg-amber-50 border-amber-300 text-amber-850 hover:bg-amber-100'
-                : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all border shrink-0 ${showArchived
+              ? 'bg-amber-50 border-amber-300 text-amber-850 hover:bg-amber-100'
+              : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             {showArchived ? 'Show Active Students' : 'Show Archived Students'}
           </button>
@@ -430,14 +429,14 @@ export const Tutees = () => {
                     console.error('Parent account error:', error);
                   }
                 } finally {
-                  await deleteApp(secondaryApp).catch(() => {});
+                  await deleteApp(secondaryApp).catch(() => { });
                 }
               }
 
               // Automatically link student to existing parent doc (for "existing parent" selection).
               // New parent accounts already have linkedStudentIds set in setDoc above.
               const targetParentId = editingTutee ? data.parentId : data.parentId;
-              
+
               if (targetParentId && !parentData) {
                 // Only do this for existing parent linking (parentData means we just created a new one already)
                 try {
@@ -455,7 +454,7 @@ export const Tutees = () => {
                     }
                     if (Object.keys(updatePayload).length > 0) {
                       await updateDoc(parentRef, updatePayload);
-                      
+
                       await logActivity(
                         user.id,
                         user.name,
@@ -504,134 +503,134 @@ export const Tutees = () => {
             const calculatedBalance = Math.max(0, totalBilled - verifiedTotalPaid);
             const tuteeFullName = `${tutee.firstName} ${tutee.surname}`;
 
-          return (
-            <div key={tutee.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all ${tutee.archived ? 'opacity-75 border-amber-200 bg-amber-50/30' : 'border-gray-200'}`}>
-              {/* Card Header with avatar + name + 3-dot menu */}
-              <div className="flex items-center gap-3 p-5 pb-3">
-                <div className="shrink-0">
-                  {tutee.photoUrl ? (
-                    <img
-                      src={tutee.photoUrl}
-                      alt={tuteeFullName}
-                      className="w-12 h-12 rounded-full object-cover border-2 border-gray-100 shadow-sm"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-gray-100 shadow-sm">
-                      <User size={22} className="text-green-700" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-gray-900 truncate">{tuteeFullName}</h3>
-                  <div className="flex flex-wrap gap-1 mt-0.5">
-                    {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
-                      <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
-                        {s}
-                      </span>
-                    ))}
+            return (
+              <div key={tutee.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all ${tutee.archived ? 'opacity-75 border-amber-200 bg-amber-50/30' : 'border-gray-200'}`}>
+                {/* Card Header with avatar + name + 3-dot menu */}
+                <div className="flex items-center gap-3 p-5 pb-3">
+                  <div className="shrink-0">
+                    {tutee.photoUrl ? (
+                      <img
+                        src={tutee.photoUrl}
+                        alt={tuteeFullName}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-100 shadow-sm"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-gray-100 shadow-sm">
+                        <User size={22} className="text-green-700" />
+                      </div>
+                    )}
                   </div>
-                  {tutee.archived && (
-                    <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200">
-                      Archived
-                    </span>
-                  )}
-                </div>
-                {/* 3-dot menu */}
-                <div className="relative shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMenuId(activeMenuId === tutee.id ? null : tutee.id);
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <MoreVertical size={18} />
-                  </button>
-                  {activeMenuId === tutee.id && (
-                    <div
-                      className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-xl border border-gray-150 py-1.5 w-44 animate-in fade-in duration-100 slide-in-from-top-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Link
-                        to={`/tutees/${tutee.id}`}
-                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                        onClick={() => setActiveMenuId(null)}
-                      >
-                        <Eye size={15} className="text-gray-400" />
-                        View Details
-                      </Link>
-                      <button
-                        onClick={() => { handleEdit(tutee); setActiveMenuId(null); }}
-                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left font-medium"
-                      >
-                        <Pencil size={15} className="text-gray-400" />
-                        Edit
-                      </button>
-                      {tutee.archived ? (
-                        <button
-                          onClick={() => { handleUnarchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
-                        >
-                          <Users size={15} className="text-amber-400" />
-                          Unarchive
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => { handleArchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
-                        >
-                          <Users size={15} className="text-amber-400" />
-                          Archive
-                        </button>
-                      )}
-                      <div className="border-t border-gray-100 my-1" />
-                      <button
-                        onClick={() => { handleDelete(tutee.id); setActiveMenuId(null); }}
-                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors text-left font-medium"
-                      >
-                        <Trash2 size={15} className="text-red-400" />
-                        Delete Permanently
-                      </button>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-gray-900 truncate">{tuteeFullName}</h3>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
+                        <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
+                          {s}
+                        </span>
+                      ))}
                     </div>
-                  )}
+                    {tutee.archived && (
+                      <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200">
+                        Archived
+                      </span>
+                    )}
+                  </div>
+                  {/* 3-dot menu */}
+                  <div className="relative shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMenuId(activeMenuId === tutee.id ? null : tutee.id);
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <MoreVertical size={18} />
+                    </button>
+                    {activeMenuId === tutee.id && (
+                      <div
+                        className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-xl border border-gray-150 py-1.5 w-44 animate-in fade-in duration-100 slide-in-from-top-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Link
+                          to={`/tutees/${tutee.id}`}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                          onClick={() => setActiveMenuId(null)}
+                        >
+                          <Eye size={15} className="text-gray-400" />
+                          View Details
+                        </Link>
+                        <button
+                          onClick={() => { handleEdit(tutee); setActiveMenuId(null); }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left font-medium"
+                        >
+                          <Pencil size={15} className="text-gray-400" />
+                          Edit
+                        </button>
+                        {tutee.archived ? (
+                          <button
+                            onClick={() => { handleUnarchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
+                            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
+                          >
+                            <Users size={15} className="text-amber-400" />
+                            Unarchive
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => { handleArchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
+                            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
+                          >
+                            <Users size={15} className="text-amber-400" />
+                            Archive
+                          </button>
+                        )}
+                        <div className="border-t border-gray-100 my-1" />
+                        <button
+                          onClick={() => { handleDelete(tutee.id); setActiveMenuId(null); }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors text-left font-medium"
+                        >
+                          <Trash2 size={15} className="text-red-400" />
+                          Delete Permanently
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="px-5 pb-4 space-y-2 text-sm border-t border-gray-50 pt-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Rate:</span>
-                  <span className="font-semibold text-gray-800">{formatCurrency(tutee.ratePerSession)}/month</span>
+                <div className="px-5 pb-4 space-y-2 text-sm border-t border-gray-50 pt-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Rate:</span>
+                    <span className="font-semibold text-gray-800">{formatCurrency(tutee.ratePerSession)}/month</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Schedule:</span>
+                    <span className="text-right font-medium text-gray-700 max-w-[180px] truncate">{formatSchedule(tutee.schedule)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Sessions:</span>
+                    <span className="font-semibold text-gray-800">{tutee.totalSessions}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Total Paid:</span>
+                    <span className="font-semibold text-gray-800">{formatCurrency(tutee.totalPaid)}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-gray-100">
+                    <span className="text-gray-500 font-medium">Balance:</span>
+                    <span className={`font-bold ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                      {formatCurrency(tutee.balance)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Schedule:</span>
-                  <span className="text-right font-medium text-gray-700 max-w-[180px] truncate">{formatSchedule(tutee.schedule)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Sessions:</span>
-                  <span className="font-semibold text-gray-800">{tutee.totalSessions}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Total Paid:</span>
-                  <span className="font-semibold text-gray-800">{formatCurrency(tutee.totalPaid)}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-gray-100">
-                  <span className="text-gray-500 font-medium">Balance:</span>
-                  <span className={`font-bold ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                    {formatCurrency(tutee.balance)}
-                  </span>
-                </div>
-              </div>
 
-              <div className="px-5 pb-4">
-                <Link
-                  to={`/tutees/${tutee.id}`}
-                  className="block text-center bg-green-50 text-green-700 font-semibold text-sm py-2 rounded-xl hover:bg-green-100 transition-colors border border-green-100"
-                >
-                  View Details
-                </Link>
+                <div className="px-5 pb-4">
+                  <Link
+                    to={`/tutees/${tutee.id}`}
+                    className="block text-center bg-green-50 text-green-700 font-semibold text-sm py-2 rounded-xl hover:bg-green-100 transition-colors border border-green-100"
+                  >
+                    View Details
+                  </Link>
+                </div>
               </div>
-            </div>
-          );
+            );
           })}
         </div>
       )}
@@ -689,7 +688,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
             p.name?.toLowerCase().includes(queryLower);
           const phoneMatch = digitsOnly.length >= 3 &&
             (p.contactNumber?.replace(/\D/g, '').startsWith(digitsOnly) ||
-             p.contactNumber?.replace(/\D/g, '').includes(digitsOnly));
+              p.contactNumber?.replace(/\D/g, '').includes(digitsOnly));
           return nameMatch || phoneMatch;
         })
         .sort((a: any, b: any) => {
@@ -886,19 +885,6 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
         <div className="flex flex-col items-center gap-3 pb-4 border-b border-gray-100">
           <label className="block text-sm font-semibold text-gray-700 w-full">Profile Photo <span className="font-normal text-gray-400">(optional)</span></label>
           <div className="flex items-center gap-5">
-            <div className="shrink-0">
-              {formData.photoUrl ? (
-                <img
-                  src={formData.photoUrl}
-                  alt="Profile preview"
-                  className="w-20 h-20 rounded-full object-cover border-2 border-green-200 shadow"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-green-200 shadow">
-                  <User size={36} className="text-green-700" />
-                </div>
-              )}
-            </div>
             <div className="flex flex-col gap-2">
               <ImageUpload
                 currentUrl={formData.photoUrl || ''}
@@ -907,6 +893,11 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                 label="Upload Photo"
                 shape="circle"
                 size="md"
+                defaultAvatar={
+                  <div className="w-full h-full rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-green-200 shadow">
+                    <User size={36} className="text-green-700" />
+                  </div>
+                }
               />
               {formData.photoUrl && (
                 <button
@@ -924,33 +915,33 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm mb-2">First Name *</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">First Name *</label>
             <input
               type="text"
               value={formData.firstName}
               onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">Surname *</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Surname *</label>
             <input
               type="text"
               value={formData.surname}
               onChange={(e) => setFormData({ ...formData, surname: e.target.value })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">Grade Level</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Grade Level</label>
             <select
               value={formData.gradeLevel || ''}
               onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm"
             >
               <option value="">Select grade level</option>
               {GRADE_LEVELS.map(g => (
@@ -960,7 +951,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm mb-2">Subjects * <span className="text-gray-500 font-normal">(select all that apply)</span></label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Subjects * <span className="text-gray-500 font-normal">(select all that apply)</span></label>
             {subjects.length === 0 ? (
               <div className="border rounded-lg p-6 bg-yellow-50 border-yellow-200 text-center">
                 <p className="text-sm text-yellow-800 mb-2">No subjects available yet!</p>
@@ -975,9 +966,8 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                   return (
                     <label
                       key={subject.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                        isSelected ? 'bg-green-50 border border-green-400 text-green-900' : 'bg-white border border-gray-200 hover:bg-gray-100'
-                      }`}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${isSelected ? 'bg-green-50 border border-green-400 text-green-900' : 'bg-white border border-gray-200 hover:bg-gray-100'
+                        }`}
                     >
                       <input
                         type="checkbox"
@@ -1003,56 +993,56 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
           </div>
 
           <div>
-            <label className="block text-sm mb-2">Rate per Month *</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Rate per Month *</label>
             <input
               type="number"
               min="0"
               step="0.01"
               value={formData.ratePerSession || ''}
               onChange={(e) => setFormData({ ...formData, ratePerSession: parseFloat(e.target.value) || 0 })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
               required
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm mb-2">Guardian/Parents Number</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Guardian/Parents Number</label>
             <input
               type="tel"
               value={formData.guardianNumber}
               onChange={(e) => setFormData({ ...formData, guardianNumber: e.target.value })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
               placeholder="+63 XXX XXX XXXX"
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">Guardian/Parents Email</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Guardian/Parents Email</label>
             <input
               type="email"
               value={formData.guardianEmail}
               onChange={(e) => setFormData({ ...formData, guardianEmail: e.target.value })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
               placeholder="parent@example.com"
             />
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm mb-2">Address</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Address</label>
             <input
               type="text"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="w-full p-2 border rounded-lg"
+              className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
               placeholder="Full address"
             />
           </div>
         </div>
 
         {!tutee && (
-          <div className="border rounded-lg p-4 bg-green-50 border-green-200">
+          <div className="border rounded-lg p-4">
             <label className="flex text-sm font-medium mb-3 items-center gap-2">
-              <UserPlus size={18} className="text-green-700" />
+              <UserPlus size={18} className="text-gray-700" />
               Parent Information
             </label>
 
@@ -1080,9 +1070,9 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
               </label>
 
               {linkOrCreateParent && (
-                <div className="space-y-4 pl-6 border-l-2 border-green-300">
+                <div className="space-y-4 pl-6 border-l-2 border-gray-200">
                   <div>
-                    <label className="block text-sm font-medium text-gray-750 text-gray-700 mb-2">Parent Account Status</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Parent Account Status</label>
                     <div className="flex gap-6">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -1121,7 +1111,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                   {parentStatus === 'existing' && (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-sm text-gray-700 mb-1">Search Parent by Name or Contact Number</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Search Parent by Name or Contact Number</label>
                         <div className="flex gap-2">
                           <input
                             type="text"
@@ -1132,7 +1122,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                               if (!e.target.value.trim()) setSearchResults([]);
                             }}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearchParents()}
-                            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 text-sm bg-white"
+                            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 text-sm placeholder:text-xs bg-white"
                             placeholder="e.g. Maria Santos or 09171234567"
                           />
                           <button
@@ -1154,9 +1144,8 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                             return (
                               <div
                                 key={p.id}
-                                className={`flex justify-between items-center p-3 text-sm transition-colors ${
-                                  isSelected ? 'bg-green-50' : 'hover:bg-gray-50'
-                                }`}
+                                className={`flex justify-between items-center p-3 text-sm transition-colors ${isSelected ? 'bg-green-50' : 'hover:bg-gray-50'
+                                  }`}
                               >
                                 <div>
                                   <p className="font-semibold text-gray-900">{p.name}</p>
@@ -1165,11 +1154,10 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                                 <button
                                   type="button"
                                   onClick={() => setSelectedParentId(isSelected ? null : p.id)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                                    isSelected
-                                      ? 'bg-green-700 border-green-800 text-white hover:bg-green-800'
-                                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                                  }`}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isSelected
+                                    ? 'bg-green-700 border-green-800 text-white hover:bg-green-800'
+                                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                                    }`}
                                 >
                                   {isSelected ? 'Selected' : 'Select'}
                                 </button>
@@ -1184,26 +1172,26 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                   {parentStatus === 'new' && (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-sm text-gray-750 text-gray-700 mb-1">Parent Name *</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Parent Name *</label>
                         <input
                           type="text"
                           value={newParentName}
                           onChange={(e) => setNewParentName(e.target.value)}
-                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
+                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 text-sm placeholder:text-xs bg-white"
                           placeholder="e.g., Maria Santos"
                           required={linkOrCreateParent && parentStatus === 'new'}
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm text-gray-750 text-gray-700 mb-1">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
                           Contact Number * <span className="text-gray-500 font-normal">(will be used as username)</span>
                         </label>
                         <input
                           type="tel"
                           value={newParentContactNumber}
                           onChange={(e) => setNewParentContactNumber(e.target.value)}
-                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
+                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700 text-sm placeholder:text-xs bg-white"
                           placeholder="09171234567"
                           required={linkOrCreateParent && parentStatus === 'new'}
                         />
@@ -1221,14 +1209,14 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
         )}
 
         {tutee && (
-          <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+          <div className="border rounded-lg p-4">
             <label className="flex text-sm font-medium mb-3 items-center gap-2">
-              <Users size={18} className="text-blue-700" />
+              <Users size={18} className="text-gray-700" />
               Link Parent Account (Optional)
             </label>
 
             {linkedParentId ? (
-              <div className="bg-white rounded-lg p-4 border border-blue-300">
+              <div className="bg-white rounded-lg p-4 border border-gray-200">
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-sm text-gray-600">Linked Parent:</p>
@@ -1258,7 +1246,7 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                     type="email"
                     value={parentEmail}
                     onChange={(e) => setParentEmail(e.target.value)}
-                    className="flex-1 p-2 border rounded-lg"
+                    className="flex-1 p-2 border rounded-lg text-sm placeholder:text-xs"
                     placeholder="parent@example.com"
                   />
                   <button
@@ -1300,45 +1288,43 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
         )}
 
         <div className="border rounded-lg p-4">
-          <label className="block text-sm font-medium mb-3">Schedule *</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Schedule *</label>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-600 mb-2">Time Range</label>
               <div className="flex gap-3 items-center">
                 <div className="flex-1">
-                  <label className="block text-xs text-gray-500 mb-1">Start Time</label>
+                  <label className="block text-m font-semibold text-gray-500 mb-1"> Class Start</label>
                   <input
                     type="time"
                     value={scheduleTime.startTime}
                     onChange={(e) => updateAllScheduleTimes(e.target.value, scheduleTime.endTime)}
-                    className="w-full p-2 border rounded-lg"
+                    className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
                   />
                 </div>
                 <span className="text-gray-500 mt-5">to</span>
                 <div className="flex-1">
-                  <label className="block text-xs text-gray-500 mb-1">End Time</label>
+                  <label className="block text-m font-semibold text-gray-500 mb-1">Class End</label>
                   <input
                     type="time"
                     value={scheduleTime.endTime}
                     onChange={(e) => updateAllScheduleTimes(scheduleTime.startTime, e.target.value)}
-                    className="w-full p-2 border rounded-lg"
+                    className="w-full p-2 border rounded-lg text-sm placeholder:text-xs"
                   />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm text-gray-600 mb-2">Select Days</label>
+              <label className="block text-m font-semibold text-gray-700 mb-2">Select Days</label>
               <div className="grid grid-cols-2 gap-2">
                 {DAYS.map(day => (
                   <label
                     key={day}
-                    className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
-                      isDaySelected(day)
-                        ? 'bg-green-50 border-green-700 text-green-900'
-                        : 'bg-white border-gray-300 hover:bg-gray-50'
-                    }`}
+                    className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${isDaySelected(day)
+                      ? 'bg-green-50 border-green-700 text-green-900'
+                      : 'bg-white border-gray-300 hover:bg-gray-50'
+                      }`}
                   >
                     <input
                       type="checkbox"

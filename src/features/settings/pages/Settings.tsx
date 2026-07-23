@@ -11,6 +11,8 @@ import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot, doc,
 import { db } from '@/shared/lib/firebase/config';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
+import gcashLogo from '@/assets/gcash-com-logo.png';
+import mayaLogo from '@/assets/id5dWPPLkV_logos.jpeg';
 
 const MODULE_ACTIONS: Record<string, string[]> = {
   all: [],
@@ -195,7 +197,12 @@ export const Settings = () => {
   const handleSavePaymentSettings = async () => {
     setIsSavingPayments(true);
     try {
-      await updatePaymentMethods(paymentMethods);
+      const updatedMethods = {
+        ...paymentMethods,
+        bank: { ...paymentMethods.bank, enabled: false },
+        other: { ...paymentMethods.other, enabled: false }
+      };
+      await updatePaymentMethods(updatedMethods);
       toast.success('Payment settings saved successfully');
     } catch (error) {
       console.error(error);
@@ -762,22 +769,24 @@ export const Settings = () => {
                 <CreditCard size={24} className="text-gray-600" />
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Payment Settings</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">Configure GCash, Maya, or Bank Transfer payment details for parents</p>
+                  <p className="text-sm text-gray-500 mt-0.5">Configure GCash or Maya payment details for parents</p>
                 </div>
               </div>
 
               <div className="space-y-6">
-                {(['gcash', 'maya', 'bank', 'other'] as const).map((method) => {
+                {(['gcash', 'maya'] as Array<'gcash' | 'maya' | 'bank' | 'other'>).map((method) => {
                   const config = paymentMethods[method];
-                  const label = method === 'gcash' ? 'GCash' :
-                    method === 'maya' ? 'Maya' :
-                      method === 'bank' ? 'Bank Transfer' : 'Other Payment Method';
+                  const label = method === 'gcash' ? 'GCash' : 'Maya';
 
                   return (
                     <div key={method} className="p-5 border rounded-2xl bg-gray-50/50 space-y-4 shadow-inner">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Smartphone size={20} className="text-gray-600" />
+                          {method === 'gcash' ? (
+                            <img src={gcashLogo} alt="GCash Logo" className="w-8 h-8 rounded-xl object-cover shadow-sm shrink-0" />
+                          ) : (
+                            <img src={mayaLogo} alt="Maya Logo" className="w-8 h-8 rounded-xl object-cover shadow-sm shrink-0" />
+                          )}
                           <span className="font-bold text-gray-900">{label}</span>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
