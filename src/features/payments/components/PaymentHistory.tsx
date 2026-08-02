@@ -16,7 +16,7 @@ interface PaymentHistoryProps {
   tutees?: Tutee[];
 }
 
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 3;  
 
 export const PaymentHistory = ({ payments, onDelete, showTuteeName = true, tuteeRate, tutees }: PaymentHistoryProps) => {
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);

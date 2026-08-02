@@ -7,7 +7,7 @@ import { GraduationCap, Mail, Lock, ArrowRight, Sparkles, Eye, EyeOff } from 'lu
 import { toast } from 'sonner';
 
 export const Login = () => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,15 +18,15 @@ export const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    let loginEmail = email.trim();
+    let loginIdentifier = identifier.trim();
     // If it's a contact number (pure digits, 10 or 11 digits)
-    const sanitizedPhone = loginEmail.replace(/\D/g, '');
+    const sanitizedPhone = loginIdentifier.replace(/\D/g, '');
     if (sanitizedPhone.length >= 10 && sanitizedPhone.length <= 11 && /^\d+$/.test(sanitizedPhone)) {
-      loginEmail = `${sanitizedPhone}@tuteepay.local`;
+      loginIdentifier = `${sanitizedPhone}@tuteepay.local`;
     }
 
     try {
-      await login(loginEmail, password);
+      await login(loginIdentifier, password);
       toast.success('Welcome back!');
       navigate('/');
     } catch (error: any) {
@@ -127,17 +127,17 @@ export const Login = () => {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Email Address / Contact Number</label>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <Mail size={20} className="text-green-700" />
                   </div>
                   <input
                     type="text"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent transition-all bg-white"
-                    placeholder="Email or phone number"
+                    placeholder="Email"
                     required
                   />
                 </div>

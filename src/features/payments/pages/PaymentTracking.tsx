@@ -18,6 +18,7 @@ export const PaymentTracking = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
 
   const [reviewingPayment, setReviewingPayment] = useState<any>(null);
+  const [viewingProofUrl, setViewingProofUrl] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [coverageType, setCoverageType] = useState<'full' | 'partial'>('full');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -64,10 +65,10 @@ export const PaymentTracking = () => {
     }
   }, [searchParams, tutees]);
 
-  const handleApprove = async (payment: any) => {
+  const handleApprove = async (payment: any, coverage: 'full' | 'partial' = coverageType) => {
     setIsProcessing(true);
     try {
-      await dayPaymentService.verifyPendingPayment(payment, coverageType);
+      await dayPaymentService.verifyPendingPayment(payment, coverage);
       toast.success('Payment approved and recorded successfully!');
       setReviewingPayment(null);
       refreshPayments();
@@ -79,10 +80,10 @@ export const PaymentTracking = () => {
     }
   };
 
-  const handleReject = async (paymentId: string) => {
+  const handleReject = async (paymentId: string, reason?: string) => {
     setIsProcessing(true);
     try {
-      await dayPaymentService.rejectPendingPayment(paymentId, rejectionReason);
+      await dayPaymentService.rejectPendingPayment(paymentId, reason ?? rejectionReason);
       toast.success('Payment rejected successfully');
       setReviewingPayment(null);
       setRejectionReason('');
@@ -169,12 +170,14 @@ export const PaymentTracking = () => {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={() => setReviewingPayment(payment)}
-                  className="w-full flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-xl text-xs transition-colors shadow-sm"
-                >
-                  <Eye size={14} /> Review Proof
-                </button>
+                <div className="pt-2 border-t border-amber-100">
+                  <button
+                    onClick={() => setReviewingPayment(payment)}
+                    className="w-full flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-xl text-xs transition-colors shadow-sm"
+                  >
+                    <Eye size={14} /> Review Proof
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -370,20 +373,26 @@ export const PaymentTracking = () => {
                   <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-2">
                     Proof of Payment screenshot
                   </label>
-                  <div className="w-full h-64 bg-gray-100 border border-gray-200 rounded-xl overflow-hidden relative group shadow-inner flex items-center justify-center">
-                    <img
-                      src={reviewingPayment.proofUrl}
-                      alt="Proof of Payment"
-                      className="max-w-full max-h-full object-contain"
-                    />
-                    <a
-                      href={reviewingPayment.proofUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="absolute bottom-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 flex items-center gap-1 text-xs font-bold transition-colors"
+                  <div className="w-full max-h-[40vh] bg-gray-100 border border-gray-200 rounded-xl overflow-y-auto relative shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => setViewingProofUrl(reviewingPayment.proofUrl)}
+                      className="block w-full cursor-zoom-in"
+                      aria-label="View full proof image"
+                    >
+                      <img
+                        src={reviewingPayment.proofUrl}
+                        alt="Proof of Payment"
+                        className="w-full h-auto block"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewingProofUrl(reviewingPayment.proofUrl)}
+                      className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 flex items-center gap-1 text-xs font-bold transition-colors"
                     >
                       <ExternalLink size={12} /> Open Full Image
-                    </a>
+                    </button>
                   </div>
                 </div>
               )}
@@ -400,37 +409,6 @@ export const PaymentTracking = () => {
                   placeholder="e.g. Reference number not found, incorrect amount"
                   className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
-              </div>
-
-              {/* Confirm Coverage Type input */}
-              <div className="space-y-1.5">
-                <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider">
-                  Confirm Payment Type
-                </label>
-                <div className="flex gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="coverageType"
-                      value="full"
-                      checked={coverageType === 'full'}
-                      onChange={() => setCoverageType('full')}
-                      className="text-green-700 focus:ring-green-500 w-4 h-4 cursor-pointer"
-                    />
-                    Full Payment
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="coverageType"
-                      value="partial"
-                      checked={coverageType === 'partial'}
-                      onChange={() => setCoverageType('partial')}
-                      className="text-green-700 focus:ring-green-500 w-4 h-4 cursor-pointer"
-                    />
-                    Partial Payment
-                  </label>
-                </div>
               </div>
 
               {/* Action Buttons */}
@@ -452,6 +430,28 @@ export const PaymentTracking = () => {
                   <CheckCircle2 size={16} /> Approve & Confirm
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Proof Image Viewer Modal */}
+      {viewingProofUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="relative max-w-2xl w-full bg-white rounded-2xl p-2 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setViewingProofUrl(null)}
+              className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-colors z-10"
+            >
+              <X size={20} />
+            </button>
+            <div className="max-h-[85vh] overflow-y-auto rounded-xl">
+              <img
+                src={viewingProofUrl}
+                alt="Proof of Payment"
+                className="w-full h-auto block"
+              />
             </div>
           </div>
         </div>
