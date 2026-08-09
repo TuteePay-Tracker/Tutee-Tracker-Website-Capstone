@@ -15,6 +15,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
+import { sendChatNotification } from '@/shared/lib/notifications/sendPush';
 import { ChatThread, Message } from '@/features/chat/types/chat';
 
 class ChatService {
@@ -125,6 +126,10 @@ class ChatService {
         [`unreadCount.${recipientId}`]: increment(1),
         updatedAt: serverTimestamp()
       });
+
+      // Fire-and-forget push to the receiver only (never the sender).
+      sendChatNotification(recipientId, senderName, text, chatId)
+        .catch((error) => console.warn('Failed to send chat push:', error));
     } catch (error) {
       console.error('Error sending message:', error);
       throw error;

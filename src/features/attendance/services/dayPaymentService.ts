@@ -18,6 +18,7 @@ import {
 import { db, auth } from '@/shared/lib/firebase/config';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
+import { sendPaymentStatusNotification } from '@/shared/lib/notifications/sendPush';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
 
@@ -669,6 +670,19 @@ class DayPaymentService {
 
       // Sync overall student totals
       await this.syncTuteeTotals(payment.tuteeId, userId);
+
+      // Notify the submitting parent that their payment was accepted.
+      try {
+        const tutee = await tuteeService.getById(payment.tuteeId);
+        const parentId =
+          (recordSnap.exists() ? recordSnap.data().parentId : null) || tutee?.parentId;
+        if (parentId) {
+          sendPaymentStatusNotification(parentId, 'accepted', payment.tuteeName, payment.amount)
+            .catch((err) => console.warn('Failed to send payment accepted push:', err));
+        }
+      } catch (error) {
+        console.warn('Failed to notify parent about accepted payment:', error);
+      }
     } catch (error) {
       console.error('Error verifying pending payment:', error);
       throw error;
@@ -695,6 +709,26 @@ class DayPaymentService {
         rejectionReason: rejectionReason || 'No reason specified',
         updatedAt: Timestamp.fromDate(new Date()),
       });
+
+      // Notify the submitting parent that their payment was rejected.
+      try {
+        if (paymentSnap.exists()) {
+          const paymentData = paymentSnap.data();
+          const tutee = await tuteeService.getById(paymentData.tuteeId);
+          const parentId = tutee?.parentId;
+          if (parentId) {
+            sendPaymentStatusNotification(
+              parentId,
+              'rejected',
+              paymentData.tuteeName,
+              paymentData.amount,
+              rejectionReason || 'No reason specified'
+            ).catch((err) => console.warn('Failed to send payment rejected push:', err));
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to notify parent about rejected payment:', error);
+      }
     } catch (error) {
       console.error('Error rejecting pending payment:', error);
       throw error;

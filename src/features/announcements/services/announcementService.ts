@@ -1,5 +1,6 @@
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
+import { sendAnnouncementNotification } from '@/shared/lib/notifications/sendPush';
 import { Announcement, AnnouncementFormData } from '@/features/announcements/types/announcement';
 
 class AnnouncementService {
@@ -23,12 +24,18 @@ class AnnouncementService {
 
   async create(tutorId: string, data: AnnouncementFormData) {
     const collRef = collection(db, 'users', tutorId, 'announcements');
-    return addDoc(collRef, {
+    const docRef = await addDoc(collRef, {
       ...data,
       tutorId,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     });
+
+    // Fire-and-forget push to all parents linked to this tutor.
+    sendAnnouncementNotification(tutorId, docRef.id, data.title, data.content)
+      .catch((error) => console.warn('Failed to send announcement push:', error));
+
+    return docRef;
   }
 
   async update(tutorId: string, id: string, data: Partial<AnnouncementFormData>) {

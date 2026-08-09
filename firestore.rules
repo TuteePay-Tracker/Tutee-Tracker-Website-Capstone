@@ -346,6 +346,15 @@ service cloud.firestore {
         allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
       }
+
+      // PUSH TOKENS subcollection (Expo push notification tokens)
+      // Tokens are device-level secrets; only the owner may manage them.
+      match /pushTokens/{tokenId} {
+        allow read: if isAuthenticated() && isOwner(userId);
+        allow create: if isAuthenticated() && isOwner(userId);
+        allow delete: if isAuthenticated() && isOwner(userId);
+        allow update: if false;
+      }
     }
 
     // CHAT THREADS and MESSAGES
