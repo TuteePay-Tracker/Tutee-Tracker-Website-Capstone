@@ -39,47 +39,47 @@ export const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden p-4">
       {/* Animated Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white via-green-100 to-green-200">
+      <div className="absolute inset-0 bg-gradient-to-br from-white via-blue-100 to-blue-200">
         <div className="absolute inset-0 opacity-25">
-          <div className="absolute top-0 -left-4 w-96 h-96 bg-green-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+          <div className="absolute top-0 -left-4 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
           <div className="absolute top-0 -right-4 w-96 h-96 bg-emerald-700 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
-          <div className="absolute -bottom-8 left-20 w-96 h-96 bg-green-700 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
+          <div className="absolute -bottom-8 left-20 w-96 h-96 bg-blue-700 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
         </div>
       </div>
 
       {/* Decorative Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-green-600/40 rounded-full animate-pulse"></div>
+        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-blue-600/40 rounded-full animate-pulse"></div>
         <div className="absolute top-3/4 right-1/4 w-3 h-3 bg-emerald-600/50 rounded-full animate-pulse animation-delay-1000"></div>
-        <div className="absolute top-1/2 right-1/3 w-2 h-2 bg-green-600/40 rounded-full animate-pulse animation-delay-2000"></div>
+        <div className="absolute top-1/2 right-1/3 w-2 h-2 bg-blue-600/40 rounded-full animate-pulse animation-delay-2000"></div>
       </div>
 
       {/* Main Content */}
       <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row items-center gap-12">
         {/* Left Side - Branding */}
         <div className="flex-1 text-gray-800 space-y-6 text-center lg:text-left">
-          <div className="inline-flex items-center gap-3 bg-green-700 backdrop-blur-lg rounded-full px-4 py-2 border border-green-800">
-            <Sparkles size={20} className="text-green-200" />
+          <div className="inline-flex items-center gap-3 bg-blue-600 backdrop-blur-lg rounded-full px-4 py-2 border border-blue-700">
+            <Sparkles size={20} className="text-blue-200" />
             <span className="text-sm font-medium text-white">Smart Tutee & Session Management</span>
           </div>
 
           <h1 className="text-5xl lg:text-6xl font-bold leading-tight text-gray-900">
             Welcome to
-            <span className="block text-green-700">
+            <span className="block text-blue-600">
               TUTOR {' '}
-              <span className="text-green-700">
+              <span className="text-blue-600">
                 TRACK
               </span>
             </span>
           </h1>
 
           <p className="text-xl text-gray-700 max-w-md">
-            Your all-in-one platform for managing tutees, scheduling sessions, tracking payments, and keeping <span className="font-semibold text-green-700">parents informed</span> — so you can focus on what matters most: <span className="font-semibold text-green-700">teaching</span>.
+            Your all-in-one platform for managing tutees, scheduling sessions, tracking payments, and keeping <span className="font-semibold text-blue-600">parents informed</span> — so you can focus on what matters most: <span className="font-semibold text-blue-600">teaching</span>.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 pt-4 flex-wrap">
-            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-green-300 shadow-sm">
-              <div className="w-10 h-10 bg-green-700 rounded-full flex items-center justify-center">
+            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-blue-300 shadow-sm">
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
@@ -90,8 +90,8 @@ export const Login = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-green-300 shadow-sm">
-              <div className="w-10 h-10 bg-green-700 rounded-full flex items-center justify-center">
+            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-blue-300 shadow-sm">
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
@@ -102,8 +102,8 @@ export const Login = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-green-300 shadow-sm">
-              <div className="w-10 h-10 bg-green-700 rounded-full flex items-center justify-center">
+            <div className="flex items-center gap-3 bg-white backdrop-blur-sm rounded-lg px-4 py-3 border border-blue-300 shadow-sm">
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -118,7 +118,7 @@ export const Login = () => {
 
         {/* Right Side - Login Form */}
         <div className="w-full lg:w-auto lg:min-w-[480px]">
-          <div className="bg-white backdrop-blur-xl rounded-3xl shadow-2xl p-8 lg:p-10 border border-green-200">
+          <div className="bg-white backdrop-blur-xl rounded-3xl shadow-2xl p-8 lg:p-10 border border-blue-200">
             <div className="text-center mb-8">
               <img src={logoUrl} alt="TuteePay Logo" className="w-16 h-16 object-contain rounded-2xl mb-4 shadow-lg bg-white p-1" />
               <h2 className="text-3xl font-bold text-gray-900 mb-2">Sign In</h2>
@@ -130,13 +130,13 @@ export const Login = () => {
                 <label className="block text-sm font-medium text-gray-700">Email</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail size={20} className="text-green-700" />
+                    <Mail size={20} className="text-blue-600" />
                   </div>
                   <input
                     type="text"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent transition-all bg-white"
+                    className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all bg-white"
                     placeholder="Email"
                     required
                   />
@@ -147,20 +147,20 @@ export const Login = () => {
                 <label className="block text-sm font-medium text-gray-700">Password</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock size={20} className="text-green-700" />
+                    <Lock size={20} className="text-blue-600" />
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 focus:border-transparent transition-all bg-white"
+                    className="w-full pl-12 pr-12 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all bg-white"
                     placeholder="••••••••••"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-green-700 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 transition-colors"
                   >
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -171,7 +171,7 @@ export const Login = () => {
                 <label className="flex items-center cursor-pointer group">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 text-green-700 border-gray-300 rounded focus:ring-green-700 cursor-pointer"
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-600 cursor-pointer"
                   />
                   <span className="ml-2 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">
                     Remember me
@@ -179,7 +179,7 @@ export const Login = () => {
                 </label>
                 <Link
                   to="/forgot-password"
-                  className="text-sm font-medium text-green-700 hover:text-green-800 transition-colors"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
                 >
                   Forgot password?
                 </Link>
@@ -188,7 +188,7 @@ export const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-green-700 text-white py-3.5 rounded-xl hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center gap-2 group"
+                className="w-full bg-blue-600 text-white py-3.5 rounded-xl hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center gap-2 group"
               >
                 {isLoading ? (
                   <>
@@ -219,7 +219,7 @@ export const Login = () => {
             <div className="text-center">
               <Link
                 to="/signup"
-                className="inline-flex items-center gap-2 text-green-700 hover:text-green-800 font-medium transition-colors group"
+                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors group"
               >
                 <span>Create an account</span>
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
