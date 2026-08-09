@@ -652,6 +652,21 @@ class DayPaymentService {
         updatedAt: Timestamp.fromDate(new Date()),
       });
 
+      // Create transaction record in the subcollection for backward compatibility and real-time syncing
+      const transRef = collection(db, 'users', userId, 'paymentTransactions');
+      await addDoc(transRef, {
+        tuteeId: payment.tuteeId,
+        tuteeName: payment.tuteeName,
+        paymentDate: payment.paymentDate || new Date().toISOString().split('T')[0],
+        daysPaid: [],
+        totalAmount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        month: payment.month,
+        notes: payment.notes || `Verified parent payment proof`,
+        paymentId: payment.id,
+        createdAt: Timestamp.fromDate(new Date()),
+      });
+
       // Sync overall student totals
       await this.syncTuteeTotals(payment.tuteeId, userId);
     } catch (error) {

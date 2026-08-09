@@ -179,6 +179,22 @@ class PaymentService {
             lastPaymentDate: payment.paymentDate,
           }, tutorId);
         }
+
+        // Create transaction record in the subcollection for backward compatibility and real-time syncing
+        const userId = this.getUserId(tutorId);
+        const transRef = collection(db, 'users', userId, 'paymentTransactions');
+        await addDoc(transRef, {
+          tuteeId: payment.tuteeId,
+          tuteeName: payment.tuteeName,
+          paymentDate: payment.paymentDate || now.toISOString().split('T')[0],
+          daysPaid: [],
+          totalAmount: payment.amount,
+          paymentMethod: payment.paymentMethod,
+          month: payment.month || now.toISOString().substring(0, 7),
+          notes: payment.notes || 'Recorded payment',
+          paymentId: docRef.id,
+          createdAt: Timestamp.fromDate(now),
+        });
       }
       
       return {
@@ -227,6 +243,14 @@ class PaymentService {
       const userId = this.getUserId();
       const docRef = doc(db, 'users', userId, 'payments', id);
       await deleteDoc(docRef);
+
+      // Also delete the linked paymentTransaction if it exists
+      const transRef = collection(db, 'users', userId, 'paymentTransactions');
+      const q = query(transRef, where('paymentId', '==', id));
+      const transSnap = await getDocs(q);
+      for (const transDoc of transSnap.docs) {
+        await deleteDoc(transDoc.ref);
+      }
     } catch (error) {
       console.error('Error deleting payment:', error);
       throw error;
