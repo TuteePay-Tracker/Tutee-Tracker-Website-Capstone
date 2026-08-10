@@ -9,7 +9,8 @@ import {
 import { db, auth } from '@/shared/lib/firebase/config';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
-const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
+const PUSH_RELAY_URL =
+  (import.meta.env.VITE_PUSH_RELAY_URL as string | undefined) ?? 'http://localhost:4000';
 
 export type PushData = Record<string, string | number | boolean>;
 
@@ -66,34 +67,30 @@ export async function sendPushMessage({
 
   const writerUid = auth.currentUser?.uid;
 
-  // Expo's API accepts up to 100 messages per request.
+  // Expo's API accepts up to 100 messages per request; the relay forwards
+  // each chunk to Expo from a server context (browsers are CORS-blocked).
   for (let i = 0; i < uniqueTokens.length; i += 100) {
     const chunk = uniqueTokens.slice(i, i + 100);
-    const messages = chunk.map((to) => ({
-      to,
-      title,
-      body,
-      sound,
-      priority,
-      data: data ?? undefined,
-    }));
 
     try {
-      const response = await fetch(EXPO_PUSH_API_URL, {
+      const response = await fetch(`${PUSH_RELAY_URL}/send-push`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify(messages),
+        body: JSON.stringify({ tokens: chunk, title, body, data, sound, priority }),
       });
 
       if (!response.ok) {
-        console.warn('Expo push API error:', response.status, await response.text());
+        console.warn('Push relay error:', response.status, await response.text());
         continue;
       }
 
-      const tickets = await response.json();
+      const result = await response.json();
+      const tickets = result?.tickets as
+        | Array<{ status?: string; details?: { error?: string }; message?: string }>
+        | undefined;
       if (Array.isArray(tickets)) {
         tickets.forEach((ticket, index) => {
           if (ticket?.status === 'error') {

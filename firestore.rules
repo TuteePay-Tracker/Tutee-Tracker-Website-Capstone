@@ -5,7 +5,7 @@ service cloud.firestore {
     
     // Helper function to check if user is authenticated
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null;  
     }
     
     // Helper function to check if user owns the data
@@ -348,12 +348,12 @@ service cloud.firestore {
       }
 
       // PUSH TOKENS subcollection (Expo push notification tokens)
-      // Tokens are device-level secrets; only the owner may manage them.
+      // Only the owner may modify them. Any authenticated user may read them
+      // so tutors can look up a parent's tokens to deliver chat/payment pushes.
       match /pushTokens/{tokenId} {
-        allow read: if isAuthenticated() && isOwner(userId);
-        allow create: if isAuthenticated() && isOwner(userId);
+        allow read: if isAuthenticated();
+        allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
-        allow update: if false;
       }
     }
 
