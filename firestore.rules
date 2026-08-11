@@ -390,6 +390,11 @@ service cloud.firestore {
           get(/databases/$(database)/documents/chats/$(chatId)).data.tutorId == request.auth.uid ||
           get(/databases/$(database)/documents/chats/$(chatId)).data.parentId == request.auth.uid
         );
+
+        allow delete: if isAuthenticated() && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.tutorId == request.auth.uid ||
+          get(/databases/$(database)/documents/chats/$(chatId)).data.parentId == request.auth.uid
+        ) && resource.data.senderId == request.auth.uid;
       }
     }
 
