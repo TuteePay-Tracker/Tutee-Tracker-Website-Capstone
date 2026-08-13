@@ -227,6 +227,19 @@ class ChatService {
       throw error;
     }
   }
+  /**
+   * Delete a single message from a chat thread
+   */
+  async deleteMessage(chatId: string, messageId: string): Promise<void> {
+    try {
+      const { deleteDoc } = await import('firebase/firestore');
+      const msgRef = doc(db, 'chats', chatId, 'messages', messageId);
+      await deleteDoc(msgRef);
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      throw error;
+    }
+  }
 }
 
 export const chatService = new ChatService();

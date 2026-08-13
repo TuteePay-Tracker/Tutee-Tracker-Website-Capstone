@@ -207,6 +207,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
+    setIsLoading(true);
     setLoggingOut(true);
     try {
       if (user) {
@@ -223,11 +224,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           console.error('Failed to log activity during logout:', error);
         }
       }
-      // Set user state to null first to trigger active hook cleanup and unsubscribe listeners
-      setUser(null);
-      // Yield to let React commit the render tree update and execute effect cleanups
-      await new Promise((resolve) => setTimeout(resolve, 0));
       await logoutUser();
+      // setUser(null) will be handled by onAuthStateChanged after sign-out
+    } catch (error) {
+      console.error('Logout failed:', error);
+      setIsLoading(false);
     } finally {
       setLoggingOut(false);
     }

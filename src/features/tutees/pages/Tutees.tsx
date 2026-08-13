@@ -504,7 +504,7 @@ export const Tutees = () => {
             const tuteeFullName = `${tutee.firstName} ${tutee.surname}`;
 
             return (
-              <div key={tutee.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all ${tutee.archived ? 'opacity-75 border-amber-200 bg-amber-50/30' : 'border-gray-200'}`}>
+              <div key={tutee.id} className={`glass-panel stat-card-premium ${tutee.archived ? 'stat-warning opacity-75 bg-amber-50/10 border-amber-200/50' : 'stat-primary'} flex flex-col justify-between`}>
                 {/* Card Header with avatar + name + 3-dot menu */}
                 <div className="flex items-center gap-3 p-5 pb-3">
                   <div className="shrink-0">
@@ -512,25 +512,25 @@ export const Tutees = () => {
                       <img
                         src={tutee.photoUrl}
                         alt={tuteeFullName}
-                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-100 shadow-sm"
+                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-100 dark:border-slate-800 shadow-sm"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center border-2 border-gray-100 shadow-sm">
-                        <User size={22} className="text-green-700" />
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 dark:from-green-950 dark:to-emerald-950 flex items-center justify-center border-2 border-gray-100 dark:border-slate-800 shadow-sm">
+                        <User size={22} className="text-green-700 dark:text-green-400" />
                       </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-gray-900 truncate">{tuteeFullName}</h3>
+                    <h3 className="font-bold text-gray-900 dark:text-white truncate">{tuteeFullName}</h3>
                     <div className="flex flex-wrap gap-1 mt-0.5">
                       {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
-                        <span key={s} className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
+                        <span key={s} className="px-2 py-0.5 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 text-[10px] font-bold rounded-full border border-green-200 dark:border-green-800/40">
                           {s}
                         </span>
                       ))}
                     </div>
                     {tutee.archived && (
-                      <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200">
+                      <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/40 px-1.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
                         Archived
                       </span>
                     )}
@@ -542,18 +542,18 @@ export const Tutees = () => {
                         e.stopPropagation();
                         setActiveMenuId(activeMenuId === tutee.id ? null : tutee.id);
                       }}
-                      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                     >
                       <MoreVertical size={18} />
                     </button>
                     {activeMenuId === tutee.id && (
                       <div
-                        className="absolute right-0 top-8 z-50 bg-white rounded-xl shadow-xl border border-gray-150 py-1.5 w-44 animate-in fade-in duration-100 slide-in-from-top-1"
+                        className="absolute right-0 top-8 z-50 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-gray-150 dark:border-slate-800 py-1.5 w-44 animate-in fade-in duration-100 slide-in-from-top-1"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Link
                           to={`/tutees/${tutee.id}`}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 dark:text-slate-350 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors font-medium"
                           onClick={() => setActiveMenuId(null)}
                         >
                           <Eye size={15} className="text-gray-400" />
@@ -561,7 +561,7 @@ export const Tutees = () => {
                         </Link>
                         <button
                           onClick={() => { handleEdit(tutee); setActiveMenuId(null); }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left font-medium"
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 dark:text-slate-350 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
                         >
                           <Pencil size={15} className="text-gray-400" />
                           Edit
@@ -569,7 +569,7 @@ export const Tutees = () => {
                         {tutee.archived ? (
                           <button
                             onClick={() => { handleUnarchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
-                            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
+                            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
                           >
                             <Users size={15} className="text-amber-400" />
                             Unarchive
@@ -577,16 +577,16 @@ export const Tutees = () => {
                         ) : (
                           <button
                             onClick={() => { handleArchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
-                            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors text-left font-medium"
+                            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
                           >
                             <Users size={15} className="text-amber-400" />
                             Archive
                           </button>
                         )}
-                        <div className="border-t border-gray-100 my-1" />
+                        <div className="border-t border-gray-100 dark:border-slate-800 my-1" />
                         <button
                           onClick={() => { handleDelete(tutee.id); setActiveMenuId(null); }}
-                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors text-left font-medium"
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
                         >
                           <Trash2 size={15} className="text-red-400" />
                           Delete Permanently
@@ -596,26 +596,26 @@ export const Tutees = () => {
                   </div>
                 </div>
 
-                <div className="px-5 pb-4 space-y-2 text-sm border-t border-gray-50 pt-3">
+                <div className="px-5 pb-4 space-y-2 text-sm border-t border-gray-100/40 dark:border-slate-800/40 pt-3">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Rate:</span>
-                    <span className="font-semibold text-gray-800">{formatCurrency(tutee.ratePerSession)}/month</span>
+                    <span className="text-gray-500 dark:text-slate-400 font-medium">Rate:</span>
+                    <span className="font-semibold text-gray-800 dark:text-slate-200">{formatCurrency(tutee.ratePerSession)}/month</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Schedule:</span>
-                    <span className="text-right font-medium text-gray-700 max-w-[180px] truncate">{formatSchedule(tutee.schedule)}</span>
+                    <span className="text-gray-500 dark:text-slate-400 font-medium">Schedule:</span>
+                    <span className="text-right font-medium text-gray-750 dark:text-slate-300 max-w-[180px] truncate">{formatSchedule(tutee.schedule)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Sessions:</span>
-                    <span className="font-semibold text-gray-800">{tutee.totalSessions}</span>
+                    <span className="text-gray-500 dark:text-slate-400 font-medium">Sessions:</span>
+                    <span className="font-semibold text-gray-800 dark:text-slate-200">{tutee.totalSessions}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Total Paid:</span>
-                    <span className="font-semibold text-gray-800">{formatCurrency(tutee.totalPaid)}</span>
+                    <span className="text-gray-500 dark:text-slate-400 font-medium">Total Paid:</span>
+                    <span className="font-semibold text-gray-800 dark:text-slate-200">{formatCurrency(tutee.totalPaid)}</span>
                   </div>
-                  <div className="flex justify-between pt-2 border-t border-gray-100">
-                    <span className="text-gray-500 font-medium">Balance:</span>
-                    <span className={`font-bold ${tutee.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  <div className="flex justify-between pt-2 border-t border-gray-100/40 dark:border-slate-800/40">
+                    <span className="text-gray-500 dark:text-slate-400 font-bold">Balance:</span>
+                    <span className={`font-bold ${tutee.balance > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                       {formatCurrency(tutee.balance)}
                     </span>
                   </div>
@@ -624,7 +624,7 @@ export const Tutees = () => {
                 <div className="px-5 pb-4">
                   <Link
                     to={`/tutees/${tutee.id}`}
-                    className="block text-center bg-green-50 text-green-700 font-semibold text-sm py-2 rounded-xl hover:bg-green-100 transition-colors border border-green-100"
+                    className="block text-center bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/40 text-green-700 dark:text-green-300 font-semibold text-sm py-2 rounded-xl transition-colors border border-green-100 dark:border-green-800/40"
                   >
                     View Details
                   </Link>

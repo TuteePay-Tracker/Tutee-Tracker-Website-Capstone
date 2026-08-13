@@ -825,25 +825,30 @@ export const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {summaryCards.map((card) => {
           const Icon = card.icon;
+          const statusClass = 
+            card.title === 'Total Earnings This Month' ? 'stat-success' :
+            card.title === 'Pending Balances' && reportData.totalPendingBalance > 0 ? 'stat-warning' :
+            card.title === 'Pending Balances' ? 'stat-muted' : 'stat-primary';
+
           return (
-            <div key={card.title} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
-              <div className={`absolute top-0 right-0 w-24 h-24 ${card.bgCircle} rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300`} />
-              <div className={`w-12 h-12 rounded-xl ${card.iconBg} flex items-center justify-center relative shrink-0`}>
+            <div key={card.title} className={`glass-panel stat-card-premium ${statusClass} p-5 flex items-center gap-4 relative overflow-hidden group`}>
+              <div className={`absolute top-0 right-0 w-24 h-24 ${card.bgCircle} dark:opacity-10 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300`} />
+              <div className={`w-12 h-12 rounded-xl ${card.iconBg} dark:bg-opacity-10 flex items-center justify-center relative shrink-0`}>
                 <Icon size={22} />
               </div>
               <div className="relative flex-1">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{card.title}</p>
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">{card.title}</p>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{card.value}</p>
                   {card.trend && (
-                    <span className="text-emerald-700 bg-emerald-50 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0 self-center">
+                    <span className="text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0 self-center">
                       <TrendingUp size={10} />
                       {card.trend}
                     </span>
                   )}
                 </div>
                 {card.link && (
-                  <Link to={card.link} className="text-green-700 hover:text-green-800 text-xs font-semibold mt-2 inline-block hover:underline relative z-20">
+                  <Link to={card.link} className="text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-xs font-semibold mt-2 inline-block hover:underline relative z-20">
                     View details →
                   </Link>
                 )}

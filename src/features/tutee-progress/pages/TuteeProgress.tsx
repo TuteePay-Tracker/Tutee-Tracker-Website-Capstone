@@ -799,19 +799,25 @@ function DashboardSection({
           },
         ].map((card) => {
           const Icon = card.icon;
+          const statusClass = 
+            card.label === 'Overall Avg Score' ? 'stat-primary' :
+            card.label === 'Students Tracked' ? 'stat-primary' :
+            card.label === 'Most Improved' ? 'stat-success' :
+            card.label === 'Need Attention' && needsIntervention.length > 0 ? 'stat-danger' : 'stat-muted';
+
           return (
             <div
               key={card.label}
-              className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group"
+              className={`glass-panel stat-card-premium ${statusClass} p-5 flex items-center gap-4 relative overflow-hidden group`}
             >
-              <div className={`absolute top-0 right-0 w-24 h-24 ${card.bgCircle} rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300`} />
-              <div className={`w-12 h-12 rounded-xl ${card.iconBg} flex items-center justify-center relative shrink-0`}>
+              <div className={`absolute top-0 right-0 w-24 h-24 ${card.bgCircle} dark:opacity-10 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300`} />
+              <div className={`w-12 h-12 rounded-xl ${card.iconBg} dark:bg-opacity-10 flex items-center justify-center relative shrink-0`}>
                 <Icon size={22} />
               </div>
               <div className="relative flex-1">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{card.label}</p>
-                <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{card.value}</p>
-                <p className="text-[10px] text-gray-500 mt-1 font-medium">{card.sub}</p>
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">{card.label}</p>
+                <p className="text-[1.625rem] font-bold text-gray-900 dark:text-white mt-0.5">{card.value}</p>
+                <p className="text-[10px] text-gray-500 dark:text-slate-455 mt-1 font-medium">{card.sub}</p>
               </div>
             </div>
           );

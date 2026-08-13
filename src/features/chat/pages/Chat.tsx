@@ -13,7 +13,8 @@ import {
   CheckCheck, 
   User, 
   GraduationCap,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
@@ -36,9 +37,11 @@ export const Chat = () => {
   const [parentPhotos, setParentPhotos] = useState<Record<string, string>>({});
   const [tutorName, setTutorName] = useState<string>('Tutor');
   const [tutorPhoto, setTutorPhoto] = useState<string>('');
+  const [deletingMsgId, setDeletingMsgId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListenerRef = useRef<(() => void) | null>(null);
+  const isFirstLoadRef = useRef(true);
 
   // Load parent user profiles to map parentId -> parentName
   useEffect(() => {
@@ -133,6 +136,9 @@ export const Chat = () => {
       return;
     }
 
+    // Reset first-load flag whenever we switch to a new thread
+    isFirstLoadRef.current = true;
+
     // Mark active thread's messages as read
     const otherUserId = user?.role === 'tutor' ? activeThread.parentId : activeThread.tutorId;
     if (user?.id) {
@@ -142,10 +148,15 @@ export const Chat = () => {
     // Subscribe to new messages
     const unsubscribe = chatService.subscribeToMessages(activeThread.id, (msgs) => {
       setMessages(msgs);
-      // Auto scroll to bottom
+
+      // On first load: jump instantly to bottom so user sees latest message
+      // On subsequent updates (new incoming message): scroll smoothly
+      const behavior = isFirstLoadRef.current ? 'instant' : 'smooth';
+      isFirstLoadRef.current = false;
+
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+        messagesEndRef.current?.scrollIntoView({ behavior });
+      }, 50);
 
       // Reset read count when new messages arrive while viewing
       if (user?.id && msgs.length > 0) {
@@ -199,6 +210,17 @@ export const Chat = () => {
       setInputText(textToSend); // Restore text on failure
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Delete a message with confirmation
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!activeThread) return;
+    try {
+      await chatService.deleteMessage(activeThread.id, msgId);
+      setDeletingMsgId(null);
+    } catch {
+      toast.error('Failed to delete message');
     }
   };
 
@@ -492,6 +514,7 @@ export const Chat = () => {
                   const isMe = msg.senderId === user?.id;
                   const showDateHeader = index === 0 || 
                     formatDateHeader(messages[index - 1].timestamp) !== formatDateHeader(msg.timestamp);
+                  const isConfirmingDelete = deletingMsgId === msg.id;
 
                   return (
                     <React.Fragment key={msg.id || index}>
@@ -503,7 +526,7 @@ export const Chat = () => {
                         </div>
                       )}
                       
-                      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in group/msg`}>
                         <div className="max-w-[75%] sm:max-w-[65%]">
                           {/* Sender name for other users in thread */}
                           {!isMe && (
@@ -512,34 +535,69 @@ export const Chat = () => {
                             </span>
                           )}
                           
-                          <div className={`p-3.5 rounded-2xl shadow-sm leading-relaxed text-sm ${
-                            isMe 
-                              ? 'bg-green-700 text-white rounded-tr-none' 
-                              : 'bg-white text-gray-800 border border-gray-150 rounded-tl-none'
-                          }`}>
-                            <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                          </div>
+                          {/* Message bubble + delete button row */}
+                          <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <div className={`p-3.5 rounded-2xl shadow-sm leading-relaxed text-sm ${
+                              isMe 
+                                ? 'bg-green-700 text-white rounded-tr-none' 
+                                : 'bg-white text-gray-800 border border-gray-150 rounded-tl-none'
+                            }`}>
+                              <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                            </div>
 
-                          {/* Timestamp and seen state */}
-                          <div className={`flex items-center gap-1.5 mt-1 px-1 text-[10px] text-gray-400 font-medium ${
-                            isMe ? 'justify-end' : 'justify-start'
-                          }`}>
-                            <Clock size={10} />
-                            <span>{formatTime(msg.timestamp)}</span>
-                            {isMe && (
-                              <span className="flex items-center">
-                                {msg.status === 'seen' ? (
-                                  <span title="Seen">
-                                    <CheckCheck size={12} className="text-blue-500" />
-                                  </span>
-                                ) : (
-                                  <span title="Sent">
-                                    <Check size={12} />
-                                  </span>
-                                )}
-                              </span>
+                            {/* Delete button — only own messages, shown on hover */}
+                            {isMe && msg.id && !isConfirmingDelete && (
+                              <button
+                                onClick={() => setDeletingMsgId(msg.id!)}
+                                className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-500 rounded-lg shrink-0 mb-1"
+                                title="Delete message"
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             )}
                           </div>
+
+                          {/* Inline delete confirmation */}
+                          {isMe && isConfirmingDelete && (
+                            <div className="flex items-center justify-end gap-1.5 mt-1 px-1">
+                              <span className="text-[10px] text-gray-500 font-medium">Delete this message?</span>
+                              <button
+                                onClick={() => handleDeleteMessage(msg.id!)}
+                                className="text-[10px] font-bold text-white bg-red-500 hover:bg-red-600 px-2 py-0.5 rounded-full transition-colors"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => setDeletingMsgId(null)}
+                                className="text-[10px] font-bold text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-100 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Timestamp and seen state */}
+                          {!isConfirmingDelete && (
+                            <div className={`flex items-center gap-1.5 mt-1 px-1 text-[10px] text-gray-400 font-medium ${
+                              isMe ? 'justify-end' : 'justify-start'
+                            }`}>
+                              <Clock size={10} />
+                              <span>{formatTime(msg.timestamp)}</span>
+                              {isMe && (
+                                <span className="flex items-center">
+                                  {msg.status === 'seen' ? (
+                                    <span title="Seen">
+                                      <CheckCheck size={12} className="text-blue-500" />
+                                    </span>
+                                  ) : (
+                                    <span title="Sent">
+                                      <Check size={12} />
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </React.Fragment>
