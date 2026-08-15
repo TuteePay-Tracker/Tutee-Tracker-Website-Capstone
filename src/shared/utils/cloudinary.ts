@@ -2,13 +2,13 @@
 // Uses unsigned upload preset for browser-safe client-side uploads
 // (API secret is never exposed in frontend code)
 
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET; // unsigned preset to create in Cloudinary dashboard
+const CLOUDINARY_CLOUD_NAME = 'dndekbare';
+const CLOUDINARY_UPLOAD_PRESET = 'tuteepay_uploads'; // unsigned preset to create in Cloudinary dashboard
 
 export const CLOUDINARY_CONFIG = {
   cloudName: CLOUDINARY_CLOUD_NAME,
   uploadPreset: CLOUDINARY_UPLOAD_PRESET,
-  apiKey: import.meta.env.VITE_CLOUDINARY_API_KEY,
+  apiKey: '885611659878567',
 };
 
 /**

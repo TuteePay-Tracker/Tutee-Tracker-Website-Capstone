@@ -53,7 +53,7 @@ export const Login = () => {
   const handleDownloadApk = () => {
     toast.info('Starting Tutor Track APK download...');
     const link = document.createElement('a');
-    link.href = 'https://github.com/TuteePay-Tracker/TutorTrack-Mobile/releases/latest/download/TutorTrack-Parent.apk';
+    link.href = '/tutortrack.apk';
     link.download = 'TutorTrack.apk';
     document.body.appendChild(link);
     link.click();
@@ -80,7 +80,7 @@ export const Login = () => {
 
       {/* Main Content Container */}
       <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row items-stretch gap-8 lg:gap-12 my-auto">
-
+        
         {/* LEFT SIDE - Welcome Title & Action Buttons */}
         <div className="flex-1 flex flex-col justify-between space-y-8 bg-white/60 backdrop-blur-md rounded-3xl p-8 lg:p-10 border border-blue-200 shadow-xl">
           <div className="space-y-4">
@@ -151,7 +151,7 @@ export const Login = () => {
                 <p className="text-sm text-gray-600">All-in-one tutoring management solution</p>
               </div>
             </div>
-
+            
             <p className="text-gray-700 text-base leading-relaxed pt-2">
               Your comprehensive platform for managing tutees, scheduling sessions, tracking payments, and keeping <span className="font-bold text-blue-600">parents informed</span> — so you can focus on what matters most: <span className="font-bold text-blue-600">teaching</span>.
             </p>
@@ -356,4 +356,4 @@ export const Login = () => {
       `}</style>
     </div>
   );
-};
+};
