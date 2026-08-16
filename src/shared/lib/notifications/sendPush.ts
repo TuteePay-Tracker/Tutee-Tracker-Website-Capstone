@@ -15,6 +15,7 @@ const PUSH_RELAY_URL =
 export type PushData = Record<string, string | number | boolean>;
 
 interface PushMessageOptions {
+  recipientId?: string;
   tokens: string[];
   title: string;
   body: string;
@@ -55,6 +56,7 @@ export async function getLinkedParents(tutorId: string): Promise<string[]> {
 }
 
 export async function sendPushMessage({
+  recipientId,
   tokens,
   title,
   body,
@@ -65,7 +67,7 @@ export async function sendPushMessage({
   const uniqueTokens = [...new Set(tokens)].filter((t) => typeof t === 'string' && t.length > 0);
   if (uniqueTokens.length === 0) return;
 
-  const writerUid = auth.currentUser?.uid;
+  const targetUserId = recipientId || auth.currentUser?.uid;
 
   // Expo's API accepts up to 100 messages per request; the relay forwards
   // each chunk to Expo from a server context (browsers are CORS-blocked).
@@ -95,8 +97,8 @@ export async function sendPushMessage({
         tickets.forEach((ticket, index) => {
           if (ticket?.status === 'error') {
             const detail = ticket.details?.error;
-            if (detail === 'DeviceNotRegistered' && writerUid) {
-              deleteStaleToken(writerUid, chunk[index]);
+            if (detail === 'DeviceNotRegistered' && targetUserId) {
+              deleteStaleToken(targetUserId, chunk[index]);
             } else {
               console.warn('Push ticket error:', detail, ticket.message);
             }
@@ -133,6 +135,7 @@ export async function sendChatNotification(
     messageText.length > 120 ? `${messageText.slice(0, 120)}…` : messageText;
 
   await sendPushMessage({
+    recipientId,
     tokens,
     title: senderName || 'New message',
     body: preview,
@@ -156,6 +159,7 @@ export async function sendAnnouncementNotification(
     const tokens = await getUserTokens(parentId);
     if (tokens.length === 0) continue;
     await sendPushMessage({
+      recipientId: parentId,
       tokens,
       title: 'New Announcement',
       body,
@@ -183,6 +187,7 @@ export async function sendPaymentStatusNotification(
       : `Your payment of ${amountLabel} for ${tuteeName} was rejected${reason ? `: ${reason}` : ''}.`;
 
   await sendPushMessage({
+    recipientId: parentId,
     tokens,
     title,
     body,
