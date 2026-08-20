@@ -24,6 +24,7 @@ import { useState, useEffect, useRef } from 'react';
 import { chatService } from '@/features/chat/services/chatService';
 import { formatSchoolYear } from '@/shared/utils/schoolYear';
 import { toast } from 'sonner';
+import { InstallPWAButton } from '@/shared/components/InstallPWAButton';
 
 export const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -34,6 +35,7 @@ export const MainLayout = () => {
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [syDropdownOpen, setSyDropdownOpen] = useState(false);
   const syDropdownRef = useRef<HTMLDivElement>(null);
+  const syDropdownMobileRef = useRef<HTMLDivElement>(null);
   const prevThreadsRef = useRef<Record<string, { lastMsgText?: string; unreadCount: number }>>({});
 
   // Listen to threads for unread count & notifications
@@ -91,7 +93,10 @@ export const MainLayout = () => {
   // Close SY dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (syDropdownRef.current && !syDropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideDesktop = syDropdownRef.current?.contains(target);
+      const insideMobile = syDropdownMobileRef.current?.contains(target);
+      if (!insideDesktop && !insideMobile) {
         setSyDropdownOpen(false);
       }
     };
@@ -174,6 +179,7 @@ export const MainLayout = () => {
   const isParent = user?.role === 'parent';
 
   return (
+    <>
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 fixed top-0 bottom-0 left-0 z-45 shadow-sm">
@@ -549,6 +555,44 @@ export const MainLayout = () => {
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
+        {/* School Year Switcher — tutor only (mobile) */}
+        {user?.role === 'tutor' && (
+          <div className="px-4 py-3 border-b border-gray-100" ref={syDropdownMobileRef}>
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">School Year</p>
+            <div className="relative">
+              <button
+                onClick={() => setSyDropdownOpen((o) => !o)}
+                className="w-full flex items-center justify-between gap-2 bg-green-50 border border-green-200 text-green-800 font-bold text-xs px-3 py-2 rounded-lg hover:bg-green-100 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <CalendarRange size={13} className="text-green-700" />
+                  <span>{formatSchoolYear(selectedYear)}</span>
+                </div>
+                <ChevronDown size={13} className={`transition-transform ${syDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {syDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                  {availableYears.map((yr) => (
+                    <button
+                      key={yr}
+                      onClick={() => { setSelectedYear(yr); setSyDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-2.5 text-xs font-semibold transition-colors ${
+                        yr === selectedYear
+                          ? 'bg-green-600 text-white'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {formatSchoolYear(yr)}
+                      {yr === selectedYear && <span className="ml-2 text-green-200">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="px-4 py-6 overflow-y-auto space-y-1 flex-1">
           {isParent ? (
             <>
@@ -855,7 +899,7 @@ export const MainLayout = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:pl-64 min-h-screen overflow-hidden">
-        <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8">
+        <main className="flex-1 w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
           <Outlet />
         </main>
 
@@ -866,5 +910,8 @@ export const MainLayout = () => {
         </footer>
       </div>
     </div>
+    {/* PWA Install Banner — floats over all pages */}
+    <InstallPWAButton />
+    </>
   );
-};;
+};

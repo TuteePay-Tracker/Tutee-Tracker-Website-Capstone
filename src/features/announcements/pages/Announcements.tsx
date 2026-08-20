@@ -94,10 +94,10 @@ export const Announcements = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Announcements</h1>
-          <p className="text-gray-500 mt-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Announcements</h1>
+          <p className="text-gray-500 mt-1 text-sm sm:text-base">
             {user?.role === 'tutor' 
               ? 'Broadcast news and updates to parents' 
               : 'Updates and broadcasts from your tutor'}
@@ -110,7 +110,7 @@ export const Announcements = () => {
               setForm({ title: '', content: '', priority: 'medium' });
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded-xl hover:bg-green-800 transition-colors font-semibold shadow-sm"
+            className="flex items-center gap-2 bg-green-700 text-white px-4 py-2.5 rounded-xl hover:bg-green-800 transition-colors font-semibold shadow-sm w-full sm:w-auto justify-center sm:justify-start shrink-0"
           >
             <Plus size={18} />
             Post Announcement

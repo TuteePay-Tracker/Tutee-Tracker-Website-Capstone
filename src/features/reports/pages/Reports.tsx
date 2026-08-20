@@ -79,8 +79,8 @@ export const Reports = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-gray-600 mt-1">Comprehensive insights into your tutoring business</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reports & Analytics</h1>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Comprehensive insights into your tutoring business</p>
         </div>
         <ExportButton reportData={reportData} />
       </div>

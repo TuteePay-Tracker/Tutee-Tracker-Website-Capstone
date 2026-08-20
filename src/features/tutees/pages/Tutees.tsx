@@ -203,17 +203,17 @@ export const Tutees = () => {
         />
       )}
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tutee Management</h1>
-          <p className="text-gray-600 mt-1">Manage your students and their information</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tutee Management</h1>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage your students and their information</p>
         </div>
         <button
           onClick={() => {
             setEditingTutee(null);
             setShowForm(true);
           }}
-          className="flex items-center gap-2 bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800"
+          className="flex items-center gap-2 bg-green-700 text-white px-4 py-2.5 rounded-lg hover:bg-green-800 w-full sm:w-auto justify-center sm:justify-start shrink-0"
         >
           <Plus size={20} />
           Enroll Tutee

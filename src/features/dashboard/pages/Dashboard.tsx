@@ -382,8 +382,8 @@ const ParentDashboard = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Parent Dashboard</h1>
-          <p className="text-gray-500 mt-1">Aggregated statistics, progress history, and tutoring schedules for your children.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Parent Dashboard</h1>
+          <p className="text-gray-500 mt-1 text-sm sm:text-base">Aggregated statistics, progress history, and tutoring schedules for your children.</p>
         </div>
         <Link
           to="/my-children"
@@ -811,27 +811,27 @@ export const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
             <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
               <CalendarRange size={12} />
               {displayLabel}
             </span>
           </div>
-          <p className="text-gray-600 mt-1">Overview of your tutoring business</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Overview of your tutoring business</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3 shrink-0">
           <Link
             to="/tutees?action=add"
-            className="bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800"
+            className="flex-1 sm:flex-none text-center bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-800 text-sm font-semibold"
           >
             Enroll Tutee
           </Link>
           <Link
             to="/payments"
-            className="bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800"
+            className="flex-1 sm:flex-none text-center bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-800 text-sm font-semibold"
           >
             Track Payments
           </Link>

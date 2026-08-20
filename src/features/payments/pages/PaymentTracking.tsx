@@ -122,8 +122,8 @@ export const PaymentTracking = () => {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Payment Tracking</h1>
-        <p className="text-gray-500 mt-2">Track monthly payments for each student</p>
+        <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 tracking-tight">Payment Tracking</h1>
+        <p className="text-gray-500 mt-1 text-sm sm:text-base">Track monthly payments for each student</p>
       </div>
 
       {/* Pending Verifications */}

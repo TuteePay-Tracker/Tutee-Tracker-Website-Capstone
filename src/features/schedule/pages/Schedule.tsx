@@ -64,17 +64,16 @@ export const Schedule = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Schedule & Timetable</h1>
-          <p className="text-gray-600 mt-1">View and manage your tutoring schedule</p>
-        </div>
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Schedule & Timetable</h1>
+        <p className="text-gray-600 mt-1 text-sm sm:text-base">View and manage your tutoring schedule</p>
       </div>
 
       {/* Controls */}
       <div className="bg-white p-4 rounded-lg border">
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3">
+          {/* Row 1: Navigation + date */}
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={previousWeek}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -83,7 +82,7 @@ export const Schedule = () => {
             </button>
             <button
               onClick={today}
-              className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800"
+              className="px-3 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 text-sm font-semibold"
             >
               Today
             </button>
@@ -93,18 +92,19 @@ export const Schedule = () => {
             >
               <ChevronRight size={20} />
             </button>
-            <span className="font-semibold text-gray-900 ml-4">
+            <span className="font-semibold text-gray-900 text-sm">
               {format(weekStart, 'MMM dd')} - {format(addDays(weekStart, 6), 'MMM dd, yyyy')}
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter size={18} className="text-gray-400" />
+          {/* Row 2: Filter + View toggle */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-1 min-w-[160px]">
+              <Filter size={16} className="text-gray-400 shrink-0" />
               <select
                 value={selectedStudent}
                 onChange={(e) => setSelectedStudent(e.target.value)}
-                className="px-4 py-2 border rounded-lg"
+                className="px-3 py-2 border rounded-lg text-sm w-full"
               >
                 <option value="">All Students</option>
                 {tutees.map(tutee => (
@@ -115,12 +115,12 @@ export const Schedule = () => {
               </select>
             </div>
 
-            <div className="flex bg-gray-100 rounded-lg p-1">
+            <div className="flex bg-gray-100 rounded-lg p-1 shrink-0">
               <button
                 onClick={() => setViewMode('week')}
-                className={`px-4 py-2 rounded-md transition-colors ${
+                className={`px-3 py-1.5 rounded-md transition-colors text-sm ${
                   viewMode === 'week'
-                    ? 'bg-white text-green-700 shadow-sm'
+                    ? 'bg-white text-green-700 shadow-sm font-semibold'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -128,9 +128,9 @@ export const Schedule = () => {
               </button>
               <button
                 onClick={() => setViewMode('day')}
-                className={`px-4 py-2 rounded-md transition-colors ${
+                className={`px-3 py-1.5 rounded-md transition-colors text-sm ${
                   viewMode === 'day'
-                    ? 'bg-white text-green-700 shadow-sm'
+                    ? 'bg-white text-green-700 shadow-sm font-semibold'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >

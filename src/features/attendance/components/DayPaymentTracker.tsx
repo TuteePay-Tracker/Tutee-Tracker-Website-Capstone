@@ -157,21 +157,21 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Calendar className="text-green-700" size={28} />
-            Payment Tracker - {tuteeName}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+            <Calendar className="text-green-700 shrink-0" size={22} />
+            <span className="break-words">Payment Tracker - {tuteeName}</span>
           </h2>
           {record && (
-            <p className="text-gray-500 mt-1">
+            <p className="text-gray-500 mt-1 text-sm">
               Active Month: {format(parseISO(record.month + '-01'), 'MMMM yyyy')}
             </p>
           )}
         </div>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 text-2xl font-light"
+          className="text-gray-400 hover:text-gray-600 text-2xl font-light shrink-0 mt-0.5"
         >
           ×
         </button>
@@ -202,18 +202,18 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
 
       {/* Summary */}
       {record && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="text-xs font-semibold text-blue-700 uppercase mb-1">Total Due</p>
-            <p className="text-2xl font-bold text-blue-900">{formatCurrency(record.totalDue)}</p>
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs font-semibold text-blue-700 uppercase mb-1">Total Due</p>
+            <p className="text-base sm:text-2xl font-bold text-blue-900 truncate">{formatCurrency(record.totalDue)}</p>
           </div>
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            <p className="text-xs font-semibold text-emerald-700 uppercase mb-1">Total Paid</p>
-            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(record.totalPaid)}</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs font-semibold text-emerald-700 uppercase mb-1">Total Paid</p>
+            <p className="text-base sm:text-2xl font-bold text-emerald-900 truncate">{formatCurrency(record.totalPaid)}</p>
           </div>
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-            <p className="text-xs font-semibold text-orange-700 uppercase mb-1">Balance</p>
-            <p className="text-2xl font-bold text-orange-900">{formatCurrency(record.totalBalance)}</p>
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs font-semibold text-orange-700 uppercase mb-1">Balance</p>
+            <p className="text-base sm:text-2xl font-bold text-orange-900 truncate">{formatCurrency(record.totalBalance)}</p>
           </div>
         </div>
       )}
@@ -253,8 +253,8 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
                 onClick={() => setSelectedMonth(monthRecord.month)}
                 className={`border-2 rounded-xl p-4 transition-all cursor-pointer hover:shadow-sm ${colorClass}`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
                     <input
                       type="checkbox"
                       checked={isPaid}
@@ -262,9 +262,9 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
                         e.stopPropagation();
                         toggleMonthPayment(monthRecord.month);
                       }}
-                      className="w-5 h-5 text-green-700 rounded focus:ring-green-500 cursor-pointer animate-none"
+                      className="w-5 h-5 text-green-700 rounded focus:ring-green-500 cursor-pointer animate-none mt-0.5 shrink-0"
                     />
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-bold text-gray-900 text-base">
                         {format(parseISO(monthRecord.month + '-01'), 'MMMM yyyy')}
                       </p>
@@ -274,23 +274,31 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
                           {statusLabel}
                         </span>
                       </div>
+                      {/* Remaining balance shown below on mobile */}
+                      <div className="mt-2 sm:hidden">
+                        <p className="text-xs text-gray-400 font-medium">Remaining Balance</p>
+                        <p className="font-bold text-gray-800 text-base">{formatCurrency(monthRecord.totalBalance)}</p>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-right">
-                    <p className="text-xs text-gray-400 font-medium">Remaining Balance</p>
-                    <p className="font-bold text-gray-800 text-lg">{formatCurrency(monthRecord.totalBalance)}</p>
+                  <div className="flex items-center gap-2">
+                    {/* Remaining balance shown inline on sm+ */}
+                    <div className="hidden sm:block text-right">
+                      <p className="text-xs text-gray-400 font-medium">Remaining Balance</p>
+                      <p className="font-bold text-gray-800 text-lg">{formatCurrency(monthRecord.totalBalance)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveMonth(monthRecord);
+                      }}
+                      className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                      title="Remove month"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveMonth(monthRecord);
-                    }}
-                    className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                    title="Remove month"
-                  >
-                    <Trash2 size={18} />
-                  </button>
                 </div>
               </div>
             );

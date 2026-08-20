@@ -1465,7 +1465,7 @@ export function TuteeProgress() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tutee Progress</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tutee Progress</h1>
           <p className="text-gray-500 mt-1 text-sm">
             Track student performance, trends, and academic growth across all subjects
           </p>

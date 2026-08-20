@@ -195,8 +195,8 @@ export const MyChildren = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">My Children</h1>
-        <p className="text-gray-600 mt-1">Manage and view details for each of your linked children</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Children</h1>
+        <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage and view details for each of your linked children</p>
       </div>
 
       {tutees.length === 0 ? (

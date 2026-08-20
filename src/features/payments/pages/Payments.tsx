@@ -64,14 +64,14 @@ export const Payments = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Payment Records</h1>
-          <p className="text-gray-600 mt-1">Track all payments and transactions</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Payment Records</h1>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Track all payments and transactions</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 w-full sm:w-auto justify-center sm:justify-start shrink-0"
         >
           <Plus size={20} />
           Add Payment

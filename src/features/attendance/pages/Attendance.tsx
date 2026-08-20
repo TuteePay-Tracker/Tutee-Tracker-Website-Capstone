@@ -189,11 +189,11 @@ export const Attendance = () => {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-          <CheckCircle2 className="text-emerald-700" size={36} />
+        <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 tracking-tight flex items-center gap-2 sm:gap-3">
+          <CheckCircle2 className="text-emerald-700" size={28} />
           Attendance
         </h1>
-        <p className="text-gray-500 mt-2">Mark Present or Absent for each student's scheduled sessions</p>
+        <p className="text-gray-500 mt-1 text-sm sm:text-base">Mark Present or Absent for each student's scheduled sessions</p>
       </div>
 
       {/* Controls */}
