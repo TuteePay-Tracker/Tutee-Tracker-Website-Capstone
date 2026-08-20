@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import logoUrl from '@/assets/logo.jpg';
 import {
   LayoutDashboard,
@@ -16,18 +17,23 @@ import {
   ChevronRight,
   CheckSquare,
   MessageSquare,
-  TrendingUp
+  TrendingUp,
+  CalendarRange,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { chatService } from '@/features/chat/services/chatService';
+import { formatSchoolYear } from '@/shared/utils/schoolYear';
 import { toast } from 'sonner';
 
 export const MainLayout = () => {
   const { user, logout } = useAuth();
+  const { selectedYear, setSelectedYear, availableYears } = useSchoolYear();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [syDropdownOpen, setSyDropdownOpen] = useState(false);
+  const syDropdownRef = useRef<HTMLDivElement>(null);
   const prevThreadsRef = useRef<Record<string, { lastMsgText?: string; unreadCount: number }>>({});
 
   // Listen to threads for unread count & notifications
@@ -81,6 +87,17 @@ export const MainLayout = () => {
 
     return () => unsubscribe();
   }, [user?.id, user?.role, location.pathname, navigate]);
+
+  // Close SY dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (syDropdownRef.current && !syDropdownRef.current.contains(e.target as Node)) {
+        setSyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const isTuteePath = 
     location.pathname.startsWith('/tutees') || 
@@ -163,11 +180,49 @@ export const MainLayout = () => {
         {/* Branding header */}
         <div className="h-20 border-b border-gray-100 flex items-center px-6 gap-3">
           <img src={logoUrl} alt="Tutor Track Logo" className="w-10 h-10 object-contain rounded-xl shadow-md" />
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-bold text-lg text-gray-900 tracking-tight leading-none">Tutor Track</h1>
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mt-1 block">Tracker</span>
           </div>
         </div>
+
+        {/* School Year Switcher — tutor only */}
+        {user?.role === 'tutor' && (
+          <div className="px-4 py-3 border-b border-gray-100" ref={syDropdownRef}>
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">School Year</p>
+            <div className="relative">
+              <button
+                onClick={() => setSyDropdownOpen((o) => !o)}
+                className="w-full flex items-center justify-between gap-2 bg-green-50 border border-green-200 text-green-800 font-bold text-xs px-3 py-2 rounded-lg hover:bg-green-100 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <CalendarRange size={13} className="text-green-700" />
+                  <span>{formatSchoolYear(selectedYear)}</span>
+                </div>
+                <ChevronDown size={13} className={`transition-transform ${syDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {syDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                  {availableYears.map((yr) => (
+                    <button
+                      key={yr}
+                      onClick={() => { setSelectedYear(yr); setSyDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-2.5 text-xs font-semibold transition-colors ${
+                        yr === selectedYear
+                          ? 'bg-green-600 text-white'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {formatSchoolYear(yr)}
+                      {yr === selectedYear && <span className="ml-2 text-green-200">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Navigation Items */}
         <div className="flex-1 px-4 py-6 overflow-y-auto space-y-1">

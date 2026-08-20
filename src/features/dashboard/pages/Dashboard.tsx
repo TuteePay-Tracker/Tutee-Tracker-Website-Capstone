@@ -3,7 +3,9 @@ import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useReports } from '@/features/reports/hooks/useReports';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
-import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell, CheckSquare } from 'lucide-react';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { isInSchoolYear } from '@/shared/utils/schoolYear';
+import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell, CheckSquare, CalendarRange } from 'lucide-react';
 import { Link } from 'react-router';
 import { LineChart, Line, BarChart, Bar, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
@@ -690,7 +692,8 @@ const ParentDashboard = () => {
 export const Dashboard = () => {
   const { user } = useAuth();
   const { payments } = usePayments();
-  const { reportData, isLoading } = useReports();
+  const { selectedYear, displayLabel } = useSchoolYear();
+  const { reportData, isLoading } = useReports(selectedYear);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isAnnounceModalOpen, setIsAnnounceModalOpen] = useState(false);
   const [editingAnnounce, setEditingAnnounce] = useState<Announcement | null>(null);
@@ -698,6 +701,13 @@ export const Dashboard = () => {
     title: '',
     content: '',
     priority: 'medium'
+  });
+
+  // Filter payments to selected school year
+  const syPayments = payments.filter((p) => {
+    const dateStr = p.paymentDate || (p as any).createdAt;
+    if (!dateStr) return false;
+    return isInSchoolYear(dateStr, selectedYear);
   });
 
   useEffect(() => {
@@ -746,7 +756,7 @@ export const Dashboard = () => {
     setIsAnnounceModalOpen(true);
   };
 
-  const totalLifetimeEarnings = payments
+  const totalLifetimeEarnings = syPayments
     .filter(p => p.status === 'verified' || !p.status)
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
@@ -762,11 +772,11 @@ export const Dashboard = () => {
   }
 
   const mostActiveTutee = reportData.tuteeActivity[0];
-  const recentPayments = payments.slice(0, 5);
+  const recentPayments = syPayments.slice(0, 5);
 
   const summaryCards = [
     {
-      title: 'Total Earnings This Month',
+      title: 'Earnings This Month',
       value: formatCurrency(reportData.totalEarningsThisMonth),
       icon: DollarSign,
       bgCircle: 'bg-emerald-50',
@@ -774,7 +784,7 @@ export const Dashboard = () => {
       trend: '+12%',
     },
     {
-      title: 'Total Lifetime Earnings',
+      title: `${displayLabel} Earnings`,
       value: formatCurrency(totalLifetimeEarnings),
       icon: TrendingUp,
       bgCircle: 'bg-teal-50',
@@ -803,7 +813,13 @@ export const Dashboard = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
+              <CalendarRange size={12} />
+              {displayLabel}
+            </span>
+          </div>
           <p className="text-gray-600 mt-1">Overview of your tutoring business</p>
         </div>
         <div className="flex gap-3">

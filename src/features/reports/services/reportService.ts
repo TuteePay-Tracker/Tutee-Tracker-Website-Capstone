@@ -508,14 +508,39 @@ class ReportService {
 
   // ── Main Generator ──────────────────────────────────
 
-  async generateReport(): Promise<ReportData> {
+  async generateReport(dateRange?: { start: Date; end: Date }): Promise<ReportData> {
     const userId = this.getUserId();
-    const [tutees, payments, assessments, records] = await Promise.all([
+    const [tutees, allPayments, allAssessments, allRecords] = await Promise.all([
       tuteeService.getAll(),
       paymentService.getAll(),
       this.fetchAssessments(userId),
       this.fetchPaymentRecords(userId),
     ]);
+
+    // Apply school year date filter if provided
+    const inRange = (dateStr: string) => {
+      if (!dateRange) return true;
+      const d = new Date(dateStr);
+      return d >= dateRange.start && d <= dateRange.end;
+    };
+
+    const payments = dateRange
+      ? allPayments.filter((p) => inRange(p.paymentDate || (p as any).createdAt || ''))
+      : allPayments;
+
+    const assessments = dateRange
+      ? allAssessments.filter((a) => inRange(a.date || a.createdAt || ''))
+      : allAssessments;
+
+    const records = dateRange
+      ? allRecords.filter((r) => {
+          // Filter paymentRecords by their month field (format: "YYYY-MM")
+          const month = (r as any).month as string | undefined;
+          if (!month) return true;
+          const monthDate = new Date(`${month}-01`);
+          return monthDate >= dateRange.start && monthDate <= dateRange.end;
+        })
+      : allRecords;
 
     const now = new Date();
     const currentMonthStart = startOfMonth(now);
