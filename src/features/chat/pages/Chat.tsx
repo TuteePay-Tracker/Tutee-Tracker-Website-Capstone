@@ -14,7 +14,9 @@ import {
   User, 
   GraduationCap,
   Clock,
-  Trash2
+  Trash2,
+  Reply,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
@@ -38,8 +40,10 @@ export const Chat = () => {
   const [tutorName, setTutorName] = useState<string>('Tutor');
   const [tutorPhoto, setTutorPhoto] = useState<string>('');
   const [deletingMsgId, setDeletingMsgId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const messageListenerRef = useRef<(() => void) | null>(null);
   const isFirstLoadRef = useRef(true);
 
@@ -138,6 +142,7 @@ export const Chat = () => {
 
     // Reset first-load flag whenever we switch to a new thread
     isFirstLoadRef.current = true;
+    setReplyingTo(null);
 
     // Mark active thread's messages as read
     const otherUserId = user?.role === 'tutor' ? activeThread.parentId : activeThread.tutorId;
@@ -187,12 +192,17 @@ export const Chat = () => {
 
     try {
       const recipientId = user.role === 'tutor' ? activeThread.parentId : activeThread.tutorId;
+      const replyToParam = replyingTo
+        ? { id: replyingTo.id, text: replyingTo.text, senderName: replyingTo.senderName }
+        : undefined;
+      setReplyingTo(null);
       await chatService.sendMessage(
         activeThread.id,
         user.id,
         user.name,
         textToSend,
-        recipientId
+        recipientId,
+        replyToParam
       );
       // Scroll to bottom
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -535,15 +545,46 @@ export const Chat = () => {
                             </span>
                           )}
                           
-                          {/* Message bubble + delete button row */}
+                          {/* Message bubble + action buttons row */}
                           <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                             <div className={`p-3.5 rounded-2xl shadow-sm leading-relaxed text-sm ${
                               isMe 
                                 ? 'bg-green-700 text-white rounded-tr-none' 
                                 : 'bg-white text-gray-800 border border-gray-150 rounded-tl-none'
                             }`}>
+                              {/* Quoted reply preview */}
+                              {msg.replyToText && (
+                                <div className={`mb-2 px-2.5 py-1.5 rounded-lg border-l-4 ${
+                                  isMe ? 'bg-white/15 border-white/80' : 'bg-gray-50 border-green-700'
+                                }`}>
+                                  <span className={`block text-[10px] font-bold uppercase tracking-wide ${
+                                    isMe ? 'text-green-100' : 'text-green-700'
+                                  }`}>
+                                    {msg.replyToSenderName === user?.name ? 'You' : msg.replyToSenderName}
+                                  </span>
+                                  <p className={`text-xs line-clamp-2 break-words ${
+                                    isMe ? 'text-green-50/90' : 'text-gray-500'
+                                  }`}>
+                                    {msg.replyToText}
+                                  </p>
+                                </div>
+                              )}
                               <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                             </div>
+
+                            {/* Reply button — all messages, shown on hover */}
+                            {!isConfirmingDelete && (
+                              <button
+                                onClick={() => {
+                                  setReplyingTo(msg);
+                                  inputRef.current?.focus();
+                                }}
+                                className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 text-gray-400 hover:text-green-700 rounded-lg shrink-0 mb-1"
+                                title="Reply"
+                              >
+                                <Reply size={13} />
+                              </button>
+                            )}
 
                             {/* Delete button — only own messages, shown on hover */}
                             {isMe && msg.id && !isConfirmingDelete && (
@@ -607,9 +648,33 @@ export const Chat = () => {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Replying-to bar */}
+            {replyingTo && (
+              <div className="px-3 pt-2 bg-white border-t border-gray-200">
+                <div className="flex items-center gap-2 bg-green-50 border-l-4 border-green-700 rounded-r-lg px-3 py-1.5">
+                  <Reply size={13} className="text-green-700 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-[10px] font-bold text-green-700 uppercase tracking-wide">
+                      Replying to {replyingTo.senderId === user?.id ? 'yourself' : replyingTo.senderName}
+                    </span>
+                    <p className="text-xs text-gray-500 truncate">{replyingTo.text}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo(null)}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors shrink-0"
+                    title="Cancel reply"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Input typing panel */}
             <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-200 flex gap-2 items-center">
               <input
+                ref={inputRef}
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}

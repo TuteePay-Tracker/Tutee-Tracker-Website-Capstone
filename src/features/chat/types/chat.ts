@@ -22,4 +22,7 @@ export interface Message {
   text: string;
   timestamp: any; // Firestore Timestamp or ISO date string
   status: 'sent' | 'seen';
+  replyToId?: string;
+  replyToText?: string;
+  replyToSenderName?: string;
 }

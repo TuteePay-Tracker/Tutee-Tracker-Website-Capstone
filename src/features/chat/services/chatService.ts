@@ -87,7 +87,10 @@ class ChatService {
           senderName: data.senderName,
           text: data.text,
           timestamp: data.timestamp,
-          status: data.status || 'sent'
+          status: data.status || 'sent',
+          replyToId: data.replyToId,
+          replyToText: data.replyToText,
+          replyToSenderName: data.replyToSenderName
         } as Message;
       });
       callback(messages);
@@ -104,18 +107,27 @@ class ChatService {
     senderId: string, 
     senderName: string, 
     text: string, 
-    recipientId: string
+    recipientId: string,
+    replyTo?: { id: string; text: string; senderName: string }
   ): Promise<void> {
     try {
       // Add message to subcollection
       const msgRef = collection(db, 'chats', chatId, 'messages');
-      await addDoc(msgRef, {
+      const messageData: Record<string, any> = {
         senderId,
         senderName,
         text,
         timestamp: serverTimestamp(),
         status: 'sent'
-      });
+      };
+
+      if (replyTo) {
+        messageData.replyToId = replyTo.id;
+        messageData.replyToText = replyTo.text;
+        messageData.replyToSenderName = replyTo.senderName;
+      }
+
+      await addDoc(msgRef, messageData);
 
       // Update parent thread document with last message info and increment unread count
       const threadRef = doc(db, 'chats', chatId);
