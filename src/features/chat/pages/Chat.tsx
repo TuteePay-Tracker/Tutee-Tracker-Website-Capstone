@@ -4,14 +4,14 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { chatService } from '@/features/chat/services/chatService';
 import { ChatThread, Message } from '@/features/chat/types/chat';
 import { Tutee } from '@/features/tutees/types/tutee';
-import { 
-  Send, 
-  Search, 
-  MessageSquare, 
-  ArrowLeft, 
-  Check, 
-  CheckCheck, 
-  User, 
+import {
+  Send,
+  Search,
+  MessageSquare,
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  User,
   GraduationCap,
   Clock,
   Trash2,
@@ -54,8 +54,8 @@ export const Chat = () => {
     const loadParents = async () => {
       try {
         const q = query(
-          collection(db, 'users'), 
-          where('role', '==', 'parent'), 
+          collection(db, 'users'),
+          where('role', '==', 'parent'),
           where('createdByTutorId', '==', user.id)
         );
         const snap = await getDocs(q);
@@ -109,7 +109,17 @@ export const Chat = () => {
         setLoadingThreads(false);
 
         // Keep active thread data fresh if it is updated in the background
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlThreadId = searchParams.get('threadId');
+
         setActiveThread(prevActive => {
+          if (urlThreadId) {
+            const targetThread = updatedThreads.find(t => t.id === urlThreadId);
+            if (targetThread) {
+              setShowMobileChat(true);
+              return targetThread;
+            }
+          }
           if (!prevActive) return null;
           const freshActive = updatedThreads.find(t => t.id === prevActive.id);
           return freshActive || prevActive;
@@ -320,7 +330,7 @@ export const Chat = () => {
 
     // 1. Add active threads
     threads.forEach(thread => {
-      const isSearchMatch = 
+      const isSearchMatch =
         thread.tuteeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         thread.parentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         thread.tutorName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -346,7 +356,7 @@ export const Chat = () => {
     tutees.forEach(tutee => {
       const hasThread = threads.some(t => t.tuteeId === tutee.id);
       if (!hasThread) {
-        const isSearchMatch = 
+        const isSearchMatch =
           `${tutee.firstName} ${tutee.surname}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
           tutee.subject.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -354,8 +364,8 @@ export const Chat = () => {
           // Tutors only show tutees with a parent linked
           // Parents show all their children
           if (user?.role === 'parent' || (user?.role === 'tutor' && tutee.parentId)) {
-            const title = user?.role === 'tutor' 
-              ? (parentNames[tutee.parentId || ''] || 'Parent') 
+            const title = user?.role === 'tutor'
+              ? (parentNames[tutee.parentId || ''] || 'Parent')
               : (tutorName || 'Tutor');
             list.push({
               type: 'contact',
@@ -376,12 +386,11 @@ export const Chat = () => {
   const chatList = getFilteredList();
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm h-[calc(100vh-180px)] min-h-[450px] flex">
-      
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm h-full md:h-[calc(100vh-180px)] md:min-h-[450px] flex">
+
       {/* Sidebar List Pane */}
-      <div className={`w-full md:w-80 lg:w-96 border-r border-gray-200 flex flex-col shrink-0 bg-gray-50/50 ${
-        showMobileChat ? 'hidden md:flex' : 'flex'
-      }`}>
+      <div className={`w-full md:w-80 lg:w-96 border-r border-gray-200 flex flex-col shrink-0 bg-gray-50/50 ${showMobileChat ? 'hidden md:flex' : 'flex'
+        }`}>
         {/* Search header */}
         <div className="p-4 border-b border-gray-200 bg-white">
           <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -409,8 +418,8 @@ export const Chat = () => {
               <MessageSquare size={36} className="mx-auto mb-2 opacity-50" />
               <p className="font-medium">No messages yet</p>
               <p className="text-xs mt-1 text-gray-400">
-                {user?.role === 'tutor' 
-                  ? 'Link parent accounts to your tutees to begin chatting.' 
+                {user?.role === 'tutor'
+                  ? 'Link parent accounts to your tutees to begin chatting.'
                   : 'Your children accounts will appear here once linked.'}
               </p>
             </div>
@@ -428,9 +437,8 @@ export const Chat = () => {
                     }
                     setShowMobileChat(true);
                   }}
-                  className={`w-full text-left p-4 transition-colors flex gap-3 items-center ${
-                    isSelected ? 'bg-green-50/70 border-l-4 border-green-700 pl-3' : 'hover:bg-gray-100 bg-white'
-                  }`}
+                  className={`w-full text-left p-4 transition-colors flex gap-3 items-center ${isSelected ? 'bg-green-50/70 border-l-4 border-green-700 pl-3' : 'hover:bg-gray-100 bg-white'
+                    }`}
                 >
                   {getTuteePhoto(item.threadData?.tuteeId || item.tuteeData?.id || '') ? (
                     <img
@@ -456,8 +464,8 @@ export const Chat = () => {
                       {item.subtitle}
                     </span>
                     <p className="text-xs text-gray-500 truncate">
-                      {item.type === 'contact' 
-                        ? 'Click to start chat thread' 
+                      {item.type === 'contact'
+                        ? 'Click to start chat thread'
                         : item.lastMessage || 'No messages in this thread yet'}
                     </p>
                   </div>
@@ -474,9 +482,8 @@ export const Chat = () => {
       </div>
 
       {/* Main Messaging Pane */}
-      <div className={`flex-1 flex flex-col bg-gray-50/30 ${
-        showMobileChat ? 'flex' : 'hidden md:flex'
-      }`}>
+      <div className={`flex-1 flex flex-col bg-gray-50/30 ${showMobileChat ? 'flex' : 'hidden md:flex'
+        }`}>
         {activeThread ? (
           <>
             {/* Active Thread Header */}
@@ -522,7 +529,7 @@ export const Chat = () => {
               ) : (
                 messages.map((msg, index) => {
                   const isMe = msg.senderId === user?.id;
-                  const showDateHeader = index === 0 || 
+                  const showDateHeader = index === 0 ||
                     formatDateHeader(messages[index - 1].timestamp) !== formatDateHeader(msg.timestamp);
                   const isConfirmingDelete = deletingMsgId === msg.id;
 
@@ -535,7 +542,7 @@ export const Chat = () => {
                           </span>
                         </div>
                       )}
-                      
+
                       <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in group/msg`}>
                         <div className="max-w-[75%] sm:max-w-[65%]">
                           {/* Sender name for other users in thread */}
@@ -544,27 +551,23 @@ export const Chat = () => {
                               {msg.senderName}
                             </span>
                           )}
-                          
+
                           {/* Message bubble + action buttons row */}
                           <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className={`p-3.5 rounded-2xl shadow-sm leading-relaxed text-sm ${
-                              isMe 
-                                ? 'bg-green-700 text-white rounded-tr-none' 
+                            <div className={`p-3.5 rounded-2xl shadow-sm leading-relaxed text-sm ${isMe
+                                ? 'bg-green-700 text-white rounded-tr-none'
                                 : 'bg-white text-gray-800 border border-gray-150 rounded-tl-none'
-                            }`}>
+                              }`}>
                               {/* Quoted reply preview */}
                               {msg.replyToText && (
-                                <div className={`mb-2 px-2.5 py-1.5 rounded-lg border-l-4 ${
-                                  isMe ? 'bg-white/15 border-white/80' : 'bg-gray-50 border-green-700'
-                                }`}>
-                                  <span className={`block text-[10px] font-bold uppercase tracking-wide ${
-                                    isMe ? 'text-green-100' : 'text-green-700'
+                                <div className={`mb-2 px-2.5 py-1.5 rounded-lg border-l-4 ${isMe ? 'bg-white/15 border-white/80' : 'bg-gray-50 border-green-700'
                                   }`}>
+                                  <span className={`block text-[10px] font-bold uppercase tracking-wide ${isMe ? 'text-green-100' : 'text-green-700'
+                                    }`}>
                                     {msg.replyToSenderName === user?.name ? 'You' : msg.replyToSenderName}
                                   </span>
-                                  <p className={`text-xs line-clamp-2 break-words ${
-                                    isMe ? 'text-green-50/90' : 'text-gray-500'
-                                  }`}>
+                                  <p className={`text-xs line-clamp-2 break-words ${isMe ? 'text-green-50/90' : 'text-gray-500'
+                                    }`}>
                                     {msg.replyToText}
                                   </p>
                                 </div>
@@ -619,9 +622,8 @@ export const Chat = () => {
 
                           {/* Timestamp and seen state */}
                           {!isConfirmingDelete && (
-                            <div className={`flex items-center gap-1.5 mt-1 px-1 text-[10px] text-gray-400 font-medium ${
-                              isMe ? 'justify-end' : 'justify-start'
-                            }`}>
+                            <div className={`flex items-center gap-1.5 mt-1 px-1 text-[10px] text-gray-400 font-medium ${isMe ? 'justify-end' : 'justify-start'
+                              }`}>
                               <Clock size={10} />
                               <span>{formatTime(msg.timestamp)}</span>
                               {isMe && (
@@ -672,7 +674,7 @@ export const Chat = () => {
             )}
 
             {/* Input typing panel */}
-            <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-200 flex gap-2 items-center">
+            <form onSubmit={handleSend} className="px-3 py-2 pb-safe bg-white border-t border-gray-200 flex gap-2 items-center">
               <input
                 ref={inputRef}
                 type="text"
@@ -680,12 +682,12 @@ export const Chat = () => {
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Type your message here..."
                 disabled={isSending}
-                className="flex-1 px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700 disabled:bg-gray-50"
+                className="flex-1 px-3 py-2.5 md:px-4 md:py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700 disabled:bg-gray-50"
               />
               <button
                 type="submit"
                 disabled={!inputText.trim() || isSending}
-                className="bg-green-700 text-white p-3 rounded-xl hover:bg-green-800 transition-colors disabled:bg-gray-200 disabled:text-gray-400 shrink-0 flex items-center justify-center shadow-md shadow-green-700/10"
+                className="bg-green-700 text-white p-2.5 md:p-3 rounded-xl hover:bg-green-800 transition-colors disabled:bg-gray-200 disabled:text-gray-400 shrink-0 flex items-center justify-center shadow-md shadow-green-700/10"
               >
                 <Send size={16} />
               </button>

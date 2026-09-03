@@ -4,13 +4,15 @@ import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import {
   User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
   Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
-  Download, Eye, Calendar, Clock, Activity, FileText, CheckCircle2, ChevronRight
+  Download, Eye, Calendar, Clock, Activity, FileText, CheckCircle2, ChevronRight,
+  BellRing, Copy, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { setupWebPushNotifications, getNotificationPermissionState, getStoredFcmToken } from '@/shared/services/fcmService';
 import gcashLogo from '@/assets/gcash-com-logo.png';
 import mayaLogo from '@/assets/id5dWPPLkV_logos.jpeg';
 
@@ -37,6 +39,18 @@ export const Settings = () => {
   // Notification states
   const [notifications, setNotifications] = useState(true);
   const [emailReminders, setEmailReminders] = useState(true);
+  const [fcmPermission, setFcmPermission] = useState<NotificationPermission | 'unsupported'>(() => getNotificationPermissionState());
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [isRegisteringFcm, setIsRegisteringFcm] = useState(false);
+
+  useEffect(() => {
+    setFcmPermission(getNotificationPermissionState());
+    if (user?.id && getNotificationPermissionState() === 'granted') {
+      getStoredFcmToken(user.id).then((token) => {
+        if (token) setFcmToken(token);
+      });
+    }
+  }, [user?.id]);
 
   // Clearing/adding states
   const [isClearing, setIsClearing] = useState(false);
@@ -715,16 +729,126 @@ export const Settings = () => {
 
           {/* 2. Notifications Tab */}
           {activeTab === 'notifications' && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm animate-in fade-in-50 duration-200">
-              <div className="flex items-center gap-3 mb-6">
-                <Bell size={24} className="text-gray-600" />
-                <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm animate-in fade-in-50 duration-200 space-y-6">
+              <div className="flex items-center gap-3">
+                <BellRing size={24} className="text-green-600" />
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Push Notifications & FCM</h2>
+                  <p className="text-sm text-gray-500">Configure PWA background push notifications and test system alerts</p>
+                </div>
               </div>
-              <div className="space-y-6">
+
+              {/* Status Banner */}
+              <div className="p-4 rounded-xl border bg-gray-50 flex items-start gap-3">
+                {fcmPermission === 'granted' ? (
+                  <CheckCircle2 size={20} className="text-green-600 shrink-0 mt-0.5" />
+                ) : fcmPermission === 'denied' ? (
+                  <AlertCircle size={20} className="text-red-600 shrink-0 mt-0.5" />
+                ) : (
+                  <Info size={20} className="text-blue-600 shrink-0 mt-0.5" />
+                )}
+
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-gray-900">Browser Permission Status:</span>
+                    <span
+                      className={`text-xs font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                        fcmPermission === 'granted'
+                          ? 'bg-green-100 text-green-800'
+                          : fcmPermission === 'denied'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {fcmPermission}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-gray-600 mt-1">
+                    {fcmPermission === 'granted'
+                      ? 'Notifications are enabled! Your device is ready to receive background push alerts.'
+                      : fcmPermission === 'denied'
+                      ? 'Notifications are currently blocked by your browser. Click the lock icon in your browser address bar (left of localhost:5173) and reset Notification permissions to "Allow".'
+                      : 'Notification permission has not been requested yet on this browser.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={async () => {
+                    if (!user?.id) return;
+                    setIsRegisteringFcm(true);
+                    try {
+                      const token = await setupWebPushNotifications(user.id);
+                      setFcmPermission(getNotificationPermissionState());
+                      if (token) {
+                        setFcmToken(token);
+                        toast.success('Web Push Notifications successfully enabled and FCM Token stored!');
+                      } else if (Notification.permission === 'denied') {
+                        toast.error('Permission blocked in browser settings. Please reset permission in address bar.');
+                      }
+                    } catch (err: any) {
+                      toast.error('Failed to enable notifications: ' + err.message);
+                    } finally {
+                      setIsRegisteringFcm(false);
+                    }
+                  }}
+                  disabled={isRegisteringFcm}
+                  className="px-4 py-2.5 bg-green-600 text-white font-bold text-xs rounded-xl hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Bell size={15} />
+                  {isRegisteringFcm ? 'Requesting Permission...' : 'Enable / Re-register Web Push'}
+                </button>
+
+                <button
+                  onClick={() => {
+                    toast.info('Test Push Notification', {
+                      description: 'This is a sample foreground notification test for Tutor Track!',
+                      duration: 4000,
+                    });
+                  }}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200 transition-colors flex items-center gap-2"
+                >
+                  <BellRing size={15} />
+                  Send Test Toast Alert
+                </button>
+              </div>
+
+              {/* FCM Token Details Card */}
+              {fcmToken && (
+                <div className="p-4 border rounded-xl bg-gray-50/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Device FCM Registration Token</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(fcmToken);
+                        toast.success('FCM Token copied to clipboard!');
+                      }}
+                      className="text-xs text-green-700 font-semibold flex items-center gap-1 hover:underline"
+                    >
+                      <Copy size={12} />
+                      Copy Token
+                    </button>
+                  </div>
+                  <div className="p-2.5 bg-white border border-gray-200 rounded-lg text-[11px] font-mono text-gray-700 break-all select-all max-h-24 overflow-y-auto">
+                    {fcmToken}
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    Use this token in Firebase Console ➔ Messaging ➔ "Send Test Message" to send a live push message directly to this device.
+                  </p>
+                </div>
+              )}
+
+              <hr className="border-gray-100 my-4" />
+
+              {/* Standard Toggles */}
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-semibold text-gray-900">Push Notifications</p>
-                    <p className="text-sm text-gray-500">Receive notifications about payments and sessions</p>
+                    <p className="font-semibold text-gray-900 text-sm">Session & Attendance Notifications</p>
+                    <p className="text-xs text-gray-500">Alerts for upcoming sessions and tutee attendance</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -736,14 +860,14 @@ export const Settings = () => {
                       }}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-700"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-700"></div>
                   </label>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-semibold text-gray-900">Email Reminders</p>
-                    <p className="text-sm text-gray-500">Get email reminders for unpaid balances</p>
+                    <p className="font-semibold text-gray-900 text-sm">Payment Alerts</p>
+                    <p className="text-xs text-gray-500">Notifications when parent payment receipts are uploaded</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -751,11 +875,11 @@ export const Settings = () => {
                       checked={emailReminders}
                       onChange={(e) => {
                         setEmailReminders(e.target.checked);
-                        toast.success(`Email reminders ${e.target.checked ? 'enabled' : 'disabled'}`);
+                        toast.success(`Payment alerts ${e.target.checked ? 'enabled' : 'disabled'}`);
                       }}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-700"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-700"></div>
                   </label>
                 </div>
               </div>

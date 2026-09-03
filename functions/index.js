@@ -132,16 +132,58 @@ exports.sendExpoPush = onCall(async (request) => {
     return { ok: true, sent: 0 };
   }
 
-  const messages = uniqueTokens.map((to) => ({
-    to,
-    title,
-    body,
-    sound: 'default',
-    priority: 'high',
-    data: data ?? undefined,
-  }));
+  const expoTokens = uniqueTokens.filter(
+    (t) => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')
+  );
+  const fcmTokens = uniqueTokens.filter(
+    (t) => !t.startsWith('ExponentPushToken[') && !t.startsWith('ExpoPushToken[')
+  );
 
-  const tickets = await sendBatchToExpo(messages);
+  let tickets = [];
+  if (expoTokens.length > 0) {
+    const messages = expoTokens.map((to) => ({
+      to,
+      title,
+      body,
+      sound: 'default',
+      priority: 'high',
+      data: data ?? undefined,
+    }));
+    tickets = await sendBatchToExpo(messages);
+  }
+
+  if (fcmTokens.length > 0) {
+    try {
+      const payloadData = data && typeof data === 'object'
+        ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]))
+        : {};
+
+      const fcmResponse = await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: {
+          title: title || 'Tutor Track Notification',
+          body: body || '',
+        },
+        data: payloadData,
+        webpush: {
+          notification: {
+            title: title || 'Tutor Track Notification',
+            body: body || '',
+            icon: '/pwa-192x192.png',
+            badge: '/pwa-192x192.png',
+          },
+          fcmOptions: {
+            link: '/',
+          },
+        },
+      });
+      console.log(
+        `Sent FCM Web Push: ${fcmResponse.successCount} success, ${fcmResponse.failureCount} failed`
+      );
+    } catch (fcmError) {
+      console.error('Error sending FCM Web Push via Cloud Function:', fcmError);
+    }
+  }
 
   return { ok: true, sent: uniqueTokens.length, tickets };
 });

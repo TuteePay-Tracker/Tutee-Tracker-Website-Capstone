@@ -69,45 +69,63 @@ export async function sendPushMessage({
 
   const targetUserId = recipientId || auth.currentUser?.uid;
 
-  // Expo's API accepts up to 100 messages per request; the relay forwards
-  // each chunk to Expo from a server context (browsers are CORS-blocked).
-  for (let i = 0; i < uniqueTokens.length; i += 100) {
-    const chunk = uniqueTokens.slice(i, i + 100);
+  const expoTokens = uniqueTokens.filter(
+    (t) => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')
+  );
+  const fcmTokens = uniqueTokens.filter(
+    (t) => !t.startsWith('ExponentPushToken[') && !t.startsWith('ExpoPushToken[')
+  );
 
-    try {
-      const response = await fetch(`${PUSH_RELAY_URL}/send-push`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ tokens: chunk, title, body, data, sound, priority }),
-      });
+  // 1. Send Expo mobile tokens via Relay Server
+  if (expoTokens.length > 0) {
+    for (let i = 0; i < expoTokens.length; i += 100) {
+      const chunk = expoTokens.slice(i, i + 100);
 
-      if (!response.ok) {
-        console.warn('Push relay error:', response.status, await response.text());
-        continue;
-      }
-
-      const result = await response.json();
-      const tickets = result?.tickets as
-        | Array<{ status?: string; details?: { error?: string }; message?: string }>
-        | undefined;
-      if (Array.isArray(tickets)) {
-        tickets.forEach((ticket, index) => {
-          if (ticket?.status === 'error') {
-            const detail = ticket.details?.error;
-            if (detail === 'DeviceNotRegistered' && targetUserId) {
-              deleteStaleToken(targetUserId, chunk[index]);
-            } else {
-              console.warn('Push ticket error:', detail, ticket.message);
-            }
-          }
+      try {
+        const response = await fetch(`${PUSH_RELAY_URL}/send-push`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ tokens: chunk, title, body, data, sound, priority }),
         });
+
+        if (!response.ok) {
+          console.warn('Expo Push relay error:', response.status, await response.text());
+          continue;
+        }
+
+        const result = await response.json();
+        const tickets = result?.tickets as
+          | Array<{ status?: string; details?: { error?: string }; message?: string }>
+          | undefined;
+        if (Array.isArray(tickets)) {
+          tickets.forEach((ticket, index) => {
+            if (ticket?.status === 'error') {
+              const detail = ticket.details?.error;
+              if (detail === 'DeviceNotRegistered' && targetUserId) {
+                deleteStaleToken(targetUserId, chunk[index]);
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to send Expo push:', error);
       }
+    }
+  }
+
+  // 2. Send Web FCM tokens
+  if (fcmTokens.length > 0) {
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const sendPushCall = httpsCallable(functions, 'sendExpoPush');
+      await sendPushCall({ tokens: fcmTokens, title, body, data });
+      console.log('Successfully called Cloud Function to send FCM push to web tokens:', fcmTokens.length);
     } catch (error) {
-      // Network errors are transient — never delete tokens here.
-      console.warn('Failed to send push:', error);
+      console.warn('Cloud Function unavailable (Spark Plan). Web notification delivered via real-time listener & service worker:', error);
     }
   }
 }
