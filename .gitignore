@@ -4,3 +4,4 @@ node_modules
 .env.*.local
 dist/firebase-messaging-sw.js
 public/firebase-messaging-sw.js
+.firebase/hosting.ZGlzdA.cache
