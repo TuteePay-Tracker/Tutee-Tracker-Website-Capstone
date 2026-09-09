@@ -5,6 +5,8 @@ import { auth, db } from '@/shared/lib/firebase/config';
 import { registerUser, loginUser, logoutUser, resetPassword as resetUserPassword } from '@/shared/lib/firebase/auth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { setLoggingOut } from '@/shared/utils/firestoreErrors';
+import { useInactivityTimeout } from '@/shared/hooks/useInactivityTimeout';
+import { InactivityWarning } from '@/shared/components/InactivityWarning';
 
 interface User {
   id: string;
@@ -248,6 +250,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const isTutor = user?.role === 'tutor';
+  const { showWarning, remainingSeconds, resetTimer } = useInactivityTimeout(
+    !!user && isTutor,
+    logout
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -263,6 +271,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }}
     >
       {children}
+      {showWarning && (
+        <InactivityWarning
+          remainingSeconds={remainingSeconds}
+          onStayLoggedIn={resetTimer}
+        />
+      )}
     </AuthContext.Provider>
   );
 };

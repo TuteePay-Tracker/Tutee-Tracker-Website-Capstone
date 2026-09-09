@@ -6,6 +6,7 @@
     "source": "functions"
   },
   "hosting": {
+    "site": "tutorial-management-capstone",
     "public": "dist",
     "ignore": [
       "firebase.json",
