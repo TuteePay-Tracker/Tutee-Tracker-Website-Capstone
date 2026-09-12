@@ -178,3 +178,5 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.listen(PORT, () => {
   console.log(`Push relay listening on http://localhost:${PORT}`);
 });
+
+export default app;
