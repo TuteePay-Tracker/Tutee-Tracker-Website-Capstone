@@ -65,7 +65,7 @@ export const AttendanceTab = ({ attendanceSummaries }: AttendanceTabProps) => {
       : 0;
   const totalScheduled = studentsWithData.reduce((sum, s) => sum + s.totalScheduledDays, 0);
   const totalAttended = studentsWithData.reduce((sum, s) => sum + s.totalPaidDays, 0);
-  const totalAbsent = totalScheduled - totalAttended;
+  const totalAbsent = studentsWithData.reduce((sum, s) => sum + s.totalUnpaidDays, 0);
 
   // Chart data: all students' rates
   const rateChartData = [...studentsWithData]

@@ -62,6 +62,7 @@ const DashboardSubjectAveragesTooltip = ({ active, payload }: any) => {
 };
 
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { getDayAttendance } from '@/features/attendance/types/dayPayment';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { Announcement, AnnouncementFormData } from '@/features/announcements/types/announcement';
@@ -75,9 +76,8 @@ import { formatTime12h } from '@/shared/utils/formatDate';
 const ParentDashboard = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
-  const [transactionTotals, setTransactionTotals] = useState<Record<string, number>>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [tuteeAttendance, setTuteeAttendance] = useState<Record<string, { presentCount: number; totalSessions: number }>>({});
+  const [tuteeAttendance, setTuteeAttendance] = useState<Record<string, { presentCount: number; absentCount: number; totalSessions: number }>>({});
   const [tuteeAssessments, setTuteeAssessments] = useState<Record<string, Assessment[]>>({});
   const [assessmentPage, setAssessmentPage] = useState(0);
   const ASSESSMENT_PAGE_SIZE = 3;
@@ -90,31 +90,10 @@ const ParentDashboard = () => {
 
   useEffect(() => {
     if (!user?.createdByTutorId || tutees.length === 0) {
-      setTransactionTotals({});
       setTuteeAttendance({});
       setTuteeAssessments({});
       return;
     }
-
-    // Set up transactions subscriptions
-    const unsubTransactions = tutees.map((tutee) => {
-      const transactionsRef = collection(db, 'users', user.createdByTutorId!, 'paymentTransactions');
-      const transactionsQuery = query(transactionsRef, where('tuteeId', '==', tutee.id));
-      return onSnapshot(
-        transactionsQuery,
-        (snapshot) => {
-          const totalAmount = snapshot.docs.reduce((sum, docSnap) => {
-            const data = docSnap.data();
-            return sum + (typeof data.totalAmount === 'number' ? data.totalAmount : 0);
-          }, 0);
-          setTransactionTotals((prev) => ({ ...prev, [tutee.id]: totalAmount }));
-        },
-        (error) => {
-          console.warn('Unable to load payment transactions for tutee:', tutee.id, error);
-          setTransactionTotals((prev) => ({ ...prev, [tutee.id]: 0 }));
-        }
-      );
-    });
 
     // Set up attendance subscriptions
     const unsubAttendance = tutees.map((tutee) => {
@@ -124,18 +103,21 @@ const ParentDashboard = () => {
         recordsQuery,
         (snapshot) => {
           let present = 0;
+          let absent = 0;
           let total = 0;
           snapshot.docs.forEach((docSnap) => {
             const recData = docSnap.data();
             const dayPayments = (recData.dayPayments || []) as any[];
             dayPayments.forEach((dp) => {
-              if (dp.status === 'paid') present++;
-              if (dp.status !== 'no-class') total++;
+              const attendance = getDayAttendance(dp);
+              if (attendance === 'present') present++;
+              else if (attendance === 'absent') absent++;
+              if (attendance !== 'no-class') total++;
             });
           });
           setTuteeAttendance((prev) => ({
             ...prev,
-            [tutee.id]: { presentCount: present, totalSessions: total }
+            [tutee.id]: { presentCount: present, absentCount: absent, totalSessions: total }
           }));
         },
         (error) => {
@@ -167,7 +149,6 @@ const ParentDashboard = () => {
     });
 
     return () => {
-      unsubTransactions.forEach((unsub) => unsub());
       unsubAttendance.forEach((unsub) => unsub());
       unsubAssessments.forEach((unsub) => unsub());
     };
@@ -175,22 +156,24 @@ const ParentDashboard = () => {
 
   // Compute aggregated stats
   const totalChildren = tutees.length;
-  
-  const totalPaid = Object.values(transactionTotals).reduce((sum, val) => sum + val, 0);
-  
+
+  // Use the tutor-maintained canonical counters (totalPaid / balance) rather than
+  // summing paymentTransactions, which used to double-count recorded payments.
+  const totalPaid = tutees.reduce((sum, tutee) => sum + (tutee.totalPaid || 0), 0);
+
   const totalOutstandingBalance = tutees.reduce((sum, tutee) => {
-    const paid = transactionTotals[tutee.id] || 0;
-    const due = (tutee.totalSessions || 0) * (tutee.ratePerSession || 0);
-    return sum + Math.max(due - paid, 0);
+    return sum + Math.max(tutee.balance || 0, 0);
   }, 0);
 
   let totalPresent = 0;
+  let totalAbsent = 0;
   let totalSessions = 0;
   Object.values(tuteeAttendance).forEach((att) => {
     totalPresent += att.presentCount;
+    totalAbsent += att.absentCount || 0;
     totalSessions += att.totalSessions;
   });
-  const overallAttendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 100;
+  const overallAttendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0;
 
   // Flatten assessments and sort chronologically
   const allAssessmentsList = Object.values(tuteeAssessments).flat().sort((a, b) => b.date.localeCompare(a.date));

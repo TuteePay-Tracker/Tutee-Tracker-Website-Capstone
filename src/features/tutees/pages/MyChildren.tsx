@@ -8,11 +8,11 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { ScheduleItem } from '@/features/tutees/types/tutee';
 import { formatTime12h } from '@/shared/utils/formatDate';
+import { getDayAttendance } from '@/features/attendance/types/dayPayment';
 
 export const MyChildren = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
-  const [transactionTotals, setTransactionTotals] = useState<Record<string, number>>({});
   const [tuteeMetrics, setTuteeMetrics] = useState<Record<string, {
     presentCount: number;
     absentCount: number;
@@ -21,52 +21,6 @@ export const MyChildren = () => {
     averageScore: number;
     latestAssessment: { score: number; remarks: string; date: string } | null;
   }>>({});
-
-  useEffect(() => {
-    if (!user?.createdByTutorId || tutees.length === 0) {
-      setTransactionTotals({});
-      return;
-    }
-
-    setTransactionTotals({});
-
-    const initialTotals: Record<string, number> = {};
-    tutees.forEach((tutee) => {
-      initialTotals[tutee.id] = 0;
-    });
-    setTransactionTotals(initialTotals);
-
-    const unsubscribes = tutees.map((tutee) => {
-      const transactionsRef = collection(db, 'users', user.createdByTutorId!, 'paymentTransactions');
-      const transactionsQuery = query(transactionsRef, where('tuteeId', '==', tutee.id));
-
-      return onSnapshot(
-        transactionsQuery,
-        (snapshot) => {
-          const totalAmount = snapshot.docs.reduce((sum, docSnap) => {
-            const data = docSnap.data();
-            return sum + (typeof data.totalAmount === 'number' ? data.totalAmount : 0);
-          }, 0);
-
-          setTransactionTotals((prev) => ({
-            ...prev,
-            [tutee.id]: totalAmount,
-          }));
-        },
-        (error) => {
-          console.warn('Unable to load payment transactions for tutee:', tutee.id, error);
-          setTransactionTotals((prev) => ({
-            ...prev,
-            [tutee.id]: 0,
-          }));
-        }
-      );
-    });
-
-    return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [user?.createdByTutorId, tutees]);
 
   useEffect(() => {
     if (!user?.createdByTutorId || tutees.length === 0) {
@@ -102,14 +56,15 @@ export const MyChildren = () => {
             const recData = docSnap.data();
             const dayPayments = (recData.dayPayments || []) as any[];
             dayPayments.forEach((dp) => {
-              if (dp.status === 'paid') present++;
-              else if (dp.status === 'partial') absent++;
-              
-              if (dp.status !== 'no-class') total++;
+              const attendance = getDayAttendance(dp);
+              if (attendance === 'present') present++;
+              else if (attendance === 'absent') absent++;
+
+              if (attendance !== 'no-class') total++;
             });
           });
 
-          const rate = total > 0 ? Math.round((present / total) * 100) : 100;
+          const rate = total > 0 ? Math.round((present / total) * 100) : 0;
 
           setTuteeMetrics((prev) => ({
             ...prev,
@@ -208,9 +163,11 @@ export const MyChildren = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {tutees.map(tutee => {
-            const totalPaid = Math.round((transactionTotals[tutee.id] || 0) * 100) / 100;
-            const totalDue = Math.round((tutee.totalSessions || 0) * (tutee.ratePerSession || 0) * 100) / 100;
-            const remainingBalance = Math.max(Math.round((totalDue - totalPaid) * 100) / 100, 0);
+            // Use the tutor-maintained canonical counters instead of summing paymentTransactions
+            // (which used to double-count recorded payments and left balances inconsistent).
+            const totalPaid = Math.round((tutee.totalPaid || 0) * 100) / 100;
+            const remainingBalance = Math.max(Math.round((tutee.balance || 0) * 100) / 100, 0);
+            const totalDue = Math.round((totalPaid + remainingBalance) * 100) / 100;
             const hasOutstandingBalance = remainingBalance > 0;
             const isFull = totalPaid > 0 && !hasOutstandingBalance;
             const isPartial = totalPaid > 0 && hasOutstandingBalance;

@@ -1,4 +1,4 @@
-import { PaymentRecord, PaymentTransaction, DayPayment, PaymentStatus } from '@/features/attendance/types/dayPayment';
+import { PaymentRecord, PaymentTransaction, DayPayment, PaymentStatus, AttendanceMark } from '@/features/attendance/types/dayPayment';
 import { Payment } from '@/features/payments/types/payment';
 import {
   collection,
@@ -278,18 +278,24 @@ class DayPaymentService {
     }
   }
 
-  // Toggle day attendance/completion status
-  async toggleDayStatus(tuteeId: string, month: string, date: string): Promise<PaymentRecord> {
+  // Set a day's attendance mark explicitly (does NOT touch payment status/amounts)
+  async setDayAttendance(
+    tuteeId: string,
+    month: string,
+    date: string,
+    attendance: AttendanceMark | 'none'
+  ): Promise<PaymentRecord> {
     try {
       const record = await this.getMonthlyRecord(tuteeId, month);
       const updatedDayPayments = record.dayPayments.map(day => {
         if (day.date === date) {
-          let newStatus: PaymentStatus;
-          if (day.status === 'unpaid') newStatus = 'paid';
-          else if (day.status === 'paid') newStatus = 'partial';
-          else if (day.status === 'partial') newStatus = 'no-class';
-          else newStatus = 'unpaid';
-          return { ...day, status: newStatus };
+          const next = { ...day };
+          if (attendance === 'none') {
+            delete next.attendance;
+          } else {
+            next.attendance = attendance;
+          }
+          return next;
         }
         return day;
       });
@@ -309,7 +315,7 @@ class DayPaymentService {
         lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Error toggling day status:', error);
+      console.error('Error setting day attendance:', error);
       throw error;
     }
   }
@@ -345,8 +351,10 @@ class DayPaymentService {
       // Determine coverageType: full if amount >= totalDue, partial otherwise
       const resolvedCoverageType: 'full' | 'partial' = amount >= record.totalDue ? 'full' : 'partial';
 
-      // Create transaction record in the central 'payments' collection
-      await paymentService.create({
+      // Create the payment via the central payments service.
+      // paymentService.create also writes the matching paymentTransactions row (with paymentId),
+      // so we must NOT add a second transaction here (that caused double-booked parent totals).
+      const createdPayment = await paymentService.create({
         tuteeId,
         tuteeName: `${tutee.firstName} ${tutee.surname}`,
         amount,
@@ -373,25 +381,6 @@ class DayPaymentService {
         );
       }
 
-      // Create transaction record in the subcollection for backward compatibility
-      const transaction: Omit<PaymentTransaction, 'id'> = {
-        tuteeId,
-        tuteeName: `${tutee.firstName} ${tutee.surname}`,
-        paymentDate: new Date().toISOString().split('T')[0],
-        daysPaid: [], // Flat rate doesn't track specific days paid
-        totalAmount: amount,
-        paymentMethod,
-        month,
-        notes,
-        createdAt: new Date().toISOString(),
-      };
-
-      const transRef = collection(db, 'users', userId, 'paymentTransactions');
-      const transDoc = await addDoc(transRef, {
-        ...transaction,
-        createdAt: Timestamp.fromDate(new Date()),
-      });
-
       // Sync overall totals
       await this.syncTuteeTotals(tuteeId, userId);
 
@@ -402,10 +391,21 @@ class DayPaymentService {
         lastUpdated: new Date().toISOString(),
       };
 
+      const paymentDate = createdPayment.paymentDate || new Date().toISOString().split('T')[0];
+
       return {
         transaction: {
-          id: transDoc.id,
-          ...transaction,
+          id: createdPayment.id,
+          tuteeId,
+          tuteeName: `${tutee.firstName} ${tutee.surname}`,
+          paymentDate,
+          daysPaid: [], // Flat rate doesn't track specific days paid
+          totalAmount: amount,
+          paymentMethod,
+          month,
+          notes,
+          coverageType: resolvedCoverageType,
+          createdAt: createdPayment.createdAt,
         },
         updatedRecord,
       };
@@ -513,10 +513,22 @@ class DayPaymentService {
       const tutee = await tuteeService.getById(tuteeId, userId);
       if (!tutee) return;
 
-      const totalSessions = records.length;
+      // Fetch all confirmed payments for this tutee (exclude pending AND rejected)
+      const payments = (await paymentService.getByTuteeId(tuteeId, userId)).filter(
+        (p) => p.status !== 'pending' && p.status !== 'rejected'
+      );
 
-      // Fetch all verified payments for this tutee
-      const payments = (await paymentService.getByTuteeId(tuteeId, userId)).filter(p => p.status !== 'pending');
+      // Billed months = months that have either a monthly record or a confirmed payment.
+      // This matches Total Due with reality even when a month was paid without a pre-created record.
+      const billedMonths = new Set<string>();
+      records.forEach((r) => {
+        if (r.month) billedMonths.add(r.month);
+      });
+      payments.forEach((p) => {
+        if (p.month) billedMonths.add(p.month);
+      });
+
+      const totalSessions = billedMonths.size;
       const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
       const totalDue = totalSessions * tutee.ratePerSession;
       const balance = totalDue - totalPaid;
@@ -556,7 +568,9 @@ class DayPaymentService {
         // Mark as Fully Paid
         const remainingBalance = record.totalBalance;
         if (remainingBalance > 0) {
-          // Create a payment transaction in central 'payments' collection
+          // Create a payment transaction in central 'payments' collection.
+          // Tag it with `source: 'month-toggle'` so uncommenting can revert ONLY this auto payment
+          // without deleting real/verified payments.
           await paymentService.create({
             tuteeId,
             tuteeName: `${tutee.firstName} ${tutee.surname}`,
@@ -567,6 +581,7 @@ class DayPaymentService {
             notes: `Marked as Paid via monthly checkbox for ${month}`,
             month,
             coverageType: 'full',
+            source: 'month-toggle',
           } as any);
 
           // Log audit activity for cash mark-as-paid
@@ -592,18 +607,27 @@ class DayPaymentService {
           lastUpdated: Timestamp.fromDate(new Date()),
         });
       } else {
-        // Mark as Unpaid
-        // Fetch and delete matching payments from central 'payments' collection
+        // Mark as Unpaid — revert ONLY the auto-created "month-toggle" payment(s).
+        // Real payments (tutor-recorded or parent-verified) are preserved.
         const payments = await paymentService.getByTuteeId(tuteeId, userId);
-        const paymentsToDelete = payments.filter((p: any) => p.month === month);
-        for (const p of paymentsToDelete) {
+        const togglePayments = payments.filter(
+          (p: any) => p.month === month && p.source === 'month-toggle'
+        );
+        for (const p of togglePayments) {
           await paymentService.delete(p.id);
         }
 
-        // Reset the monthly record to unpaid
+        // Recompute the month's paid total from whatever legitimate payments remain.
+        const remainingMonthPayments = payments.filter(
+          (p: any) => p.month === month && p.source !== 'month-toggle' && p.status !== 'pending' && p.status !== 'rejected'
+        );
+        const remainingPaid = remainingMonthPayments.reduce((sum, p: any) => sum + p.amount, 0);
+        const newTotalPaid = Math.min(record.totalDue, remainingPaid);
+        const newTotalBalance = record.totalDue - newTotalPaid;
+
         await updateDoc(docRef, {
-          totalPaid: 0,
-          totalBalance: record.totalDue,
+          totalPaid: newTotalPaid,
+          totalBalance: newTotalBalance,
           lastUpdated: Timestamp.fromDate(new Date()),
         });
       }

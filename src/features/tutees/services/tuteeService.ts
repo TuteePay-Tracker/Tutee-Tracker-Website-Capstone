@@ -16,8 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
 
-const calculateBalance = (totalSessions: number, ratePerSession: number, totalPaid: number, existingBalance?: number): number => {
-  if (existingBalance !== undefined) return existingBalance;
+const calculateBalance = (totalSessions: number, ratePerSession: number, totalPaid: number): number => {
   return Math.round(((totalSessions || 0) * (ratePerSession || 0) - (totalPaid || 0)) * 100) / 100;
 };
 
@@ -63,7 +62,7 @@ class TuteeService {
           totalSessions,
           totalPaid,
           ratePerSession,
-          balance: calculateBalance(totalSessions, ratePerSession, totalPaid, data.balance),
+          balance: calculateBalance(totalSessions, ratePerSession, totalPaid),
           createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           lastPaymentDate: data.lastPaymentDate || null,
@@ -112,7 +111,7 @@ class TuteeService {
             totalSessions,
             totalPaid,
             ratePerSession,
-            balance: calculateBalance(totalSessions, ratePerSession, totalPaid, data.balance),
+            balance: calculateBalance(totalSessions, ratePerSession, totalPaid),
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             lastPaymentDate: data.lastPaymentDate || null,
@@ -150,7 +149,7 @@ class TuteeService {
           totalSessions,
           totalPaid,
           ratePerSession,
-          balance: calculateBalance(totalSessions, ratePerSession, totalPaid, data.balance),
+          balance: calculateBalance(totalSessions, ratePerSession, totalPaid),
           createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           lastPaymentDate: data.lastPaymentDate || null,

@@ -14,7 +14,6 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
-import { tuteeService } from '@/features/tutees/services/tuteeService';
 
 class PaymentService {
   private getUserId(providedId?: string): string {
@@ -164,23 +163,11 @@ class PaymentService {
 
       const docRef = await addDoc(collectionRef, paymentData);
       
-      // Update tutee totals only if this is not a pending payment proof submission
       if (payment.status !== 'pending') {
-        const tutee = await tuteeService.getById(payment.tuteeId, tutorId);
-        if (tutee) {
-          const newTotalPaid = tutee.totalPaid + payment.amount;
-          const totalDue = tutee.totalSessions * tutee.ratePerSession;
-          const newBalance = totalDue - newTotalPaid;
-
-          await tuteeService.update(payment.tuteeId, {
-            totalSessions: tutee.totalSessions,
-            totalPaid: newTotalPaid,
-            balance: newBalance,
-            lastPaymentDate: payment.paymentDate,
-          }, tutorId);
-        }
-
-        // Create transaction record in the subcollection for backward compatibility and real-time syncing
+        // Create transaction record in the subcollection for backward compatibility and real-time syncing.
+        // NOTE: tutee totals (totalSessions/totalPaid/balance) are synced by
+        // dayPaymentService.syncTuteeTotals() — the single canonical writer — so each caller
+        // invokes that instead of mutating the tutee here (which caused stale/divergent balances).
         const userId = this.getUserId(tutorId);
         const transRef = collection(db, 'users', userId, 'paymentTransactions');
         await addDoc(transRef, {

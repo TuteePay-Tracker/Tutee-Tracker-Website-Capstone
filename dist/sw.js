@@ -1,5 +1,6 @@
 // TutorTrack Service Worker
-// Strategy: Network-first for API/Firebase calls, Cache-first for static assets
+// Registered only in production builds (from src/main.tsx), never in dev.
+// Strategy: Network-first for navigation, Cache-first for versioned static assets.
 
 const CACHE_NAME = 'tutortrack-v1';
 
@@ -17,7 +18,6 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
   );
-  // Activate immediately without waiting for old tabs to close
   self.skipWaiting();
 });
 
@@ -32,20 +32,19 @@ self.addEventListener('activate', (event) => {
       )
     )
   );
-  // Take control of all open clients immediately
   self.clients.claim();
 });
 
 // ─── Fetch ──────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  const url = new URL(request.url);
-
-  // Skip non-GET requests and cross-origin requests (e.g. Firebase, Google Fonts)
   if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Network-first for navigation (HTML pages) so users always get fresh content
+  // Network-first for navigation so users always get fresh content.
+  // If the network fails, fall back to the cached app shell.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -54,24 +53,35 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           return response;
         })
-        .catch(() => caches.match('/') || caches.match(request))
+        .catch(() => caches.match('/'))
     );
     return;
   }
 
-  // Cache-first for static assets (JS, CSS, images, fonts)
+  // Only intercept versioned static build assets. Everything else (API calls,
+  // client-side routes like /tutees/..., dev modules) passes through untouched.
+  const isStatic =
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/favicon.png' ||
+    url.pathname === '/manifest.json';
+  if (!isStatic) return;
+
+  // Cache-first for static assets; never reject the fetch promise.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        // Only cache valid same-origin responses
-        if (!response || response.status !== 200 || response.type !== 'basic') {
+    caches
+      .match(request)
+      .then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (!response || response.status !== 200 || response.type !== 'basic') {
+            return response;
+          }
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           return response;
-        }
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        return response;
-      });
-    })
+        });
+      })
+      .catch(() => caches.match(request))
   );
 });

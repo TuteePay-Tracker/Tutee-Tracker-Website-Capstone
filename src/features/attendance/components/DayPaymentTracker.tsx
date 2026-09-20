@@ -62,6 +62,16 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
   }, [selectedMonth, allRecords]);
 
   const toggleMonthPayment = async (month: string) => {
+    const monthRecord = allRecords.find(r => r.month === month);
+    const isCurrentlyPaid = monthRecord ? monthRecord.totalPaid > 0 && monthRecord.totalBalance <= 0 : false;
+
+    if (isCurrentlyPaid) {
+      const confirmed = window.confirm(
+        'Unchecking this month will only remove the auto-created "mark as paid" payment. Recorded and parent-verified payments are kept and the balance will be recomputed. Continue?'
+      );
+      if (!confirmed) return;
+    }
+
     try {
       await dayPaymentService.toggleMonthPaymentStatus(tuteeId, month);
       toast.success('Payment status updated');
@@ -132,6 +142,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
         totalAmount: result.transaction.totalAmount,
         paymentMethod,
         notes,
+        coverageType: result.transaction.coverageType,
       };
 
       setReceiptData(receipt);

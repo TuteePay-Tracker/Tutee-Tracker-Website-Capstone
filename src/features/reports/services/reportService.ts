@@ -15,7 +15,7 @@ import {
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
 import { Assessment } from '@/features/tutee-progress/types/assessment';
-import { PaymentRecord } from '@/features/attendance/types/dayPayment';
+import { PaymentRecord, getDayAttendance } from '@/features/attendance/types/dayPayment';
 import { Tutee } from '@/features/tutees/types/tutee';
 import { Payment } from '@/features/payments/types/payment';
 import {
@@ -34,6 +34,7 @@ import {
   subMonths,
   isWithinInterval,
   differenceInDays,
+  eachDayOfInterval,
 } from 'date-fns';
 
 // ── Helpers ────────────────────────────────────────────
@@ -121,22 +122,26 @@ class ReportService {
       const tuteeRecords = recordsByTutee.get(tutee.id) || [];
       let totalScheduled = 0;
       let totalPaid = 0;
+      let totalAbsent = 0;
 
-      const monthlyMap = new Map<string, { scheduled: number; paid: number }>();
+      const monthlyMap = new Map<string, { present: number; absent: number; scheduled: number }>();
 
       tuteeRecords.forEach((record) => {
         const days = record.dayPayments || [];
-        const activeDays = days.filter((d) => d.status !== 'no-class');
-        const scheduled = activeDays.length;
-        const paid = activeDays.filter((d) => d.status === 'paid').length;
-        totalScheduled += scheduled;
-        totalPaid += paid;
+        const presentDays = days.filter((d) => getDayAttendance(d) === 'present').length;
+        const absentDays = days.filter((d) => getDayAttendance(d) === 'absent').length;
+        const scheduledDays = days.filter((d) => getDayAttendance(d) !== 'no-class').length;
+
+        totalScheduled += scheduledDays;
+        totalPaid += presentDays;
+        totalAbsent += absentDays;
 
         const month = record.month; // YYYY-MM
-        const existing = monthlyMap.get(month) || { scheduled: 0, paid: 0 };
+        const existing = monthlyMap.get(month) || { present: 0, absent: 0, scheduled: 0 };
         monthlyMap.set(month, {
-          scheduled: existing.scheduled + scheduled,
-          paid: existing.paid + paid,
+          present: existing.present + presentDays,
+          absent: existing.absent + absentDays,
+          scheduled: existing.scheduled + scheduledDays,
         });
       });
 
@@ -145,16 +150,30 @@ class ReportService {
         .slice(-6)
         .map(([month, data]) => ({
           month,
-          rate: data.scheduled > 0 ? Math.round((data.paid / data.scheduled) * 100) : 0,
+          rate: data.scheduled > 0 ? Math.round((data.present / data.scheduled) * 100) : 0,
         }));
+
+      // If no records in database yet for this tutee, derive scheduled days from tutee.schedule (same as Attendance page)
+      if (tuteeRecords.length === 0 && Array.isArray(tutee.schedule) && tutee.schedule.length > 0) {
+        const now = new Date();
+        const monthStart = startOfMonth(now);
+        const monthEnd = endOfMonth(now);
+        const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+        const scheduleDays = tutee.schedule.map((s) => s.day);
+        totalScheduled = allDays.filter((day: Date) => scheduleDays.includes(format(day, 'EEEE'))).length;
+      }
+
+      const attendanceRate = totalScheduled > 0
+        ? Math.round((totalPaid / totalScheduled) * 100)
+        : 0;
 
       return {
         tuteeId: tutee.id,
         tuteeName: `${tutee.firstName} ${tutee.surname}`,
         totalScheduledDays: totalScheduled,
         totalPaidDays: totalPaid,
-        totalUnpaidDays: totalScheduled - totalPaid,
-        attendanceRate: totalScheduled > 0 ? Math.round((totalPaid / totalScheduled) * 100) : 0,
+        totalUnpaidDays: totalAbsent,
+        attendanceRate,
         monthlyTrend,
       };
     });
@@ -459,7 +478,7 @@ class ReportService {
     records.forEach((r) => {
       (r.dayPayments || []).forEach((day) => {
         const dayDate = new Date(day.date);
-        if (isWithinInterval(dayDate, { start: weekStart, end: weekEnd }) && day.status === 'paid') {
+        if (isWithinInterval(dayDate, { start: weekStart, end: weekEnd }) && getDayAttendance(day) === 'present') {
           activeThisWeek.add(r.tuteeId);
         }
       });

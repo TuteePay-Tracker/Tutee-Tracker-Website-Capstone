@@ -15,6 +15,8 @@ export interface Payment {
   proofUrl?: string;
   coverageType?: 'full' | 'partial';
   rejectionReason?: string;
+  /** Marker for auto-generated payments (e.g. the "mark month as paid" checkbox) so they can be identified/reverted without touching real payments. */
+  source?: string;
 }
 
 export interface PaymentFormData {

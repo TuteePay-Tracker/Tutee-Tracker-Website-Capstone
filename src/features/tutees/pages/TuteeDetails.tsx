@@ -16,7 +16,7 @@ import { PaymentHistory } from '@/features/payments/components/PaymentHistory';
 import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
 import { ScheduleItem, GRADE_LEVELS } from '@/features/tutees/types/tutee';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
-import { PaymentRecord } from '@/features/attendance/types/dayPayment';
+import { PaymentRecord, getDayAttendance } from '@/features/attendance/types/dayPayment';
 import { PaymentMethod } from '@/features/payments/types/payment';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { doc, getDoc } from 'firebase/firestore';
@@ -301,17 +301,10 @@ export const TuteeDetails = () => {
     );
   }
 
-  // Calculate accurate totals from source records instead of relying on aggregate counters
-  // Total Paid: Sum only verified payments.
-  const totalPaid = payments
-    .filter(p => p.status === 'verified' || !p.status)
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  // Remaining Balance: Sum of all monthly balances from attendance records.
-  // If attendance hasn't loaded yet, fall back to the document calculation.
-  const remainingBalance = attendanceRecords.length > 0
-    ? attendanceRecords.reduce((sum, r) => sum + Math.max(r.totalBalance || 0, 0), 0)
-    : Math.max(0, ((tutee.totalSessions || 0) * (tutee.ratePerSession || 0)) - (tutee.totalPaid || 0));
+  // Use the tutor-maintained canonical counters (kept in sync by syncTuteeTotals and
+  // recomputed on read by tuteeService) so every page shows identical numbers.
+  const totalPaid = Math.round((tutee.totalPaid || 0) * 100) / 100;
+  const remainingBalance = Math.max(Math.round((tutee.balance || 0) * 100) / 100, 0);
   const remainingBalanceCents = Math.round(remainingBalance * 100);
   const hasOutstandingBalance = remainingBalanceCents > 0;
   const totalDue = Math.round((totalPaid + remainingBalance) * 100) / 100;
@@ -702,9 +695,9 @@ export const TuteeDetails = () => {
           ) : (
             <div className="space-y-8">
               {attendanceRecords.map((record) => {
-                const presentCount = record.dayPayments.filter(d => d.status === 'paid').length;
-                const absentCount = record.dayPayments.filter(d => d.status === 'partial').length;
-                const totalSessions = record.dayPayments.filter(d => d.status !== 'no-class').length;
+                const presentCount = record.dayPayments.filter(d => getDayAttendance(d) === 'present').length;
+                const absentCount = record.dayPayments.filter(d => getDayAttendance(d) === 'absent').length;
+                const totalSessions = record.dayPayments.filter(d => getDayAttendance(d) !== 'no-class').length;
                 return (
                   <div key={record.id} className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50 space-y-4">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-gray-200 pb-3">
@@ -731,22 +724,23 @@ export const TuteeDetails = () => {
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {record.dayPayments.map((day) => {
+                          const attendance = getDayAttendance(day);
                           let cardClass = 'bg-white border-gray-200 text-gray-500';
                           let statusLabel = 'Scheduled';
                           let statusIcon = <Clock size={14} className="text-gray-400" />;
                           let labelColorClass = 'text-gray-400';
 
-                          if (day.status === 'paid') {
+                          if (attendance === 'present') {
                             cardClass = 'bg-green-50 border-green-200 text-green-800';
                             statusLabel = 'Present';
                             statusIcon = <CheckCircle2 size={14} className="text-green-600" />;
                             labelColorClass = 'text-green-600';
-                          } else if (day.status === 'partial') {
+                          } else if (attendance === 'absent') {
                             cardClass = 'bg-red-50 border-red-200 text-red-800';
                             statusLabel = 'Absent';
                             statusIcon = <XCircle size={14} className="text-red-505" />;
                             labelColorClass = 'text-red-600';
-                          } else if (day.status === 'no-class') {
+                          } else if (attendance === 'no-class') {
                             cardClass = 'bg-purple-50 border-purple-200 text-purple-800';
                             statusLabel = 'No Class';
                             statusIcon = <CalendarX size={14} className="text-purple-600" />;

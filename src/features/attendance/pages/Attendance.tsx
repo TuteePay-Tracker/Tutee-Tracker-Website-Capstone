@@ -3,7 +3,7 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
-import { PaymentRecord } from '@/features/attendance/types/dayPayment';
+import { PaymentRecord, AttendanceMark, AttendanceStatus, getDayAttendance } from '@/features/attendance/types/dayPayment';
 import { Tutee } from '@/features/tutees/types/tutee';
 import {
   CheckCircle2,
@@ -16,6 +16,7 @@ import {
   User,
   Calendar,
   CalendarX,
+  Pencil,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
 import { toast } from 'sonner';
@@ -23,26 +24,11 @@ import { db } from '@/shared/lib/firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 
-type AttendanceStatus = 'present' | 'absent' | 'no-class' | 'none';
-
-interface DayAttendance {
-  date: string;
-  status: AttendanceStatus;
-}
-
-// Map dayPayment status to attendance status
-const toAttendance = (status: string): AttendanceStatus => {
-  if (status === 'paid') return 'present';
-  if (status === 'partial') return 'absent';
-  if (status === 'no-class') return 'no-class';
-  return 'none';
-};
-
-const fromAttendance = (current: AttendanceStatus): string => {
-  if (current === 'present') return 'partial'; // paid -> partial means toggling to absent
-  if (current === 'absent') return 'no-class';   // partial -> no-class
-  if (current === 'no-class') return 'unpaid'; // no-class -> unpaid
-  return 'paid';                                // none -> paid means present
+const MARK_LABELS: Record<AttendanceStatus, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  'no-class': 'No Class',
+  none: 'Unmarked',
 };
 
 export const Attendance = () => {
@@ -53,6 +39,7 @@ export const Attendance = () => {
   const [records, setRecords] = useState<Record<string, PaymentRecord | null>>({});
   const [loadingRecords, setLoadingRecords] = useState<Record<string, boolean>>({});
   const [togglingDay, setTogglingDay] = useState<string | null>(null);
+  const [selectedMark, setSelectedMark] = useState<AttendanceMark | 'none'>('present');
 
   const monthKey = format(selectedMonth, 'yyyy-MM');
   const filteredTutees = selectedTuteeId
@@ -104,7 +91,7 @@ export const Attendance = () => {
     return () => unsubscribe();
   }, [tutees, monthKey, user?.id]);
 
-  const getScheduledDays = (tutee: Tutee): DayAttendance[] => {
+  const getScheduledDays = (tutee: Tutee): { date: string; status: AttendanceStatus }[] => {
     const record = records[`${tutee.id}_${monthKey}`];
     if (!record) {
       // Compute from schedule if no record yet
@@ -125,29 +112,28 @@ export const Attendance = () => {
 
     return record.dayPayments.map(dp => ({
       date: dp.date,
-      status: toAttendance(dp.status),
+      status: getDayAttendance(dp),
     }));
   };
 
-  const handleToggleDay = async (tutee: Tutee, date: string, currentStatus: AttendanceStatus) => {
+  const handleApplyMark = async (tutee: Tutee, date: string, currentStatus: AttendanceStatus) => {
     const key = `${tutee.id}_${date}`;
     if (togglingDay === key) return;
     setTogglingDay(key);
 
+    // Tapping the same mark again clears it
+    const nextMark: AttendanceMark | 'none' = currentStatus === selectedMark ? 'none' : selectedMark;
+
     try {
-      await dayPaymentService.toggleDayStatus(tutee.id, monthKey, date);
-      const label = 
-        currentStatus === 'none' ? 'Marked Present ✓' : 
-        currentStatus === 'present' ? 'Marked Absent ✗' : 
-        currentStatus === 'absent' ? 'Marked No Class' : 'Status cleared';
+      await dayPaymentService.setDayAttendance(tutee.id, monthKey, date, nextMark);
+      const label = nextMark === 'none'
+        ? 'Mark cleared'
+        : `Marked ${MARK_LABELS[nextMark]} ✓`;
       toast.success(label);
 
       if (user) {
         const isNew = currentStatus === 'none';
-        const newStatusStr = 
-          currentStatus === 'none' ? 'Present' : 
-          currentStatus === 'present' ? 'Absent' : 
-          currentStatus === 'absent' ? 'No Class' : 'None';
+        const newStatusStr = nextMark === 'none' ? 'None' : MARK_LABELS[nextMark];
         await logActivity(
           user.id,
           user.name,
@@ -239,31 +225,77 @@ export const Attendance = () => {
         </div>
       </div>
 
+      {/* Mark Toolbar */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-3">
+        <div className="flex items-center gap-2">
+          <Pencil size={16} className="text-green-700" />
+          <p className="text-sm font-bold text-gray-900">Select a mark, then tap a date to apply it</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(['present', 'absent', 'no-class', 'none'] as AttendanceStatus[]).map(mark => {
+            const active = selectedMark === mark;
+            let btnClass = 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50';
+            let icon = <Clock size={16} />;
+            if (mark === 'present') {
+              btnClass = active
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/30'
+                : 'border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-50';
+              icon = <CheckCircle2 size={16} />;
+            } else if (mark === 'absent') {
+              btnClass = active
+                ? 'border-red-500 bg-red-50 text-red-700 ring-2 ring-red-500/30'
+                : 'border-red-200 bg-red-50/50 text-red-600 hover:bg-red-50';
+              icon = <XCircle size={16} />;
+            } else if (mark === 'no-class') {
+              btnClass = active
+                ? 'border-purple-500 bg-purple-50 text-purple-700 ring-2 ring-purple-500/30'
+                : 'border-purple-200 bg-purple-50/50 text-purple-700 hover:bg-purple-50';
+              icon = <CalendarX size={16} />;
+            } else {
+              btnClass = active
+                ? 'border-gray-500 bg-gray-100 text-gray-700 ring-2 ring-gray-400/30'
+                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100';
+              icon = <Clock size={16} />;
+            }
+            return (
+              <button
+                key={mark}
+                onClick={() => setSelectedMark(mark as AttendanceMark | 'none')}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border-2 text-sm font-bold transition-all active:scale-95 ${btnClass}`}
+              >
+                {icon}
+                {mark === 'none' ? 'Clear mark' : MARK_LABELS[mark]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs font-semibold text-gray-600">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-emerald-100 border-2 border-emerald-400 flex items-center justify-center">
             <CheckCircle2 size={14} className="text-emerald-600" />
           </div>
-          <span>Present — click to mark absent</span>
+          <span>Present</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-red-100 border-2 border-red-400 flex items-center justify-center">
             <XCircle size={14} className="text-red-500" />
           </div>
-          <span>Absent — click to mark no class</span>
+          <span>Absent</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-purple-100 border-2 border-purple-400 flex items-center justify-center">
             <CalendarX size={14} className="text-purple-600" />
           </div>
-          <span>No Class — click to clear</span>
+          <span>No Class</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
             <Clock size={14} className="text-gray-400" />
           </div>
-          <span>Not yet marked — click to mark present</span>
+          <span>Not yet marked (not counted as absent)</span>
         </div>
       </div>
 
@@ -374,10 +406,10 @@ export const Attendance = () => {
                         return (
                           <button
                             key={day.date}
-                            onClick={() => handleToggleDay(tutee, day.date, day.status)}
+                            onClick={() => handleApplyMark(tutee, day.date, day.status)}
                             disabled={isToggling}
                             className={`relative flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl border-2 transition-all cursor-pointer active:scale-95 ${cardClass} ${isToday ? 'ring-2 ring-primary ring-offset-1' : ''} ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={`${format(baseDate, 'EEEE, MMM dd')} — Click to mark ${day.status === 'none' ? 'Present' : day.status === 'present' ? 'Absent' : day.status === 'absent' ? 'No Class' : 'Unmarked'}`}
+                            title={`${format(baseDate, 'EEEE, MMM dd')} — Tap to apply "${selectedMark === 'none' ? 'Clear mark' : MARK_LABELS[selectedMark]}"`}
                           >
                             {isToggling ? (
                               <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>

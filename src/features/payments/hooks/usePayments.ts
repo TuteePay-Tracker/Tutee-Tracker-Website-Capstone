@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
+import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 
 export const usePayments = () => {
   const { user } = useAuth();
@@ -66,6 +67,11 @@ export const usePayments = () => {
     try {
       const newPayment = await paymentService.create(payment, tutorId);
       setPayments(prev => [newPayment, ...prev]);
+      // Keep the tutee's canonical totals (totalSessions/totalPaid/balance) in sync.
+      // paymentService.create no longer mutates the tutee itself.
+      if (newPayment.status !== 'pending') {
+        await dayPaymentService.syncTuteeTotals(newPayment.tuteeId, tutorId);
+      }
       if (user) {
         await logActivity(
           user.id,
