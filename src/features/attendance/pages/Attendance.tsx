@@ -24,7 +24,7 @@ import { db } from '@/shared/lib/firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
-import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
+import { belongsToSchoolYear, isMonthInSchoolYear } from '@/shared/utils/schoolYear';
 
 import { Link } from 'react-router';
 
@@ -38,13 +38,24 @@ const MARK_LABELS: Record<AttendanceStatus, string> = {
 export const Attendance = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
-  const { selectedYear } = useSchoolYear();
+  const { selectedYear, startMonth } = useSchoolYear();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedTuteeId, setSelectedTuteeId] = useState<string>('');
   const [records, setRecords] = useState<Record<string, PaymentRecord | null>>({});
   const [loadingRecords, setLoadingRecords] = useState<Record<string, boolean>>({});
   const [togglingDay, setTogglingDay] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<AttendanceMark | 'none'>('present');
+
+  // Align selectedMonth when selectedYear or startMonth changes if it falls outside the active school year
+  useEffect(() => {
+    const currentMonthKey = format(selectedMonth, 'yyyy-MM');
+    if (!isMonthInSchoolYear(currentMonthKey, selectedYear, startMonth)) {
+      const startYear = parseInt(selectedYear.split('-')[0], 10);
+      if (!isNaN(startYear)) {
+        setSelectedMonth(new Date(startYear, startMonth - 1, 1));
+      }
+    }
+  }, [selectedYear, startMonth]);
 
   const monthKey = format(selectedMonth, 'yyyy-MM');
 
@@ -78,7 +89,7 @@ export const Attendance = () => {
       snapshot.docs.forEach(docSnap => {
         const data = docSnap.data();
         // Only show attendance belonging to the selected school year.
-        if (!belongsToSchoolYear(selectedYear, data)) return;
+        if (!belongsToSchoolYear(selectedYear, data, startMonth)) return;
         const tuteeId = data.tuteeId;
         results[`${tuteeId}_${monthKey}`] = {
           id: docSnap.id,

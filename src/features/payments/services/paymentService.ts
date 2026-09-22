@@ -1,11 +1,11 @@
 import { Payment } from '@/features/payments/types/payment';
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  addDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
@@ -35,7 +35,7 @@ class PaymentService {
       const collectionRef = this.getCollectionRef(tutorId);
       const q = query(collectionRef, orderBy('paymentDate', 'desc'));
       const querySnapshot = await getDocs(q);
-      
+
       return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -53,7 +53,7 @@ class PaymentService {
       const userId = this.getUserId();
       const docRef = doc(db, 'users', userId, 'payments', id);
       const docSnap = await getDoc(docRef);
-      
+
       if (docSnap.exists()) {
         return {
           id: docSnap.id,
@@ -73,18 +73,21 @@ class PaymentService {
     try {
       const collectionRef = this.getCollectionRef(tutorId);
       const q = query(
-        collectionRef, 
-        where('tuteeId', '==', tuteeId),
-        orderBy('paymentDate', 'desc')
+        collectionRef,
+        where('tuteeId', '==', tuteeId)
       );
       const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
+
+      const list = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         paymentDate: doc.data().paymentDate,
         createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       } as Payment));
+
+      // Sort in memory to avoid composite index requirements
+      list.sort((a, b) => (b.paymentDate || '').localeCompare(a.paymentDate || ''));
+      return list;
     } catch (error) {
       console.error('Error fetching payments by tutee:', error);
       throw error;
@@ -95,7 +98,7 @@ class PaymentService {
     try {
       const userId = tutorId || this.getUserId();
       if (!userId) {
-        return () => {};
+        return () => { };
       }
       const collectionRef = collection(db, 'users', userId, 'payments');
       const q = query(collectionRef, orderBy('paymentDate', 'desc'));
@@ -113,7 +116,7 @@ class PaymentService {
       });
     } catch (error) {
       console.error('Error setting up payments subscription:', error);
-      return () => {};
+      return () => { };
     }
   }
 
@@ -121,13 +124,12 @@ class PaymentService {
     try {
       const userId = tutorId || this.getUserId();
       if (!userId) {
-        return () => {};
+        return () => { };
       }
       const collectionRef = collection(db, 'users', userId, 'payments');
       const q = query(
-        collectionRef, 
-        where('tuteeId', '==', tuteeId),
-        orderBy('paymentDate', 'desc')
+        collectionRef,
+        where('tuteeId', '==', tuteeId)
       );
 
       return onSnapshot(q, (querySnapshot) => {
@@ -137,13 +139,14 @@ class PaymentService {
           paymentDate: docSnap.data().paymentDate,
           createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         } as Payment));
+        list.sort((a, b) => (b.paymentDate || '').localeCompare(a.paymentDate || ''));
         callback(list);
       }, (error) => {
         console.error('Error in payments subscription by tutee:', error);
       });
     } catch (error) {
       console.error('Error setting up payments subscription by tutee:', error);
-      return () => {};
+      return () => { };
     }
   }
 
@@ -168,7 +171,7 @@ class PaymentService {
       );
 
       const docRef = await addDoc(collectionRef, paymentData);
-      
+
       if (payment.status !== 'pending') {
         // Create transaction record in the subcollection for backward compatibility and real-time syncing.
         // NOTE: tutee totals (totalSessions/totalPaid/balance) are synced by
@@ -190,7 +193,7 @@ class PaymentService {
           createdAt: Timestamp.fromDate(now),
         });
       }
-      
+
       return {
         id: docRef.id,
         ...payment,

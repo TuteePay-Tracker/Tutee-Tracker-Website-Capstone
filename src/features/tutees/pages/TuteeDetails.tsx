@@ -282,7 +282,7 @@ export const TuteeDetails = () => {
     const avg = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
     const improvement = scores.length >= 2 ? Math.max(...scores) - Math.min(...scores) : 0;
     const latestScore = scores[scores.length - 1];
-    
+
     // Calculate slope (trend)
     const n = scores.length;
     let trend = 0;
@@ -302,7 +302,7 @@ export const TuteeDetails = () => {
 
   const subjectSummaries = useMemo(() => {
     if (!studentAssessments.length) return [];
-    
+
     const bySubject: Record<string, typeof studentAssessments> = {};
     studentAssessments.forEach(a => {
       if (!bySubject[a.subject]) bySubject[a.subject] = [];
@@ -403,8 +403,8 @@ export const TuteeDetails = () => {
 
   const currentMonthStr = format(new Date(), 'yyyy-MM');
   const currentMonthRecord = attendanceRecords.find(r => r.month === currentMonthStr);
-  const isCurrentMonthFullyPaid = currentMonthRecord 
-    ? currentMonthRecord.totalBalance <= 0 
+  const isCurrentMonthFullyPaid = currentMonthRecord
+    ? currentMonthRecord.totalBalance <= 0
     : false;
 
   return (
@@ -432,8 +432,8 @@ export const TuteeDetails = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
-                  ? 'border-green-700 text-green-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-green-700 text-green-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               {tab.name}
@@ -562,11 +562,10 @@ export const TuteeDetails = () => {
                                 });
                               }
                             }}
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-all ${
-                              isSelected
+                            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-all ${isSelected
                                 ? 'bg-green-700 border-green-700 text-white shadow-sm'
                                 : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                            }`}
+                              }`}
                           >
                             {s.name}
                           </button>
@@ -608,15 +607,13 @@ export const TuteeDetails = () => {
                               key={day}
                               type="button"
                               onClick={() => toggleEditDay(day)}
-                              className={`flex items-center gap-2 p-2 border rounded-lg text-xs font-medium transition-colors text-left ${
-                                isSelected
+                              className={`flex items-center gap-2 p-2 border rounded-lg text-xs font-medium transition-colors text-left ${isSelected
                                   ? 'bg-green-50 border-green-700 text-green-900 font-semibold'
                                   : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'
-                              }`}
+                                }`}
                             >
-                              <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${
-                                isSelected ? 'bg-green-700 border-green-700 text-white' : 'border-gray-300 bg-white'
-                              }`}>
+                              <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${isSelected ? 'bg-green-700 border-green-700 text-white' : 'border-gray-300 bg-white'
+                                }`}>
                                 {isSelected && <CheckCircle2 size={10} className="stroke-[3]" />}
                               </div>
                               <span>{day}</span>
@@ -774,10 +771,10 @@ export const TuteeDetails = () => {
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="font-medium text-gray-600">Remaining Balance</span>
                     <span className={`font-bold text-lg ${isFull
-                        ? 'text-green-600'
-                        : isPartial
-                          ? 'text-orange-600'
-                          : 'text-gray-500'
+                      ? 'text-green-600'
+                      : isPartial
+                        ? 'text-orange-600'
+                        : 'text-gray-500'
                       }`}>
                       ₱{remainingBalance.toLocaleString()}
                     </span>
@@ -1075,19 +1072,16 @@ export const TuteeDetails = () => {
 
                 {/* Score Trend */}
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
-                  <div className={`absolute top-0 right-0 w-24 h-24 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300 ${
-                    assessmentSummary.trend > 1 ? 'bg-emerald-50' : assessmentSummary.trend < -1 ? 'bg-red-50' : 'bg-gray-50'
-                  }`} />
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative shrink-0 ${
-                    assessmentSummary.trend > 1 ? 'bg-emerald-50 text-emerald-700' : assessmentSummary.trend < -1 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
-                  }`}>
+                  <div className={`absolute top-0 right-0 w-24 h-24 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300 ${assessmentSummary.trend > 1 ? 'bg-emerald-50' : assessmentSummary.trend < -1 ? 'bg-red-50' : 'bg-gray-50'
+                    }`} />
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative shrink-0 ${assessmentSummary.trend > 1 ? 'bg-emerald-50 text-emerald-700' : assessmentSummary.trend < -1 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
+                    }`}>
                     {assessmentSummary.trend > 1 ? <TrendingUp size={22} /> : assessmentSummary.trend < -1 ? <TrendingDown size={22} /> : <Minus size={22} />}
                   </div>
                   <div className="relative">
                     <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Score Trend</p>
-                    <p className={`text-2xl font-bold mt-0.5 ${
-                      assessmentSummary.trend > 1 ? 'text-emerald-600' : assessmentSummary.trend < -1 ? 'text-red-600' : 'text-gray-500'
-                    }`}>{Math.abs(assessmentSummary.trend)}</p>
+                    <p className={`text-2xl font-bold mt-0.5 ${assessmentSummary.trend > 1 ? 'text-emerald-600' : assessmentSummary.trend < -1 ? 'text-red-600' : 'text-gray-500'
+                      }`}>{Math.abs(assessmentSummary.trend)}</p>
                   </div>
                 </div>
               </div>
@@ -1159,11 +1153,10 @@ export const TuteeDetails = () => {
                       <span className="text-xs px-2.5 py-1 bg-green-50 text-green-700 font-bold border border-green-200 rounded-full">
                         {a.subject}
                       </span>
-                      <span className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${
-                        a.remarks === 'Excellent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        a.remarks === 'Good' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                        'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
+                      <span className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${a.remarks === 'Excellent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          a.remarks === 'Good' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
                         {a.remarks}
                       </span>
                     </div>
@@ -1186,12 +1179,12 @@ export const TuteeDetails = () => {
                           </span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {a.assessmentScores.map((s, idx) => {
-                              const rowPct = s.totalScore > 0 
-                                ? Math.round((s.score / s.totalScore) * 100) 
+                              const rowPct = s.totalScore > 0
+                                ? Math.round((s.score / s.totalScore) * 100)
                                 : 0;
                               return (
                                 <div key={idx} className="bg-white border border-gray-150 rounded-xl px-4 py-3 flex justify-between items-center shadow-sm">
-                                  <span className="font-bold text-gray-800 truncate">{s.name || `Score ${idx+1}`}</span>
+                                  <span className="font-bold text-gray-800 truncate">{s.name || `Score ${idx + 1}`}</span>
                                   <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg text-xs shrink-0">
                                     {s.score} / {s.totalScore} pts ({rowPct}%)
                                   </span>
@@ -1550,8 +1543,8 @@ const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose,
                     type="button"
                     onClick={() => setSelectedMethod(m)}
                     className={`px-4 py-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 transition-all ${selectedMethod === m
-                        ? 'border-green-600 bg-green-50/50 text-green-800'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'border-green-600 bg-green-50/50 text-green-800'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
                       }`}
                   >
                     {m === 'gcash' ? (

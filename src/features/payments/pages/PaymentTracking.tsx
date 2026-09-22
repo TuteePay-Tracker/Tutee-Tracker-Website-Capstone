@@ -10,8 +10,10 @@ import { dayPaymentService } from '@/features/attendance/services/dayPaymentServ
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 export const PaymentTracking = () => {
+  const { user } = useAuth();
   const { tutees, isLoading: loadingTutees } = useTutees();
   const { payments, refreshPayments, isLoading: loadingPayments } = usePayments();
   const { selectedYear } = useSchoolYear();
@@ -25,6 +27,15 @@ export const PaymentTracking = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [coverageType, setCoverageType] = useState<'full' | 'partial'>('full');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Auto-sync all tutees in the background on mount to ensure fresh per-year totals
+  useEffect(() => {
+    if (tutees.length > 0 && user?.id && user?.role !== 'parent') {
+      tutees.forEach((t) => {
+        dayPaymentService.syncTuteeTotals(t.id, user.id).catch(() => {});
+      });
+    }
+  }, [tutees.length, user?.id]);
 
   useEffect(() => {
     if (reviewingPayment) {
@@ -258,17 +269,17 @@ export const PaymentTracking = () => {
                   )}
                   <div className="text-right">
                     <p className="text-xs text-gray-500 font-medium">Status</p>
-                    {yearTotals.totalPaid > 0 && yearTotals.balance <= 0 ? (
+                    {yearTotals.totalSessions > 0 && yearTotals.balance <= 0 ? (
                       <span className="inline-flex items-center gap-1 text-sm font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                         ✓ Paid
                       </span>
-                    ) : yearTotals.totalPaid > 0 && yearTotals.balance > 0 ? (
+                    ) : yearTotals.balance > 0 ? (
                       <span className="inline-flex items-center gap-1 text-sm font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
                         ₱{yearTotals.balance.toFixed(2)} due
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-sm font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                        Unpaid
+                        Unbilled
                       </span>
                     )}
                   </div>

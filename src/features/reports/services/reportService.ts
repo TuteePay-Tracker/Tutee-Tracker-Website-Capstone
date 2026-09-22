@@ -547,9 +547,14 @@ class ReportService {
       return d >= dateRange.start && d <= dateRange.end;
     };
 
-    const payments = dateRange
+    const rawPayments = dateRange
       ? allPayments.filter((p) => inRange(p.paymentDate || (p as any).createdAt || ''))
       : allPayments;
+
+    // Only confirmed / verified payments count toward earnings metrics
+    const payments = rawPayments.filter(
+      (p) => p.status !== 'pending' && p.status !== 'rejected'
+    );
 
     const assessments = dateRange
       ? allAssessments.filter((a) => inRange(a.date || a.createdAt || ''))

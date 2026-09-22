@@ -14,6 +14,7 @@ import { Schedule } from '@/features/schedule/pages/Schedule';
 import { Chat } from '@/features/chat/pages/Chat';
 import { Announcements } from '@/features/announcements/pages/Announcements';
 import { TuteeProgress } from '@/features/tutee-progress/pages/TuteeProgress';
+import { AssessmentFormPage } from '@/features/tutee-progress/pages/AssessmentFormPage';
 import { Login } from '@/features/auth/pages/Login';
 import { Signup } from '@/features/auth/pages/Signup';
 import { ForgotPassword } from '@/features/auth/pages/ForgotPassword';
@@ -169,6 +170,22 @@ export const router = createBrowserRouter([
       {
         path: 'tutee-progress',
         element: <TuteeProgress />,
+      },
+      {
+        path: 'tutee-progress/assessment/new',
+        element: (
+          <ProtectedRoute tutorOnly>
+            <AssessmentFormPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'tutee-progress/assessment/:id',
+        element: (
+          <ProtectedRoute tutorOnly>
+            <AssessmentFormPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'my-children',

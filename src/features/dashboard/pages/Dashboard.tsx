@@ -707,12 +707,8 @@ export const Dashboard = () => {
     priority: 'medium'
   });
 
-  // Filter payments to selected school year
-  const syPayments = payments.filter((p) => {
-    const dateStr = p.paymentDate || (p as any).createdAt;
-    if (!dateStr) return false;
-    return isInSchoolYear(dateStr, selectedYear);
-  });
+  // All payments already scoped to selected school year via usePayments
+  const syPayments = payments;
 
   useEffect(() => {
     if (user?.id && user.role === 'tutor') {
@@ -763,7 +759,7 @@ export const Dashboard = () => {
   };
 
   const totalLifetimeEarnings = syPayments
-    .filter(p => p.status === 'verified' || !p.status)
+    .filter(p => p.status !== 'pending' && p.status !== 'rejected')
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
   // Show parent-specific view

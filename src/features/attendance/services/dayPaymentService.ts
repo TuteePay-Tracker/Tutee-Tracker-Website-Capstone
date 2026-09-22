@@ -42,6 +42,10 @@ class DayPaymentService {
     return collection(db, 'users', userId, 'paymentTransactions');
   }
 
+  // Serialize syncTuteeTotals per (tutor, tutee) so concurrent syncs (delete + re-add,
+  // migration, payment recording) never produce a stale last-write that drops a month's totals.
+  private syncQueues = new Map<string, Promise<void>>();
+
   // Get or create payment record for a specific month and tutee
   async getMonthlyRecord(tuteeId: string, month: string, tutorId?: string): Promise<PaymentRecord> {
     try {
@@ -77,8 +81,10 @@ class DayPaymentService {
         throw new Error('Monthly payment record not found');
       }
 
-      // Create new record if it doesn't exist
-      return await this.createMonthlyRecord(tuteeId, month);
+      // A billing month must only exist after the tutor explicitly initialized it
+      // ("+ Add Month"). Never auto-create a record from a read — that caused months to
+      // appear in the tracker before the tutor ever added them.
+      throw new Error('Monthly payment record not found');
     } catch (error) {
       console.error('Error getting monthly record:', error);
       throw error;
@@ -157,7 +163,7 @@ class DayPaymentService {
         }
       }
 
-      await this.syncTuteeTotals(tuteeId);
+      await this.syncTuteeTotals(tuteeId, userId);
 
       return {
         id: recordId,
@@ -191,7 +197,7 @@ class DayPaymentService {
           const newAmountPaid = day.amountPaid + payment.amountPaid;
           const newStatus: PaymentStatus =
             newAmountPaid >= day.amountDue ? 'paid' :
-            newAmountPaid > 0 ? 'partial' : 'unpaid';
+              newAmountPaid > 0 ? 'partial' : 'unpaid';
 
           return {
             ...day,
@@ -540,17 +546,20 @@ class DayPaymentService {
       const recordsRef = this.getPaymentRecordsRef(tutorId);
       const q = query(
         recordsRef,
-        where('tuteeId', '==', tuteeId),
-        orderBy('month', 'desc')
+        where('tuteeId', '==', tuteeId)
       );
 
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
+      const records = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         lastUpdated: doc.data().lastUpdated?.toDate?.()?.toISOString() || new Date().toISOString(),
         createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       } as PaymentRecord));
+
+      // Sort in memory by month descending to avoid composite index requirements
+      records.sort((a, b) => b.month.localeCompare(a.month));
+      return records;
     } catch (error) {
       console.error('Error getting records:', error);
       throw error;
@@ -560,9 +569,11 @@ class DayPaymentService {
   async removeMonthlyRecord(tuteeId: string, month: string): Promise<void> {
     try {
       const userId = this.getUserId();
-      const record = await this.getMonthlyRecord(tuteeId, month);
       const recordId = `${tuteeId}_${month}`;
       const recordDocRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+
+      // Read the record directly so removing a month never re-creates it.
+      const recordSnap = await getDoc(recordDocRef);
 
       const payments = await paymentService.getByTuteeId(tuteeId, userId);
       const paymentsToDelete = payments.filter((payment: any) => payment.month === month);
@@ -582,10 +593,12 @@ class DayPaymentService {
         }
       }
 
-      await deleteDoc(recordDocRef);
+      if (recordSnap.exists()) {
+        await deleteDoc(recordDocRef);
+      }
       await this.syncTuteeTotals(tuteeId, userId);
 
-      console.info(`Removed monthly billing record ${recordId}`, record);
+      console.info(`Removed monthly billing record ${recordId}`, recordSnap.data());
     } catch (error) {
       console.error('Error removing monthly record:', error);
       throw error;
@@ -593,6 +606,19 @@ class DayPaymentService {
   }
 
   async syncTuteeTotals(tuteeId: string, tutorId?: string): Promise<void> {
+    // Chain concurrent sync calls per (tutor, tutee) so each one recomputes from fresh
+    // data and no stale read-modify-write can clobber a newer result (delete → re-add race).
+    const userId = tutorId || auth.currentUser?.uid;
+    const key = `${userId || ''}|${tuteeId}`;
+    const previous = this.syncQueues.get(key) || Promise.resolve();
+    const run = previous
+      .catch(() => {})
+      .then(() => this.performSyncTuteeTotals(tuteeId, userId));
+    this.syncQueues.set(key, run);
+    return run;
+  }
+
+  private async performSyncTuteeTotals(tuteeId: string, tutorId?: string): Promise<void> {
     try {
       const userId = tutorId || this.getUserId();
       const records = await this.getRecordsByTutee(tuteeId, userId);
@@ -604,41 +630,47 @@ class DayPaymentService {
         (p) => p.status !== 'pending' && p.status !== 'rejected'
       );
 
-      // Billed months = months that have either a monthly record or a confirmed payment.
-      // This matches Total Due with reality even when a month was paid without a pre-created record.
-      const billedMonths = new Set<string>();
-      records.forEach((r) => {
-        if (r.month) billedMonths.add(r.month);
-      });
-      payments.forEach((p) => {
-        if (p.month) billedMonths.add(p.month);
-      });
-
       // Per-year financial rollups.
+      // Billed months come ONLY from monthly records the tutor explicitly initialized
+      // ("+ Add Month"). Payments never create a billing month — a payment recorded via
+      // the Payments tab without a matching record must not inflate the month count or
+      // the amount due. Payments still count toward the year's paid total.
       const yearMap = new Map<string, {
         months: Set<string>;
         paid: number;
         lastPaymentDate?: string;
       }>();
 
-      const addMonth = (month: string | undefined | null, paid: number, paymentDate?: string) => {
-        if (!month) return;
-        const year = getSchoolYearFromMonth(month) || '';
-        if (!year) return;
+      const ensureYear = (month: string) => {
+        const year = getSchoolYearFromMonth(month);
+        if (!year) return undefined;
         let entry = yearMap.get(year);
         if (!entry) {
           entry = { months: new Set(), paid: 0 };
           yearMap.set(year, entry);
         }
+        return entry;
+      };
+
+      const addRecordMonth = (month: string | undefined | null) => {
+        if (!month) return;
+        const entry = ensureYear(month);
+        if (!entry) return;
         entry.months.add(month);
+      };
+
+      const addPaidAmount = (month: string | undefined | null, paid: number, paymentDate?: string) => {
+        if (!month) return;
+        const entry = ensureYear(month);
+        if (!entry) return;
         entry.paid += paid;
         if (paymentDate && (!entry.lastPaymentDate || paymentDate > entry.lastPaymentDate)) {
           entry.lastPaymentDate = paymentDate;
         }
       };
 
-      records.forEach((r) => addMonth(r.month, 0));
-      payments.forEach((p) => addMonth(p.month || p.paymentDate?.slice(0, 7), p.amount, p.paymentDate));
+      records.forEach((r) => addRecordMonth(r.month));
+      payments.forEach((p) => addPaidAmount(p.month || p.paymentDate?.slice(0, 7), p.amount, p.paymentDate));
 
       const totalsByYear: Record<string, { totalSessions: number; totalPaid: number; balance: number; lastPaymentDate?: string }> = {};
 
@@ -662,12 +694,15 @@ class DayPaymentService {
         const sessions = entry.months.size;
         const due = sessions * tutee.ratePerSession;
         const balance = Math.round((due - entry.paid) * 100) / 100;
-        totalsByYear[year] = {
+        const yearData: { totalSessions: number; totalPaid: number; balance: number; lastPaymentDate?: string } = {
           totalSessions: sessions,
           totalPaid: Math.round(entry.paid * 100) / 100,
           balance,
-          lastPaymentDate: entry.lastPaymentDate,
         };
+        if (entry.lastPaymentDate) {
+          yearData.lastPaymentDate = entry.lastPaymentDate;
+        }
+        totalsByYear[year] = yearData;
         totalSessions += sessions;
         totalPaid += entry.paid;
       });
@@ -677,7 +712,7 @@ class DayPaymentService {
       const balance = Math.round((totalDue - totalPaid) * 100) / 100;
 
       // Find latest payment date overall
-      let lastPaymentDate = undefined;
+      let lastPaymentDate: string | undefined = undefined;
       if (payments.length > 0) {
         const sorted = [...payments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
         lastPaymentDate = sorted[0].paymentDate;
@@ -689,7 +724,7 @@ class DayPaymentService {
         balance,
         lastPaymentDate,
         totalsByYear,
-      });
+      }, userId);
     } catch (error) {
       console.error('Error syncing tutee totals:', error);
     }
@@ -863,7 +898,7 @@ class DayPaymentService {
       const userId = this.getUserId();
       const paymentDocRef = doc(db, 'users', userId, 'payments', paymentId);
       const paymentSnap = await getDoc(paymentDocRef);
-      
+
       let newNotes = rejectionReason ? `Rejected: ${rejectionReason}` : 'Rejected by tutor';
       if (paymentSnap.exists()) {
         const currentNotes = paymentSnap.data().notes || '';

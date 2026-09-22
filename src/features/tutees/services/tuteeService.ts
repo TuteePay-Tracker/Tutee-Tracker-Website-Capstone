@@ -23,6 +23,22 @@ const calculateBalance = (totalSessions: number, ratePerSession: number, totalPa
   return Math.round(((totalSessions || 0) * (ratePerSession || 0) - (totalPaid || 0)) * 100) / 100;
 };
 
+function sanitizeForFirestore(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date || obj instanceof Timestamp) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore).filter(v => v !== undefined);
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = sanitizeForFirestore(value);
+    }
+  }
+  return result;
+}
+
 class TuteeService {
   private getUserId(providedId?: string): string {
     const userId = providedId || auth.currentUser?.uid;
@@ -218,12 +234,10 @@ class TuteeService {
       const userId = this.getUserId(tutorId);
       const docRef = doc(db, 'users', userId, 'tutees', id);
 
-      const cleanedUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, value]) => value !== undefined)
-      );
+      const sanitizedUpdates = sanitizeForFirestore(updates) || {};
 
       const updateData: any = {
-        ...cleanedUpdates,
+        ...sanitizedUpdates,
         updatedAt: Timestamp.fromDate(new Date()),
       };
 

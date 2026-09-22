@@ -72,7 +72,6 @@ import {
   Star,
   BookOpen,
   Plus,
-  X,
   ChevronUp,
   ChevronDown,
   Activity,
@@ -82,17 +81,14 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
-import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { assessmentService } from '@/features/tutee-progress/services/assessmentService';
 import { logActivity } from '@/shared/utils/auditLogger';
 import {
   Assessment,
-  AssessmentFormData,
-  AssessmentScore,
-  REMARKS_OPTIONS,
   scoreToRemarks,
   StudentPerformance,
   SubjectSummary,
@@ -226,465 +222,6 @@ function RemarksBadge({ remarks }: { remarks: Assessment['remarks'] }) {
   );
 }
 
-// ─── Assessment Form Modal ────────────────────────────────────────────────────
-
-interface AssessmentModalProps {
-  tutorId: string;
-  tutees: { id: string; firstName: string; surname: string }[];
-  subjects: string[];
-  defaultSubject?: string;
-  editing?: Assessment | null;
-  onClose: () => void;
-}
-
-function AssessmentModal({
-  tutorId,
-  tutees,
-  subjects,
-  defaultSubject,
-  editing,
-  onClose,
-}: AssessmentModalProps) {
-  const { user } = useAuth();
-  const getInitialScores = (): AssessmentScore[] => {
-    if (!editing?.assessmentScores || editing.assessmentScores.length === 0) {
-      return [{ name: '', score: 0, totalScore: 100 }];
-    }
-    return editing.assessmentScores.map(s => ({
-      name: s.name || '',
-      score: s.score || 0,
-      totalScore: s.totalScore || 100
-    }));
-  };
-
-  const [form, setForm] = useState<AssessmentFormData>({
-    tuteeId: editing?.tuteeId ?? '',
-    tuteeName: editing?.tuteeName ?? '',
-    subject: editing?.subject ?? defaultSubject ?? subjects[0] ?? '',
-    date: editing?.date ?? new Date().toISOString().slice(0, 10),
-    topic: editing?.topic ?? '',
-    assessmentScores: getInitialScores(),
-    totalScore: editing?.totalScore ?? undefined,
-    topicsCovered: editing?.topicsCovered ?? '',
-    notes: editing?.notes ?? '',
-    recommendations: editing?.recommendations ?? '',
-    score: editing?.score ?? 0,
-    remarks: editing?.remarks ?? 'Good',
-  });
-  const [saving, setSaving] = useState(false);
-
-  const calculateScoreAndRemarks = (scores: AssessmentScore[]) => {
-    const earnedPoints = scores.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
-    const totalPoints = scores.reduce((sum, s) => sum + (Number(s.totalScore) || 0), 0);
-    let avgPercentage = 0;
-    if (totalPoints > 0) {
-      avgPercentage = Math.round((earnedPoints / totalPoints) * 100);
-    }
-    return {
-      score: avgPercentage,
-      totalScore: totalPoints,
-      remarks: scoreToRemarks(avgPercentage),
-    };
-  };
-
-  const handleTuteeChange = (id: string) => {
-    const found = tutees.find((t) => t.id === id);
-    setForm((f) => ({
-      ...f,
-      tuteeId: id,
-      tuteeName: found ? `${found.firstName} ${found.surname}` : '',
-    }));
-  };
-
-  const updateAssessmentScore = (index: number, field: 'name' | 'score' | 'totalScore', value: string | number) => {
-    setForm((prev) => {
-      const newScores = prev.assessmentScores.map((score, idx) => {
-        if (idx !== index) return score;
-        return { ...score, [field]: value };
-      });
-      const { score, totalScore, remarks } = calculateScoreAndRemarks(newScores);
-      return {
-        ...prev,
-        assessmentScores: newScores,
-        score,
-        totalScore,
-        remarks,
-      };
-    });
-  };
-
-  const addAssessmentScore = () => {
-    setForm((prev) => {
-      const newScores = [...prev.assessmentScores, { name: '', score: 0, totalScore: 100 }];
-      const { score, totalScore, remarks } = calculateScoreAndRemarks(newScores);
-      return {
-        ...prev,
-        assessmentScores: newScores,
-        score,
-        totalScore,
-        remarks,
-      };
-    });
-  };
-
-  const removeAssessmentScore = (index: number) => {
-    setForm((prev) => {
-      const newScores = prev.assessmentScores.length === 1
-        ? [{ name: '', score: 0, totalScore: 100 }]
-        : prev.assessmentScores.filter((_, idx) => idx !== index);
-      const { score, totalScore, remarks } = calculateScoreAndRemarks(newScores);
-      return {
-        ...prev,
-        assessmentScores: newScores,
-        score,
-        totalScore,
-        remarks,
-      };
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.tuteeId) {
-      toast.error('Please select a student');
-      return;
-    }
-    if (!form.topic.trim()) {
-      toast.error('Please enter a lesson Topic');
-      return;
-    }
-    if (!form.notes.trim()) {
-      toast.error('Please fill out all required fields');
-      return;
-    }
-    if (form.assessmentScores.length === 0 || form.assessmentScores.some(s => !s.name.trim())) {
-      toast.error('Please enter a name for all assessment scores');
-      return;
-    }
-    if (form.assessmentScores.some(s => s.score < 0 || s.totalScore <= 0)) {
-      toast.error('Scores and total possible points must be positive numbers');
-      return;
-    }
-    if (form.assessmentScores.some(s => s.score > s.totalScore)) {
-      toast.error('Student score cannot exceed the maximum possible points');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const dataToSave = {
-        ...form,
-        topicsCovered: form.topic
-      };
-      if (editing) {
-        await assessmentService.update(tutorId, editing.id, dataToSave);
-        toast.success('Assessment updated');
-        if (user) {
-          await logActivity(
-            user.id,
-            user.name,
-            user.role,
-            'Assessment Updated',
-            'Tutee Progress',
-            `Updated assessment for student ${form.tuteeName} in ${form.subject}`
-          );
-          await logActivity(
-            user.id,
-            user.name,
-            user.role,
-            'Scores Recorded',
-            'Tutee Progress',
-            `Recorded scores for student ${form.tuteeName} in ${form.subject}`
-          );
-        }
-      } else {
-        await assessmentService.add(tutorId, dataToSave);
-        toast.success('Assessment recorded!');
-        if (user) {
-          await logActivity(
-            user.id,
-            user.name,
-            user.role,
-            'Assessment Created',
-            'Tutee Progress',
-            `Created assessment for student ${form.tuteeName} in ${form.subject}`
-          );
-          await logActivity(
-            user.id,
-            user.name,
-            user.role,
-            'Scores Recorded',
-            'Tutee Progress',
-            `Recorded scores for student ${form.tuteeName} in ${form.subject}`
-          );
-        }
-      }
-      onClose();
-    } catch {
-      toast.error('Failed to save assessment');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 my-8">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-green-700 to-emerald-600 p-5 text-white flex justify-between items-center">
-          <div>
-            <h3 className="font-bold text-lg">
-              {editing ? 'Edit Assessment' : 'Add Assessment'}
-            </h3>
-            <p className="text-green-100 text-xs mt-0.5">Record student performance</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Student selection + Date & Subject */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
-                Student
-              </label>
-              <select
-                required
-                value={form.tuteeId}
-                onChange={(e) => handleTuteeChange(e.target.value)}
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-medium"
-              >
-                <option value="">Select student…</option>
-                {tutees.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.firstName} {t.surname}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
-                Subject
-              </label>
-              <select
-                value={form.subject}
-                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-medium"
-              >
-                {subjects.length === 0 ? (
-                  <option value="" disabled>No subjects configured</option>
-                ) : (
-                  subjects.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
-                Date
-              </label>
-              <input
-                type="date"
-                required
-                value={form.date}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
-                Lesson Topic *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g., Fractions"
-                value={form.topic}
-                onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
-              />
-            </div>
-          </div>
-
-          {/* Assessment scores dynamic layout */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider">
-                Assessment Scores <span className="text-red-500">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={addAssessmentScore}
-                className="text-xs font-semibold text-green-700 hover:text-green-800 flex items-center gap-1"
-              >
-                <span>+ Add Score</span>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {form.assessmentScores.map((scoreItem, index) => {
-                const pct = scoreItem.totalScore > 0 
-                  ? Math.round((scoreItem.score / scoreItem.totalScore) * 100) 
-                  : 0;
-                return (
-                  <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full p-3.5 border border-gray-200/80 rounded-2xl bg-gray-50/40 shadow-sm relative">
-                    {/* Assessment Name */}
-                    <div className="flex-1 w-full">
-                      <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Assessment Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={scoreItem.name}
-                        onChange={(e) => updateAssessmentScore(index, 'name', e.target.value)}
-                        placeholder="e.g. Quiz 1, Seatwork"
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm shadow-inner"
-                      />
-                    </div>
-                    
-                    {/* Scores Inputs & Percentage */}
-                    <div className="flex items-end gap-2 w-full sm:w-auto shrink-0 pt-3 sm:pt-0">
-                      <div className="relative w-20">
-                        <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Score *</label>
-                        <input
-                          type="number"
-                          min="0"
-                          required
-                          value={scoreItem.score}
-                          onChange={(e) => updateAssessmentScore(index, 'score', Number(e.target.value))}
-                          placeholder="Score"
-                          className="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-sm shadow-inner"
-                        />
-                      </div>
-                      
-                      <span className="text-gray-400 font-bold mb-2">/</span>
-                      
-                      <div className="relative w-20">
-                        <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Max *</label>
-                        <input
-                          type="number"
-                          min="1"
-                          required
-                          value={scoreItem.totalScore}
-                          onChange={(e) => updateAssessmentScore(index, 'totalScore', Number(e.target.value))}
-                          placeholder="Max"
-                          className="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-sm shadow-inner"
-                        />
-                      </div>
-
-                      {/* Computed Percentage (Read-only) */}
-                      <div className="relative w-20">
-                        <label className="block text-[9px] uppercase font-extrabold text-blue-400 tracking-wider mb-1 text-center">Percentage</label>
-                        <div className="h-9 flex items-center justify-center bg-blue-50 border border-blue-100 rounded-xl text-blue-700 font-extrabold text-xs select-none">
-                          {pct}%
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => removeAssessmentScore(index)}
-                        className="text-red-400 hover:text-red-600 p-2 rounded-xl transition-colors shrink-0 mb-0.5"
-                        title="Remove score"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Overall Calculations Live Preview */}
-          {(() => {
-            const overallEarned = form.assessmentScores.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
-            const overallTotal = form.assessmentScores.reduce((sum, s) => sum + (Number(s.totalScore) || 0), 0);
-            return (
-              <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-4 grid grid-cols-3 gap-4 text-center shadow-sm">
-                <div>
-                  <span className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider">Overall Score</span>
-                  <span className="text-base font-black text-gray-900 mt-1 block">
-                    {overallEarned} <span className="text-gray-400 font-normal">/</span> {overallTotal}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider">Overall Percentage</span>
-                  <span className="text-base font-black text-blue-600 mt-1 block">
-                    {form.score}%
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider">Performance Status</span>
-                  <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border mt-1 ${
-                    form.remarks === 'Excellent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    form.remarks === 'Good' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    {form.remarks}
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-
-
-          {/* Tutor Notes */}
-          <div>
-            <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1.5">Tutor Notes & Observations *</label>
-            <textarea
-              rows={3}
-              required
-              placeholder="How did the student perform? Any strengths or areas they struggled with?"
-              value={form.notes}
-              onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm"
-            />
-          </div>
-
-          {/* Recommendations */}
-          <div>
-            <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1.5">Recommendations (Optional)</label>
-            <textarea
-              rows={2}
-              placeholder="Suggested homework, study plans, or target practices..."
-              value={form.recommendations}
-              onChange={(e) => setForm(prev => ({ ...prev, recommendations: e.target.value }))}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm"
-            />
-          </div>
-
-          {/* Horizontal Line and Actions */}
-          <div className="pt-4 border-t flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold text-sm transition-colors text-gray-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : editing ? 'Save Changes' : 'Save Report'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 // ─── Dashboard Section ────────────────────────────────────────────────────────
 
@@ -1057,21 +594,18 @@ function DashboardSection({
 
 function SubjectSection({
   assessments,
-  tutees,
   tutorId,
   isTutor,
   subjects,
 }: {
   assessments: Assessment[];
-  tutees: any[];
   tutorId: string | undefined;
   isTutor: boolean;
   subjects: string[];
 }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeSubject, setActiveSubject] = useState<string>(subjects[0] ?? '');
-  const [showModal, setShowModal] = useState(false);
-  const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [studentPage, setStudentPage] = useState(0);
   const STUDENT_PAGE_SIZE = 3;
@@ -1167,10 +701,11 @@ function SubjectSection({
         {/* Add Assessment button (tutor only) */}
         {isTutor && tutorId && (
           <button
-            onClick={() => {
-              setEditingAssessment(null);
-              setShowModal(true);
-            }}
+            onClick={() =>
+              navigate('/tutee-progress/assessment/new', {
+                state: { subject: activeSubject || undefined },
+              })
+            }
             className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm"
           >
             <Plus size={16} />
@@ -1309,10 +844,7 @@ function SubjectSection({
                                 <div className="flex gap-1 ml-1" onClick={(e) => e.stopPropagation()}>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setEditingAssessment(a);
-                                      setShowModal(true);
-                                    }}
+                                    onClick={() => navigate(`/tutee-progress/assessment/${a.id}`)}
                                     className="p-1 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
                                     title="Edit assessment"
                                   >
@@ -1413,21 +945,6 @@ function SubjectSection({
           )}
         </div>
       )}
-
-      {/* Assessment Modal */}
-      {showModal && tutorId && (
-        <AssessmentModal
-          tutorId={tutorId}
-          tutees={tutees}
-          subjects={subjects}
-          defaultSubject={activeSubject}
-          editing={editingAssessment}
-          onClose={() => {
-            setShowModal(false);
-            setEditingAssessment(null);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -1437,7 +954,6 @@ function SubjectSection({
 export function TuteeProgress() {
   const { user } = useAuth();
   const { assessments, isLoading, tutorId } = useAssessments();
-  const { tutees } = useTutees();
   // Load subjects from Firestore `users/{tutorId}/subjects` collection.
   // useSubjects uses the current auth user internally; for parents the tutor's
   // subjects are fetched via a separate lookup using tutorId below.
@@ -1512,7 +1028,6 @@ export function TuteeProgress() {
         </div>
         <SubjectSection
           assessments={assessments}
-          tutees={tutees}
           tutorId={tutorId || undefined}
           isTutor={isTutor}
           subjects={subjectNames}

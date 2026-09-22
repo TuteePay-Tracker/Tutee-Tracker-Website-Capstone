@@ -6,19 +6,17 @@ import { ExportButton } from '@/features/reports/components/ExportButton';
 import { OverviewTab } from '@/features/reports/components/OverviewTab';
 import { AcademicTab } from '@/features/reports/components/AcademicTab';
 import { AttendanceTab } from '@/features/reports/components/AttendanceTab';
-import { AtRiskTab } from '@/features/reports/components/AtRiskTab';
 import { PaymentBehaviorTab } from '@/features/reports/components/PaymentBehaviorTab';
 import { StudentComparisonTab } from '@/features/reports/components/StudentComparisonTab';
 import {
   BarChart3,
   BookOpen,
   Calendar,
-  ShieldAlert,
   CreditCard,
   Users,
 } from 'lucide-react';
 
-type TabId = 'overview' | 'academic' | 'attendance' | 'at-risk' | 'payments' | 'comparison';
+type TabId = 'overview' | 'academic' | 'attendance' | 'payments' | 'comparison';
 
 interface Tab {
   id: TabId;
@@ -58,12 +56,6 @@ export const Reports = () => {
       id: 'attendance',
       label: 'Attendance',
       icon: <Calendar size={16} />,
-    },
-    {
-      id: 'at-risk',
-      label: 'At-Risk',
-      icon: <ShieldAlert size={16} />,
-      badge: reportData.atRiskStudents.length || undefined,
     },
     {
       id: 'payments',
@@ -136,10 +128,6 @@ export const Reports = () => {
 
         {activeTab === 'attendance' && (
           <AttendanceTab attendanceSummaries={reportData.attendanceSummaries} />
-        )}
-
-        {activeTab === 'at-risk' && (
-          <AtRiskTab atRiskStudents={reportData.atRiskStudents} />
         )}
 
         {activeTab === 'payments' && (

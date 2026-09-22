@@ -14,7 +14,7 @@ import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { setupWebPushNotifications, getNotificationPermissionState, getStoredFcmToken } from '@/shared/services/fcmService';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
-import { formatSchoolYear, getNextSchoolYear, getDefaultSchoolYears } from '@/shared/utils/schoolYear';
+import { formatSchoolYear, getNextSchoolYear, getDefaultSchoolYears, MONTH_OPTIONS } from '@/shared/utils/schoolYear';
 import gcashLogo from '@/assets/gcash-com-logo.png';
 import mayaLogo from '@/assets/id5dWPPLkV_logos.jpeg';
 
@@ -37,6 +37,8 @@ export const Settings = () => {
   const {
     selectedYear,
     setSelectedYear,
+    startMonth,
+    setStartMonth,
     availableYears,
     addSchoolYear,
     removeSchoolYear,
@@ -45,6 +47,7 @@ export const Settings = () => {
   const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'payments' | 'subjects' | 'schoolyear' | 'logs' | 'backup'>(() => {
     return (sessionStorage.getItem('settingsActiveTab') as any) || 'account';
   });
+  const [isSavingStartMonth, setIsSavingStartMonth] = useState(false);
 
   // Notification states
   const [notifications, setNotifications] = useState(true);
@@ -318,6 +321,20 @@ export const Settings = () => {
     }
     setSelectedYear(year);
     toast.success(`Now viewing ${formatSchoolYear(year)}`);
+  };
+
+  const handleStartMonthChange = async (newMonth: number) => {
+    try {
+      setIsSavingStartMonth(true);
+      await setStartMonth(newMonth);
+      const opt = MONTH_OPTIONS.find((m) => m.value === newMonth);
+      toast.success(`School year start month updated to ${opt?.label || newMonth}`);
+    } catch (error) {
+      console.error('Error changing start month:', error);
+      toast.error('Failed to update school year start month');
+    } finally {
+      setIsSavingStartMonth(false);
+    }
   };
 
   const handleRebuildTotals = async () => {
@@ -1174,8 +1191,43 @@ export const Settings = () => {
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">School Year Management</h2>
                   <p className="text-sm text-gray-500 mt-0.5">
-                    Students, payments, attendance, and reports are tracked per school year (June 1 – May 31).
+                    Configure your academic calendar cycle, add new school years, and switch active periods.
                   </p>
+                </div>
+              </div>
+
+              {/* Start Month Configuration Card */}
+              <div className="p-5 rounded-2xl border border-gray-200 bg-gray-50/70 space-y-3 shadow-inner">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Calendar size={18} className="text-green-700" />
+                      <h3 className="font-bold text-gray-900 text-sm sm:text-base">School Year Start Month (Flexible Academic Calendar)</h3>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Choose when your tutoring year begins. This automatically adapts the 12-month calendar window across all records, attendance, payments, and parent portals.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <select
+                      value={startMonth}
+                      onChange={(e) => handleStartMonthChange(Number(e.target.value))}
+                      disabled={isSavingStartMonth}
+                      className="px-3.5 py-2 bg-white border border-gray-300 rounded-xl font-bold text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-600 shadow-sm cursor-pointer disabled:opacity-50"
+                    >
+                      {MONTH_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-200/70 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <span className="font-semibold text-gray-700">Active Academic Window:</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-800 font-bold">
+                    {MONTH_OPTIONS.find((m) => m.value === startMonth)?.label.split(' ')[0]} 1 → {MONTH_OPTIONS.find((m) => m.value === (startMonth === 1 ? 12 : startMonth - 1))?.label.split(' ')[0]} {startMonth === 1 ? '(Same Year)' : '(Next Year)'}
+                  </span>
                 </div>
               </div>
 
@@ -1192,7 +1244,7 @@ export const Settings = () => {
               <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
                 <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
                 <p className="text-sm text-amber-800">
-                  When your next school year starts (June), add it here or use the suggested year below. Students from the
+                  When your next school year starts ({MONTH_OPTIONS.find((m) => m.value === startMonth)?.label.split(' ')[0]}), add it here or use the suggested year below. Students from the
                   previous year stay archived under their old year and won't appear in the new one until you enroll them.
                 </p>
               </div>

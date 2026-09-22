@@ -16,11 +16,12 @@ interface DayPaymentTrackerProps {
 }
 
 export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTrackerProps) => {
-  const { selectedYear } = useSchoolYear();
+  const { selectedYear, startMonth } = useSchoolYear();
   const currentMonthStr = format(new Date(), 'yyyy-MM');
-  const defaultYearMonth = isMonthInSchoolYear(currentMonthStr, selectedYear)
+  const formattedStartMonth = String(startMonth).padStart(2, '0');
+  const defaultYearMonth = isMonthInSchoolYear(currentMonthStr, selectedYear, startMonth)
     ? currentMonthStr
-    : `${selectedYear.slice(0, 4)}-06`;
+    : `${selectedYear.slice(0, 4)}-${formattedStartMonth}`;
 
   const [allRecords, setAllRecords] = useState<PaymentRecord[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(defaultYearMonth);
@@ -32,14 +33,14 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
 
-  // Update default month when selectedYear changes
+  // Update default month when selectedYear or startMonth changes
   useEffect(() => {
-    const nextMonth = isMonthInSchoolYear(currentMonthStr, selectedYear)
+    const nextMonth = isMonthInSchoolYear(currentMonthStr, selectedYear, startMonth)
       ? currentMonthStr
-      : `${selectedYear.slice(0, 4)}-06`;
+      : `${selectedYear.slice(0, 4)}-${String(startMonth).padStart(2, '0')}`;
     setSelectedMonth(nextMonth);
     setMonthToAdd(nextMonth);
-  }, [selectedYear]);
+  }, [selectedYear, startMonth, currentMonthStr]);
 
   // Subscribe to real-time updates for records of this tutee filtered by selected school year
   useEffect(() => {
@@ -47,7 +48,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
     setIsLoading(true);
 
     unsubscribe = dayPaymentService.subscribeToRecordsByTutee(tuteeId, (records) => {
-      const filtered = records.filter((r) => belongsToSchoolYear(selectedYear, r));
+      const filtered = records.filter((r) => belongsToSchoolYear(selectedYear, r, startMonth));
       setAllRecords(filtered);
       setIsLoading(false);
     });
@@ -55,7 +56,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [tuteeId, selectedYear]);
+  }, [tuteeId, selectedYear, startMonth]);
 
   // Sync the form pre-fill and selected month validity when records update
   useEffect(() => {
@@ -245,7 +246,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
             const isSelected = monthRecord.month === selectedMonth;
             const isPaid = monthRecord.totalPaid > 0 && monthRecord.totalBalance <= 0;
             const isPartial = monthRecord.totalPaid > 0 && monthRecord.totalBalance > 0;
-            
+
             let colorClass = 'bg-white border-gray-200';
             let textColorClass = 'text-gray-600';
             let statusLabel = 'Unpaid';

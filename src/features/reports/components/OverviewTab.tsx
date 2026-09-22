@@ -31,7 +31,7 @@ export const OverviewTab = ({ data }: OverviewTabProps) => {
     ? Math.round(studentsWithAssessments.reduce((sum, s) => sum + s.averageScore, 0) / studentsWithAssessments.length)
     : 0;
 
-  const atRiskCount = data.atRiskStudents.length;
+  const totalStudents = data.studentPerformance.length || data.attendanceSummaries.length;
 
   return (
     <div className="space-y-6">
@@ -73,19 +73,15 @@ export const OverviewTab = ({ data }: OverviewTabProps) => {
           </div>
         </div>
 
-        {/* At Risk Card */}
+        {/* Enrolled Students Card */}
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden group">
-          <div className={`absolute top-0 right-0 w-24 h-24 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300 ${
-            atRiskCount > 0 ? 'bg-red-50' : 'bg-gray-50'
-          }`} />
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative shrink-0 ${
-            atRiskCount > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
-          }`}>
-            <ShieldAlert size={22} />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-full translate-x-8 -translate-y-8 group-hover:scale-110 transition-transform duration-300" />
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center relative shrink-0">
+            <Users size={22} />
           </div>
           <div className="relative">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">At-Risk Students</p>
-            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{atRiskCount} Student{atRiskCount !== 1 ? 's' : ''}</p>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Enrolled Students</p>
+            <p className="text-[1.625rem] font-bold text-gray-900 mt-0.5">{totalStudents} Student{totalStudents !== 1 ? 's' : ''}</p>
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import {
   formatSchoolYear,
   getDefaultSchoolYears,
   getNextSchoolYear,
+  DEFAULT_START_MONTH,
 } from '@/shared/utils/schoolYear';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { db } from '@/shared/lib/firebase/config';
@@ -13,6 +14,8 @@ import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc } from '
 interface SchoolYearContextType {
   selectedYear: string;
   setSelectedYear: (year: string) => void;
+  startMonth: number;
+  setStartMonth: (month: number) => Promise<void>;
   availableYears: string[];
   schoolYears: string[];
   schoolYearRange: { start: Date; end: Date };
@@ -26,43 +29,64 @@ interface SchoolYearContextType {
 const SchoolYearContext = createContext<SchoolYearContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'tutortrack_school_year';
+const START_MONTH_KEY = 'tutortrack_school_year_start_month';
 
 export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const [schoolYears, setSchoolYears] = useState<string[]>(() => getDefaultSchoolYears());
+  const [startMonth, setStartMonthState] = useState<number>(() => {
+    const saved = localStorage.getItem(START_MONTH_KEY);
+    const parsed = saved ? parseInt(saved, 10) : NaN;
+    return !isNaN(parsed) && parsed >= 1 && parsed <= 12 ? parsed : DEFAULT_START_MONTH;
+  });
+  const [schoolYears, setSchoolYears] = useState<string[]>(() => getDefaultSchoolYears(3, 1, startMonth));
   const [isLoading, setIsLoading] = useState(true);
   const migrationTriggered = useRef(false);
   const [selectedYear, setSelectedYearState] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    const defaults = getDefaultSchoolYears();
+    const defaults = getDefaultSchoolYears(3, 1, startMonth);
     if (saved && defaults.includes(saved)) return saved;
-    return getCurrentSchoolYear();
+    return getCurrentSchoolYear(startMonth);
   });
 
-  // Resolve the school-year list + active year for the current user.
+  // Resolve the school-year list + active year + start month for the current user.
   useEffect(() => {
     let cancelled = false;
 
     const loadForUser = async () => {
       setIsLoading(true);
       try {
-        // No user yet — fall back to the static defaults, keep localStorage selection.
         if (!user) {
           if (!cancelled) {
-            setSchoolYears(getDefaultSchoolYears());
+            setSchoolYears(getDefaultSchoolYears(3, 1, startMonth));
             setIsLoading(false);
           }
           return;
         }
 
-        // For parents, follow the tutor's active school year.
         const resolvedUid = user.role === 'tutor' ? user.id : user.createdByTutorId;
         if (!resolvedUid) {
           if (!cancelled) {
-            setSchoolYears(getDefaultSchoolYears());
+            setSchoolYears(getDefaultSchoolYears(3, 1, startMonth));
             setIsLoading(false);
           }
           return;
+        }
+
+        // Fetch tutor doc to check active school year and configured start month
+        const tutorSnap = await getDoc(doc(db, 'users', resolvedUid));
+        let userStartMonth = startMonth;
+        let activeYear: string | undefined;
+
+        if (tutorSnap.exists()) {
+          const tutorData = tutorSnap.data();
+          activeYear = tutorData.activeSchoolYear as string | undefined;
+          if (typeof tutorData.schoolYearStartMonth === 'number' && tutorData.schoolYearStartMonth >= 1 && tutorData.schoolYearStartMonth <= 12) {
+            userStartMonth = tutorData.schoolYearStartMonth;
+            if (!cancelled) {
+              setStartMonthState(userStartMonth);
+              localStorage.setItem(START_MONTH_KEY, String(userStartMonth));
+            }
+          }
         }
 
         // Load the per-tutor school-year list.
@@ -71,7 +95,7 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
 
         // Seed defaults (current + next) if nothing exists yet.
         if (years.length === 0) {
-          const defaults = getDefaultSchoolYears(0, 1);
+          const defaults = getDefaultSchoolYears(0, 1, userStartMonth);
           for (const year of defaults) {
             await setDoc(doc(db, 'users', resolvedUid, 'schoolYears', year), {
               value: year,
@@ -83,16 +107,11 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
 
         if (!cancelled) setSchoolYears(years);
 
-        // Resolve the active year.
-        const tutorSnap = await getDoc(doc(db, 'users', resolvedUid));
-        const activeYear = tutorSnap.exists() ? (tutorSnap.data().activeSchoolYear as string | undefined) : undefined;
-
         const saved = localStorage.getItem(STORAGE_KEY);
-        let next = activeYear || saved || getCurrentSchoolYear();
-        if (!years.includes(next)) next = years[0] || getCurrentSchoolYear();
+        let next = activeYear || saved || getCurrentSchoolYear(userStartMonth);
+        if (!years.includes(next)) next = years[0] || getCurrentSchoolYear(userStartMonth);
 
         if (user.role === 'parent') {
-          // Parents always follow the tutor's active year.
           localStorage.setItem(STORAGE_KEY, next);
           setSelectedYearState(next);
         } else if (saved && years.includes(saved)) {
@@ -103,7 +122,7 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
         }
 
         // One-time backfill: stamp schoolYear on existing records and compute
-        // per-year tutee totals. Fire-and-forget; guarded by a per-tutor flag.
+        // per-year tutee totals.
         if (user.role === 'tutor' && !migrationTriggered.current) {
           migrationTriggered.current = true;
           import('@/shared/utils/migrateSchoolYears')
@@ -112,10 +131,10 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error('Error loading school years:', error);
-        const defaults = getDefaultSchoolYears();
+        const defaults = getDefaultSchoolYears(3, 1, startMonth);
         if (!cancelled) {
           setSchoolYears(defaults);
-          if (!selectedYear) setSelectedYearState(getCurrentSchoolYear());
+          if (!selectedYear) setSelectedYearState(getCurrentSchoolYear(startMonth));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -130,17 +149,30 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role, user?.createdByTutorId]);
 
-  const schoolYearRange = getSchoolYearRange(selectedYear);
+  const schoolYearRange = getSchoolYearRange(selectedYear, startMonth);
   const displayLabel = formatSchoolYear(selectedYear);
 
   const setSelectedYear = (year: string) => {
     localStorage.setItem(STORAGE_KEY, year);
     setSelectedYearState(year);
-    // Persist the tutor's active year so the parent portal matches.
     if (user?.role === 'tutor') {
       updateDoc(doc(db, 'users', user.id), { activeSchoolYear: year }).catch((err) =>
         console.error('Error persisting active school year:', err)
       );
+    }
+  };
+
+  const setStartMonth = async (month: number) => {
+    if (month < 1 || month > 12) return;
+    setStartMonthState(month);
+    localStorage.setItem(START_MONTH_KEY, String(month));
+
+    if (user?.role === 'tutor') {
+      try {
+        await updateDoc(doc(db, 'users', user.id), { schoolYearStartMonth: month });
+      } catch (err) {
+        console.error('Error saving school year start month:', err);
+      }
     }
   };
 
@@ -174,6 +206,8 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
   const value: SchoolYearContextType = {
     selectedYear,
     setSelectedYear,
+    startMonth,
+    setStartMonth,
     availableYears: schoolYears,
     schoolYears,
     schoolYearRange,

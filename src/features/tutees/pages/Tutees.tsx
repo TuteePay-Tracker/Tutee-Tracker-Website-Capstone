@@ -58,12 +58,17 @@ export const Tutees = () => {
     return !!t.archived;
   };
 
-  // Load the unfiltered list once to power the carry-over (enroll) panel.
+  // Load the unfiltered list once to power the carry-over (enroll) panel and auto-sync totals.
   useEffect(() => {
     if (user?.role !== 'tutor') return;
     let cancelled = false;
     tuteeService.getAll().then((data) => {
-      if (!cancelled) setAllTutees(data);
+      if (!cancelled) {
+        setAllTutees(data);
+        data.forEach((t) => {
+          dayPaymentService.syncTuteeTotals(t.id, user.id).catch(() => {});
+        });
+      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [user?.role, user?.id]);
