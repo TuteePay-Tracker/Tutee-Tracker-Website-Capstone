@@ -12,6 +12,11 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 const PUSH_RELAY_URL =
   (import.meta.env.VITE_PUSH_RELAY_URL as string | undefined) ?? 'http://localhost:4000';
 
+// Matches the reply category registered in the parent mobile app
+// (TutorTrack-Mobile). expo-notifications reads `categoryId` from the Android
+// notification `data` payload to attach the reply action.
+const MESSAGE_ACTIONS_CATEGORY_ID = 'MESSAGE_ACTIONS';
+
 export type PushData = Record<string, string | number | boolean>;
 
 interface PushMessageOptions {
@@ -157,7 +162,7 @@ export async function sendChatNotification(
     tokens,
     title: senderName || 'New message',
     body: preview,
-    data: { type: 'chat', chatId },
+    data: { type: 'chat', chatId, categoryId: MESSAGE_ACTIONS_CATEGORY_ID },
   });
 }
 

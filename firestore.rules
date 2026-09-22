@@ -363,7 +363,13 @@ service cloud.firestore {
       // SCHOOL YEARS subcollection (tutor-maintained school year list)
       match /schoolYears/{yearId} {
         // A school year doc simply flags existence; the id is the "YYYY-YY" value.
-        allow read: if isAuthenticated() && isOwner(userId);
+        // The tutor (owner) maintains it; linked parents may read the list so
+        // the mobile app's SchoolYearContext can watch the available years.
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+        );
         allow create: if isAuthenticated() && isOwner(userId)
           && request.resource.data.keys().hasOnly(['value', 'createdAt', 'source'])
           && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt is string);

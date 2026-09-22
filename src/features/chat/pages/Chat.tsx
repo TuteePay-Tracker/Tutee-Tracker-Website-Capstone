@@ -328,8 +328,12 @@ export const Chat = () => {
       tuteeData?: Tutee;
     }> = [];
 
-    // 1. Add active threads
+    // 1. Add active threads (only for students enrolled in the selected school year)
+    const scopedTuteeIds = new Set(tutees.map(t => t.id));
     threads.forEach(thread => {
+      const isInScope = scopedTuteeIds.has(thread.id) || scopedTuteeIds.has(thread.tuteeId);
+      if (!isInScope) return;
+
       const isSearchMatch =
         thread.tuteeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         thread.parentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -354,7 +358,7 @@ export const Chat = () => {
 
     // 2. Add tutees without active threads as "contacts" to initiate new chats
     tutees.forEach(tutee => {
-      const hasThread = threads.some(t => t.tuteeId === tutee.id);
+      const hasThread = threads.some(t => t.id === tutee.id || t.tuteeId === tutee.id);
       if (!hasThread) {
         const isSearchMatch =
           `${tutee.firstName} ${tutee.surname}`.toLowerCase().includes(searchQuery.toLowerCase()) ||

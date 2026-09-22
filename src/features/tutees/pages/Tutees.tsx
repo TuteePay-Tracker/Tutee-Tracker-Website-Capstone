@@ -101,17 +101,34 @@ export const Tutees = () => {
     return () => document.removeEventListener('click', closeMenus);
   }, []);
 
+  // Sort schedule slots by weekday (Sun → Sat) then by time
+  const WEEKDAY_INDEX: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  const compareSchedule = (a: ScheduleItem, b: ScheduleItem): number => {
+    const keyOf = (day: string) => {
+      const cap = (day || '').trim().charAt(0).toUpperCase() + (day || '').trim().slice(1).toLowerCase();
+      return WEEKDAY_INDEX[cap] ?? WEEKDAY_INDEX[cap.slice(0, 3)] ?? 99;
+    };
+    const aIdx = keyOf(a.day);
+    const bIdx = keyOf(b.day);
+    if (aIdx !== bIdx) return aIdx - bIdx;
+    return (a.startTime || '').localeCompare(b.startTime || '');
+  };
+
   // Helper to format schedule (handles both old string and new array format)
   const formatSchedule = (schedule: string | ScheduleItem[]) => {
     if (Array.isArray(schedule)) {
       if (schedule.length === 0) return 'No schedule';
 
+      const sorted = [...schedule].sort(compareSchedule);
+
       // Get abbreviated day names
-      const days = schedule.map(s => s.day.slice(0, 3)).join(', ');
+      const days = sorted.map(s => s.day.slice(0, 3)).join(', ');
 
       // Check if all days have the same time
-      const firstItem = schedule[0];
-      const hasSameTime = schedule.every(s =>
+      const firstItem = sorted[0];
+      const hasSameTime = sorted.every(s =>
         'startTime' in s && 'endTime' in s &&
         s.startTime === firstItem.startTime &&
         s.endTime === firstItem.endTime

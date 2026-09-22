@@ -4,15 +4,14 @@ import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import {
   User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
   Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
-  Download, Eye, Calendar, Clock, Activity, FileText, CheckCircle2, ChevronRight,
-  BellRing, Copy, AlertCircle, CalendarRange
+  Download, Eye, Calendar, Clock, Activity, FileText, ChevronRight,
+  BellRing, AlertCircle, CalendarRange
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
-import { setupWebPushNotifications, getNotificationPermissionState, getStoredFcmToken } from '@/shared/services/fcmService';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { formatSchoolYear, getNextSchoolYear, getDefaultSchoolYears, MONTH_OPTIONS } from '@/shared/utils/schoolYear';
 import gcashLogo from '@/assets/gcash-com-logo.png';
@@ -52,18 +51,6 @@ export const Settings = () => {
   // Notification states
   const [notifications, setNotifications] = useState(true);
   const [emailReminders, setEmailReminders] = useState(true);
-  const [fcmPermission, setFcmPermission] = useState<NotificationPermission | 'unsupported'>(() => getNotificationPermissionState());
-  const [fcmToken, setFcmToken] = useState<string | null>(null);
-  const [isRegisteringFcm, setIsRegisteringFcm] = useState(false);
-
-  useEffect(() => {
-    setFcmPermission(getNotificationPermissionState());
-    if (user?.id && getNotificationPermissionState() === 'granted') {
-      getStoredFcmToken(user.id).then((token) => {
-        if (token) setFcmToken(token);
-      });
-    }
-  }, [user?.id]);
 
   // Clearing/adding states
   const [isClearing, setIsClearing] = useState(false);
@@ -823,113 +810,9 @@ export const Settings = () => {
               <div className="flex items-center gap-3">
                 <BellRing size={24} className="text-green-600" />
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">Push Notifications & FCM</h2>
-                  <p className="text-sm text-gray-500">Configure PWA background push notifications and test system alerts</p>
+                  <h2 className="text-xl font-bold text-gray-900">Push Notifications</h2>
                 </div>
               </div>
-
-              {/* Status Banner */}
-              <div className="p-4 rounded-xl border bg-gray-50 flex items-start gap-3">
-                {fcmPermission === 'granted' ? (
-                  <CheckCircle2 size={20} className="text-green-600 shrink-0 mt-0.5" />
-                ) : fcmPermission === 'denied' ? (
-                  <AlertCircle size={20} className="text-red-600 shrink-0 mt-0.5" />
-                ) : (
-                  <Info size={20} className="text-blue-600 shrink-0 mt-0.5" />
-                )}
-
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-gray-900">Browser Permission Status:</span>
-                    <span
-                      className={`text-xs font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                        fcmPermission === 'granted'
-                          ? 'bg-green-100 text-green-800'
-                          : fcmPermission === 'denied'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {fcmPermission}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-gray-600 mt-1">
-                    {fcmPermission === 'granted'
-                      ? 'Notifications are enabled! Your device is ready to receive background push alerts.'
-                      : fcmPermission === 'denied'
-                      ? 'Notifications are currently blocked by your browser. Click the lock icon in your browser address bar (left of localhost:5173) and reset Notification permissions to "Allow".'
-                      : 'Notification permission has not been requested yet on this browser.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <button
-                  onClick={async () => {
-                    if (!user?.id) return;
-                    setIsRegisteringFcm(true);
-                    try {
-                      const token = await setupWebPushNotifications(user.id);
-                      setFcmPermission(getNotificationPermissionState());
-                      if (token) {
-                        setFcmToken(token);
-                        toast.success('Web Push Notifications successfully enabled and FCM Token stored!');
-                      } else if (Notification.permission === 'denied') {
-                        toast.error('Permission blocked in browser settings. Please reset permission in address bar.');
-                      }
-                    } catch (err: any) {
-                      toast.error('Failed to enable notifications: ' + err.message);
-                    } finally {
-                      setIsRegisteringFcm(false);
-                    }
-                  }}
-                  disabled={isRegisteringFcm}
-                  className="px-4 py-2.5 bg-green-600 text-white font-bold text-xs rounded-xl hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
-                >
-                  <Bell size={15} />
-                  {isRegisteringFcm ? 'Requesting Permission...' : 'Enable / Re-register Web Push'}
-                </button>
-
-                <button
-                  onClick={() => {
-                    toast.info('Test Push Notification', {
-                      description: 'This is a sample foreground notification test for Tutor Track!',
-                      duration: 4000,
-                    });
-                  }}
-                  className="px-4 py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200 transition-colors flex items-center gap-2"
-                >
-                  <BellRing size={15} />
-                  Send Test Toast Alert
-                </button>
-              </div>
-
-              {/* FCM Token Details Card */}
-              {fcmToken && (
-                <div className="p-4 border rounded-xl bg-gray-50/70 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Device FCM Registration Token</span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(fcmToken);
-                        toast.success('FCM Token copied to clipboard!');
-                      }}
-                      className="text-xs text-green-700 font-semibold flex items-center gap-1 hover:underline"
-                    >
-                      <Copy size={12} />
-                      Copy Token
-                    </button>
-                  </div>
-                  <div className="p-2.5 bg-white border border-gray-200 rounded-lg text-[11px] font-mono text-gray-700 break-all select-all max-h-24 overflow-y-auto">
-                    {fcmToken}
-                  </div>
-                  <p className="text-[11px] text-gray-500">
-                    Use this token in Firebase Console ➔ Messaging ➔ "Send Test Message" to send a live push message directly to this device.
-                  </p>
-                </div>
-              )}
 
               <hr className="border-gray-100 my-4" />
 
