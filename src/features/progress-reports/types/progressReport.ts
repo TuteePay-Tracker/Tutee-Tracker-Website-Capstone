@@ -16,6 +16,8 @@ export interface ProgressReport {
   assessmentScores: AssessmentScore[];
   notes: string;
   recommendations?: string;
+  /** School year this progress report belongs to, e.g. "2026-27". */
+  schoolYear?: string;
   createdAt: string;
 }
 

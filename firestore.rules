@@ -120,7 +120,11 @@ service cloud.firestore {
             && data.createdAt is timestamp
             && data.updatedAt is timestamp
             // Custom modification: Safely handles optional, null, timestamp, or string variants of lastPaymentDate
-            && (!data.keys().hasAny(['lastPaymentDate']) || data.lastPaymentDate == null || data.lastPaymentDate is timestamp || data.lastPaymentDate is string);
+            && (!data.keys().hasAny(['lastPaymentDate']) || data.lastPaymentDate == null || data.lastPaymentDate is timestamp || data.lastPaymentDate is string)
+            // School-year fields (optional, enforced by the app)
+            && (!data.keys().hasAny(['schoolYears']) || data.schoolYears is list)
+            && (!data.keys().hasAny(['archivedForYears']) || data.archivedForYears is list)
+            && (!data.keys().hasAny(['totalsByYear']) || data.totalsByYear is map);
         }
 
         function isLinkingParentOnly() {
@@ -157,7 +161,8 @@ service cloud.firestore {
             && data.updatedAt is timestamp
             && (!data.keys().hasAny(['status']) || data.status is string)
             && (!data.keys().hasAny(['proofUrl']) || data.proofUrl is string)
-            && (!data.keys().hasAny(['month']) || data.month is string);
+            && (!data.keys().hasAny(['month']) || data.month is string)
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
         // Tutor reads own payments; linked parent can read too (if parentId matches)
@@ -189,7 +194,8 @@ service cloud.firestore {
             && data.duration is number && data.duration > 0
             && data.status is string
             && data.createdAt is timestamp
-            && data.updatedAt is timestamp;
+            && data.updatedAt is timestamp
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
         // Tutor reads own sessions; linked parent can read too (if parentId matches)
@@ -221,7 +227,8 @@ service cloud.firestore {
             && data.lastUpdated is timestamp
             && data.createdAt is timestamp
             && (!data.keys().hasAny(['parentId']) || data.parentId == null || data.parentId is string)
-            && (!data.keys().hasAny(['tutorId']) || data.tutorId is string);
+            && (!data.keys().hasAny(['tutorId']) || data.tutorId is string)
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
         // Allow read if tutor owner OR parent of tutee
         allow read: if isAuthenticated() && (
@@ -245,7 +252,10 @@ service cloud.firestore {
             && data.totalAmount is number
             && data.paymentMethod is string
             && data.createdAt is timestamp
-            && (!data.keys().hasAny(['month']) || data.month is string);
+            && (!data.keys().hasAny(['month']) || data.month is string)
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string)
+            && (!data.keys().hasAny(['paymentId']) || data.paymentId is string)
+            && (!data.keys().hasAny(['notes']) || data.notes is string);
         }
         // Allow read if tutor owner OR parent of tutee
         allow read: if isAuthenticated() && (
@@ -270,7 +280,8 @@ service cloud.firestore {
             && data.behavior is string
             && (!data.keys().hasAny(['assessmentScores']) || data.assessmentScores is list)
             && data.notes is string
-            && data.createdAt is timestamp;
+            && data.createdAt is timestamp
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
         // Allow read if tutor owner OR parent of tutee
@@ -292,7 +303,8 @@ service cloud.firestore {
             && data.priority in ['low', 'medium', 'high']
             && data.tutorId == userId
             && data.createdAt is timestamp
-            && data.updatedAt is timestamp;
+            && data.updatedAt is timestamp
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
         allow read: if isAuthenticated() && (
@@ -334,7 +346,8 @@ service cloud.firestore {
             && data.remarks is string
             && data.createdAt is timestamp
             && data.updatedAt is timestamp
-            && (!data.keys().hasAny(['recommendations']) || data.recommendations is string);
+            && (!data.keys().hasAny(['recommendations']) || data.recommendations is string)
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
         // Tutor reads/writes own assessments; linked parents can read too
@@ -344,6 +357,17 @@ service cloud.firestore {
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
         );
         allow create, update: if isAuthenticated() && isOwner(userId);
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // SCHOOL YEARS subcollection (tutor-maintained school year list)
+      match /schoolYears/{yearId} {
+        // A school year doc simply flags existence; the id is the "YYYY-YY" value.
+        allow read: if isAuthenticated() && isOwner(userId);
+        allow create: if isAuthenticated() && isOwner(userId)
+          && request.resource.data.keys().hasOnly(['value', 'createdAt', 'source'])
+          && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt is string);
+        allow update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 

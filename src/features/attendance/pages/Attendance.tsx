@@ -23,6 +23,10 @@ import { toast } from 'sonner';
 import { db } from '@/shared/lib/firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
+
+import { Link } from 'react-router';
 
 const MARK_LABELS: Record<AttendanceStatus, string> = {
   present: 'Present',
@@ -34,6 +38,7 @@ const MARK_LABELS: Record<AttendanceStatus, string> = {
 export const Attendance = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedTuteeId, setSelectedTuteeId] = useState<string>('');
   const [records, setRecords] = useState<Record<string, PaymentRecord | null>>({});
@@ -42,9 +47,12 @@ export const Attendance = () => {
   const [selectedMark, setSelectedMark] = useState<AttendanceMark | 'none'>('present');
 
   const monthKey = format(selectedMonth, 'yyyy-MM');
+
+  // Only include tutees who have been charged (have a PaymentRecord) for this specific month
+  const activeTuteesThisMonth = tutees.filter(t => Boolean(records[`${t.id}_${monthKey}`]));
   const filteredTutees = selectedTuteeId
-    ? tutees.filter(t => t.id === selectedTuteeId)
-    : tutees;
+    ? activeTuteesThisMonth.filter(t => t.id === selectedTuteeId)
+    : activeTuteesThisMonth;
 
   // Load attendance records for all visible tutees in real-time when month changes
   useEffect(() => {
@@ -69,6 +77,8 @@ export const Attendance = () => {
 
       snapshot.docs.forEach(docSnap => {
         const data = docSnap.data();
+        // Only show attendance belonging to the selected school year.
+        if (!belongsToSchoolYear(selectedYear, data)) return;
         const tuteeId = data.tuteeId;
         results[`${tuteeId}_${monthKey}`] = {
           id: docSnap.id,
@@ -89,30 +99,44 @@ export const Attendance = () => {
     });
 
     return () => unsubscribe();
-  }, [tutees, monthKey, user?.id]);
+  }, [tutees, monthKey, user?.id, selectedYear]);
 
   const getScheduledDays = (tutee: Tutee): { date: string; status: AttendanceStatus }[] => {
     const record = records[`${tutee.id}_${monthKey}`];
     if (!record) {
-      // Compute from schedule if no record yet
-      const monthStart = startOfMonth(selectedMonth);
-      const monthEnd = endOfMonth(selectedMonth);
-      const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-      const scheduleDays = Array.isArray(tutee.schedule)
-        ? tutee.schedule.map(s => s.day)
-        : [];
-
-      return allDays
-        .filter(day => scheduleDays.includes(format(day, 'EEEE')))
-        .map(day => ({
-          date: format(day, 'yyyy-MM-dd'),
-          status: 'none' as AttendanceStatus,
-        }));
+      return [];
     }
 
-    return record.dayPayments.map(dp => ({
-      date: dp.date,
-      status: getDayAttendance(dp),
+    const scheduleDays: string[] = Array.isArray(tutee.schedule)
+      ? tutee.schedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
+      : typeof tutee.schedule === 'string'
+        ? (tutee.schedule as string).split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
+        : [];
+
+    if (scheduleDays.length === 0) {
+      return (record.dayPayments || []).map(dp => ({
+        date: dp.date,
+        status: getDayAttendance(dp),
+      }));
+    }
+
+    const monthDate = parseISO(monthKey + '-01');
+    const monthStart = startOfMonth(monthDate);
+    const monthEnd = endOfMonth(monthDate);
+    const allDaysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+    const expectedDates = allDaysInMonth
+      .filter(day => scheduleDays.includes(format(day, 'EEEE')))
+      .map(day => format(day, 'yyyy-MM-dd'));
+
+    const existingMap = new Map<string, AttendanceStatus>();
+    (record.dayPayments || []).forEach(dp => {
+      existingMap.set(dp.date, getDayAttendance(dp));
+    });
+
+    return expectedDates.map(date => ({
+      date,
+      status: existingMap.get(date) || 'none',
     }));
   };
 

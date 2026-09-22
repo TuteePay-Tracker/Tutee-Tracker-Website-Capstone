@@ -39,6 +39,8 @@ export interface PaymentRecord {
   parentId?: string | null;
   tutorId?: string;
   month: string; // YYYY-MM format
+  /** School year this monthly record belongs to, e.g. "2026-27". */
+  schoolYear?: string;
   dayPayments: DayPayment[];
   totalDue: number;
   totalPaid: number;
@@ -63,6 +65,8 @@ export interface PaymentTransaction {
   month?: string;
   notes?: string;
   coverageType?: 'full' | 'partial';
+  /** School year this transaction belongs to, e.g. "2026-27". */
+  schoolYear?: string;
   createdAt: string;
 }
 

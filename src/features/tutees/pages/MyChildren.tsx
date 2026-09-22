@@ -6,13 +6,16 @@ import { GraduationCap, Calendar, TrendingUp, CheckSquare } from 'lucide-react';
 import { Link } from 'react-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
-import { ScheduleItem } from '@/features/tutees/types/tutee';
+import { ScheduleItem, getTuteeYearTotals } from '@/features/tutees/types/tutee';
 import { formatTime12h } from '@/shared/utils/formatDate';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
 import { getDayAttendance } from '@/features/attendance/types/dayPayment';
 
 export const MyChildren = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [tuteeMetrics, setTuteeMetrics] = useState<Record<string, {
     presentCount: number;
     absentCount: number;
@@ -54,6 +57,7 @@ export const MyChildren = () => {
 
           snapshot.docs.forEach((docSnap) => {
             const recData = docSnap.data();
+            if (!belongsToSchoolYear(selectedYear, recData)) return;
             const dayPayments = (recData.dayPayments || []) as any[];
             dayPayments.forEach((dp) => {
               const attendance = getDayAttendance(dp);
@@ -88,7 +92,10 @@ export const MyChildren = () => {
       const unsubAssessments = onSnapshot(
         assessmentsQuery,
         (snapshot) => {
-          const list = snapshot.docs.map((d) => d.data()).sort((a, b) => b.date.localeCompare(a.date));
+          const list = snapshot.docs
+            .map((d) => d.data())
+            .filter((a) => belongsToSchoolYear(selectedYear, a))
+            .sort((a, b) => b.date.localeCompare(a.date));
           const validScores = list.map((a) => a.score).filter((s) => typeof s === 'number');
           const avg = validScores.length ? Math.round(validScores.reduce((sum, s) => sum + s, 0) / validScores.length) : 0;
           const latest = list.length > 0 ? {
@@ -117,7 +124,7 @@ export const MyChildren = () => {
     return () => {
       unsubscribes.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user?.createdByTutorId, tutees]);
+  }, [user?.createdByTutorId, tutees, selectedYear]);
 
   const renderSchedule = (schedule: string | ScheduleItem[]) => {
     if (Array.isArray(schedule)) {
@@ -165,8 +172,8 @@ export const MyChildren = () => {
           {tutees.map(tutee => {
             // Use the tutor-maintained canonical counters instead of summing paymentTransactions
             // (which used to double-count recorded payments and left balances inconsistent).
-            const totalPaid = Math.round((tutee.totalPaid || 0) * 100) / 100;
-            const remainingBalance = Math.max(Math.round((tutee.balance || 0) * 100) / 100, 0);
+            const totalPaid = Math.round((getTuteeYearTotals(tutee, selectedYear).totalPaid || 0) * 100) / 100;
+            const remainingBalance = Math.max(Math.round((getTuteeYearTotals(tutee, selectedYear).balance || 0) * 100) / 100, 0);
             const totalDue = Math.round((totalPaid + remainingBalance) * 100) / 100;
             const hasOutstandingBalance = remainingBalance > 0;
             const isFull = totalPaid > 0 && !hasOutstandingBalance;

@@ -6,12 +6,17 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
+import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 
 export const usePayments = () => {
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const applyScope = (data: Payment[]): Payment[] => data.filter((p) => belongsToSchoolYear(selectedYear, p));
 
   useEffect(() => {
     if (user === undefined) return;
@@ -23,19 +28,19 @@ export const usePayments = () => {
     } else if (user) {
       setIsLoading(true);
       const unsubscribe = paymentService.subscribeAll((data) => {
-        setPayments(data);
+        setPayments(applyScope(data));
         setIsLoading(false);
         setError(null);
       });
       return () => unsubscribe();
     }
-  }, [user]);
+  }, [user, selectedYear]);
 
   const loadPayments = async () => {
     try {
       setIsLoading(true);
       const data = await paymentService.getAll();
-      setPayments(data);
+      setPayments(applyScope(data));
       setError(null);
     } catch (err: any) {
       const errorMessage = err?.message || 'Failed to load payments';
@@ -55,7 +60,7 @@ export const usePayments = () => {
     return paymentService.subscribeByTuteeId(
       tuteeId,
       (data) => {
-        setPayments(data);
+        setPayments(applyScope(data));
         setIsLoading(false);
         setError(null);
       },

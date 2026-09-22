@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { usePayments } from '@/features/payments/hooks/usePayments';
+import { getTuteeYearTotals } from '@/features/tutees/types/tutee';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { DayPaymentTracker } from '@/features/attendance/components/DayPaymentTracker';
 import { Users, Calendar, DollarSign, BookOpen, X, Eye, CheckCircle2, XCircle, AlertCircle, ExternalLink, User } from 'lucide-react';
 import { useSearchParams } from 'react-router';
@@ -12,6 +14,7 @@ import { toast } from 'sonner';
 export const PaymentTracking = () => {
   const { tutees, isLoading: loadingTutees } = useTutees();
   const { payments, refreshPayments, isLoading: loadingPayments } = usePayments();
+  const { selectedYear } = useSchoolYear();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTutee, setSelectedTutee] = useState<{ id: string; name: string } | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string>('');
@@ -233,71 +236,74 @@ export const PaymentTracking = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredTutees.map(tutee => (
-            <button
-              key={tutee.id}
-              onClick={() => setSelectedTutee({ id: tutee.id, name: `${tutee.firstName} ${tutee.surname}` })}
-              className="bg-white rounded-2xl border-2 border-gray-200 p-6 hover:border-green-500 hover:shadow-xl transition-all text-left group"
-            >
-              <div className="flex items-start justify-between mb-4">
-                {tutee.photoUrl ? (
-                  <img
-                    src={tutee.photoUrl}
-                    alt={`${tutee.firstName} ${tutee.surname}`}
-                    className="w-12 h-12 rounded-xl object-cover border border-gray-200 shadow-md shadow-green-700/10"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-700/20">
-                    <Calendar className="text-white" size={24} />
-                  </div>
-                )}
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 font-medium">Status</p>
-                  {tutee.totalPaid > 0 && tutee.balance <= 0 ? (
-                    <span className="inline-flex items-center gap-1 text-sm font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                      ✓ Paid
-                    </span>
-                  ) : tutee.totalPaid > 0 && tutee.balance > 0 ? (
-                    <span className="inline-flex items-center gap-1 text-sm font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
-                      ₱{tutee.balance.toFixed(2)} due
-                    </span>
+          {filteredTutees.map(tutee => {
+            const yearTotals = getTuteeYearTotals(tutee, selectedYear);
+            return (
+              <button
+                key={tutee.id}
+                onClick={() => setSelectedTutee({ id: tutee.id, name: `${tutee.firstName} ${tutee.surname}` })}
+                className="bg-white rounded-2xl border-2 border-gray-200 p-6 hover:border-green-500 hover:shadow-xl transition-all text-left group"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  {tutee.photoUrl ? (
+                    <img
+                      src={tutee.photoUrl}
+                      alt={`${tutee.firstName} ${tutee.surname}`}
+                      className="w-12 h-12 rounded-xl object-cover border border-gray-200 shadow-md shadow-green-700/10"
+                    />
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-sm font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                      Unpaid
-                    </span>
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-700/20">
+                      <Calendar className="text-white" size={24} />
+                    </div>
                   )}
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 font-medium">Status</p>
+                    {yearTotals.totalPaid > 0 && yearTotals.balance <= 0 ? (
+                      <span className="inline-flex items-center gap-1 text-sm font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                        ✓ Paid
+                      </span>
+                    ) : yearTotals.totalPaid > 0 && yearTotals.balance > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-sm font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                        ₱{yearTotals.balance.toFixed(2)} due
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-sm font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                        Unpaid
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <h3 className="font-bold text-lg text-gray-900 group-hover:text-green-700 transition-colors mb-1">
-                {tutee.firstName} {tutee.surname}
-              </h3>
-              <div className="flex flex-wrap gap-1 mb-3">
-                {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
-                  <span key={s} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">{s}</span>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <DollarSign size={16} />
-                <span>₱{tutee.ratePerSession} per month</span>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Months: {tutee.totalSessions}</span>
-                  <span className="text-gray-500">Paid: ₱{tutee.totalPaid.toFixed(2)}</span>
+                <h3 className="font-bold text-lg text-gray-900 group-hover:text-green-700 transition-colors mb-1">
+                  {tutee.firstName} {tutee.surname}
+                </h3>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).map(s => (
+                    <span key={s} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">{s}</span>
+                  ))}
                 </div>
-              </div>
 
-              <div className="mt-4">
-                <span className="inline-flex items-center gap-2 text-green-700 font-medium text-sm group-hover:gap-3 transition-all">
-                  Track Payments
-                  <span>→</span>
-                </span>
-              </div>
-            </button>
-          ))}
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <DollarSign size={16} />
+                  <span>₱{tutee.ratePerSession} per month</span>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Months: {yearTotals.totalSessions}</span>
+                    <span className="text-gray-500">Paid: ₱{yearTotals.totalPaid.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <span className="inline-flex items-center gap-2 text-green-700 font-medium text-sm group-hover:gap-3 transition-all">
+                    Track Payments
+                    <span>→</span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 

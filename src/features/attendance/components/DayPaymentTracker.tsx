@@ -6,6 +6,8 @@ import { format, parseISO } from 'date-fns';
 import { Receipt } from '@/features/payments/components/Receipt';
 import { Calendar, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { belongsToSchoolYear, isMonthInSchoolYear } from '@/shared/utils/schoolYear';
 
 interface DayPaymentTrackerProps {
   tuteeId: string;
@@ -14,9 +16,15 @@ interface DayPaymentTrackerProps {
 }
 
 export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTrackerProps) => {
+  const { selectedYear } = useSchoolYear();
+  const currentMonthStr = format(new Date(), 'yyyy-MM');
+  const defaultYearMonth = isMonthInSchoolYear(currentMonthStr, selectedYear)
+    ? currentMonthStr
+    : `${selectedYear.slice(0, 4)}-06`;
+
   const [allRecords, setAllRecords] = useState<PaymentRecord[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
-  const [monthToAdd, setMonthToAdd] = useState(format(new Date(), 'yyyy-MM'));
+  const [selectedMonth, setSelectedMonth] = useState(defaultYearMonth);
+  const [monthToAdd, setMonthToAdd] = useState(defaultYearMonth);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -24,29 +32,30 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
 
-  // Subscribe to real-time updates for all records of this tutee
+  // Update default month when selectedYear changes
+  useEffect(() => {
+    const nextMonth = isMonthInSchoolYear(currentMonthStr, selectedYear)
+      ? currentMonthStr
+      : `${selectedYear.slice(0, 4)}-06`;
+    setSelectedMonth(nextMonth);
+    setMonthToAdd(nextMonth);
+  }, [selectedYear]);
+
+  // Subscribe to real-time updates for records of this tutee filtered by selected school year
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
     setIsLoading(true);
 
     unsubscribe = dayPaymentService.subscribeToRecordsByTutee(tuteeId, (records) => {
-      setAllRecords(records);
-      
-      const currentMonthStr = format(new Date(), 'yyyy-MM');
-      const hasCurrentMonth = records.some(r => r.month === currentMonthStr);
-      
-      if (records.length === 0 || !hasCurrentMonth) {
-        // Auto-create current month record if it doesn't exist
-        dayPaymentService.getMonthlyRecord(tuteeId, currentMonthStr)
-          .catch(err => console.error("Error auto-creating month:", err));
-      }
+      const filtered = records.filter((r) => belongsToSchoolYear(selectedYear, r));
+      setAllRecords(filtered);
       setIsLoading(false);
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [tuteeId]);
+  }, [tuteeId, selectedYear]);
 
   // Sync the form pre-fill and selected month validity when records update
   useEffect(() => {
@@ -84,7 +93,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
   const handleAddMonth = async () => {
     try {
       setIsLoading(true);
-      await dayPaymentService.getMonthlyRecord(tuteeId, monthToAdd);
+      await dayPaymentService.createMonthlyRecord(tuteeId, monthToAdd);
       setSelectedMonth(monthToAdd);
       toast.success(`Billing for ${format(parseISO(monthToAdd + '-01'), 'MMMM yyyy')} initialized`);
       setIsLoading(false);
@@ -230,7 +239,7 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
       )}
 
       {/* Months Checklist */}
-      {allRecords.length > 0 && (
+      {allRecords.length > 0 ? (
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {allRecords.map(monthRecord => {
             const isSelected = monthRecord.month === selectedMonth;
@@ -314,6 +323,14 @@ export const DayPaymentTracker = ({ tuteeId, tuteeName, onClose }: DayPaymentTra
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-8 text-center text-gray-500">
+          <Calendar className="mx-auto text-gray-300 mb-2" size={36} />
+          <p className="font-bold text-gray-800 text-base">No Billing Months Charged Yet</p>
+          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            This student hasn't been charged for any months yet. Use the <strong>"Initialize New Month Billing"</strong> tool above to charge a month and enable schedules & attendance.
+          </p>
         </div>
       )}
 

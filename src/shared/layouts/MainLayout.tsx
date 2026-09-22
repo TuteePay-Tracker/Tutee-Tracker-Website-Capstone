@@ -26,6 +26,7 @@ import { formatSchoolYear } from '@/shared/utils/schoolYear';
 import { toast } from 'sonner';
 import { InstallPWAButton } from '@/shared/components/InstallPWAButton';
 import { setupWebPushNotifications, listenForForegroundMessages } from '@/shared/services/fcmService';
+import { SchoolYearConfirmDialog } from '@/shared/components/SchoolYearConfirmDialog';
 
 export const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -35,6 +36,7 @@ export const MainLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [syDropdownOpen, setSyDropdownOpen] = useState(false);
+  const [pendingYear, setPendingYear] = useState<string | null>(null);
   const syDropdownRef = useRef<HTMLDivElement>(null);
   const syDropdownMobileRef = useRef<HTMLDivElement>(null);
   const prevThreadsRef = useRef<Record<string, { lastMsgText?: string; unreadCount: number }>>({});
@@ -259,7 +261,7 @@ export const MainLayout = () => {
                     {availableYears.map((yr) => (
                       <button
                         key={yr}
-                        onClick={() => { setSelectedYear(yr); setSyDropdownOpen(false); }}
+                        onClick={() => { setPendingYear(yr); setSyDropdownOpen(false); }}
                         className={`w-full text-left px-3 py-2.5 text-xs font-semibold transition-colors ${yr === selectedYear
                             ? 'bg-green-600 text-white'
                             : 'text-gray-700 hover:bg-gray-50'
@@ -602,7 +604,7 @@ export const MainLayout = () => {
                     {availableYears.map((yr) => (
                       <button
                         key={yr}
-                        onClick={() => { setSelectedYear(yr); setSyDropdownOpen(false); }}
+                        onClick={() => { setPendingYear(yr); setSyDropdownOpen(false); }}
                         className={`w-full text-left px-3 py-2.5 text-xs font-semibold transition-colors ${yr === selectedYear
                             ? 'bg-green-600 text-white'
                             : 'text-gray-700 hover:bg-gray-50'
@@ -927,6 +929,17 @@ export const MainLayout = () => {
       </div>
       {/* PWA Install Banner — floats over all pages */}
       <InstallPWAButton />
+
+      {/* School year change confirmation */}
+      <SchoolYearConfirmDialog
+        pendingYear={pendingYear}
+        currentYear={selectedYear}
+        onConfirm={(year) => {
+          setSelectedYear(year);
+          setPendingYear(null);
+        }}
+        onCancel={() => setPendingYear(null)}
+      />
     </>
   );
 };

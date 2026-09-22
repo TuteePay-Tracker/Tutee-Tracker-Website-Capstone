@@ -17,7 +17,7 @@ export const useReports = (schoolYear?: string) => {
       try {
         setIsLoading(true);
         const dateRange = schoolYear ? getSchoolYearRange(schoolYear) : undefined;
-        const data = await reportService.generateReport(dateRange);
+        const data = await reportService.generateReport(dateRange, schoolYear);
         if (cancelled) return;
         setReportData(data);
         setError(null);
@@ -47,7 +47,7 @@ export const useReports = (schoolYear?: string) => {
     try {
       setIsLoading(true);
       const dateRange = schoolYear ? getSchoolYearRange(schoolYear) : undefined;
-      const data = await reportService.generateReport(dateRange);
+      const data = await reportService.generateReport(dateRange, schoolYear);
       setReportData(data);
       setError(null);
     } catch (err: any) {

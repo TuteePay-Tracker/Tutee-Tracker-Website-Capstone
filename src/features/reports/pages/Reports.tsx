@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useReports } from '@/features/reports/hooks/useReports';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { formatSchoolYear } from '@/shared/utils/schoolYear';
 import { ExportButton } from '@/features/reports/components/ExportButton';
 import { OverviewTab } from '@/features/reports/components/OverviewTab';
 import { AcademicTab } from '@/features/reports/components/AcademicTab';
@@ -26,7 +28,8 @@ interface Tab {
 }
 
 export const Reports = () => {
-  const { reportData, isLoading } = useReports();
+  const { selectedYear } = useSchoolYear();
+  const { reportData, isLoading } = useReports(selectedYear);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   if (isLoading || !reportData) {
@@ -80,7 +83,10 @@ export const Reports = () => {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">Comprehensive insights into your tutoring business</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">
+            Comprehensive insights into your tutoring business —{' '}
+            <span className="font-bold text-green-700">{formatSchoolYear(selectedYear)}</span>
+          </p>
         </div>
         <ExportButton reportData={reportData} />
       </div>

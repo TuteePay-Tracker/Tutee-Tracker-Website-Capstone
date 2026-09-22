@@ -192,14 +192,14 @@ function renderReceiptCanvas(receipt: ReceiptData): HTMLCanvasElement {
       c.fillRect(PAD, boxTop + 20, CONTENT_W, 14); // square bottom corners of header
       fmt(c, 10, '600');
       c.fillStyle = gray;
-      const dueR = PAD + CONTENT_W * 0.34;
-      const paidR = PAD + CONTENT_W * 0.66;
-      const statusR = WIDTH - PAD - 12;
+      const dueR = PAD + CONTENT_W * 0.38;
+      const paidR = PAD + CONTENT_W * 0.70;
+      const statusR = WIDTH - PAD - 14;
       c.textAlign = 'left';
-      c.fillText('DATE', PAD + 12, boxTop + 22);
+      c.fillText('DATE', PAD + 14, boxTop + 22);
       c.textAlign = 'right';
-      c.fillText('AMOUNT DUE', dueR - 12, boxTop + 22);
-      c.fillText('AMOUNT PAID', paidR - 12, boxTop + 22);
+      c.fillText('AMOUNT DUE', dueR - 10, boxTop + 22);
+      c.fillText('AMOUNT PAID', paidR - 10, boxTop + 22);
       c.fillText('STATUS', statusR, boxTop + 22);
 
       days.forEach((day, i) => {
@@ -214,14 +214,14 @@ function renderReceiptCanvas(receipt: ReceiptData): HTMLCanvasElement {
         fmt(c, 13, '500');
         c.fillStyle = ink;
         c.textAlign = 'left';
-        c.fillText(formatSafeDate(day.date), PAD + 12, ry + 24);
+        c.fillText(formatSafeDate(day.date), PAD + 14, ry + 24);
         fmt(c, 12);
         c.fillStyle = gray;
         c.textAlign = 'right';
-        c.fillText(formatCurrency(day.amountDue || 0), dueR - 12, ry + 24);
+        c.fillText(formatCurrency(day.amountDue || 0), dueR - 10, ry + 24);
         fmt(c, 12, '600');
         c.fillStyle = ink;
-        c.fillText(formatCurrency(day.amountPaid || 0), paidR - 12, ry + 24);
+        c.fillText(formatCurrency(day.amountPaid || 0), paidR - 10, ry + 24);
 
         // Status badge
         const label = statusLabel(day.status);
@@ -461,78 +461,80 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-              <CheckCircle2 className="text-emerald-700" size={24} />
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Modal Topbar Header */}
+        <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="text-emerald-700" size={20} />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Payment Receipt</h2>
-              <p className="text-sm text-gray-500">Receipt #{receipt.receiptNumber || 'N/A'}</p>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">Payment Receipt</h2>
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Receipt #{receipt.receiptNumber || 'N/A'}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl font-light"
+            className="text-gray-400 hover:text-gray-600 text-2xl font-light p-1 shrink-0 leading-none"
+            aria-label="Close"
           >
             ×
           </button>
         </div>
 
-        {/* Receipt Content */}
-        <div ref={receiptRef} className="p-8 bg-white">
-          <div className="border-2 border-gray-200 rounded-xl p-8">
-            {/* Header */}
-            <div className="text-center mb-8 pb-6 border-b-2 border-gray-200">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">TuteePay Tracker</h1>
-              <p className="text-gray-600 text-sm">Payment Receipt</p>
-              <p className="text-xs text-gray-500 mt-2">Receipt #: {receipt.receiptNumber || 'N/A'}</p>
+        {/* Scrollable Receipt Body */}
+        <div className="p-3 sm:p-8 bg-white overflow-y-auto flex-1">
+          <div ref={receiptRef} className="border border-gray-200 sm:border-2 rounded-xl p-4 sm:p-8 bg-white shadow-xs">
+            {/* Brand Header */}
+            <div className="text-center mb-5 sm:mb-8 pb-4 sm:pb-6 border-b sm:border-b-2 border-gray-200">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">TuteePay Tracker</h1>
+              <p className="text-gray-600 text-xs sm:text-sm font-medium">Payment Receipt</p>
+              <p className="text-[11px] sm:text-xs text-gray-400 mt-1 sm:mt-2">Receipt #: {receipt.receiptNumber || 'N/A'}</p>
             </div>
 
             {/* Student & Payment Info */}
-            <div className="grid grid-cols-2 gap-8 mb-8">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Student Name</p>
-                <p className="text-lg font-semibold text-gray-900">{receipt.tuteeName || 'Student'}</p>
+            <div className="grid grid-cols-2 gap-4 sm:gap-8 mb-5 sm:mb-8">
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 sm:mb-2">Student Name</p>
+                <p className="text-sm sm:text-lg font-semibold text-gray-900 truncate">{receipt.tuteeName || 'Student'}</p>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Date</p>
-                <p className="text-lg font-semibold text-gray-900">
+              <div className="text-right min-w-0">
+                <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 sm:mb-2">Payment Date</p>
+                <p className="text-sm sm:text-lg font-semibold text-gray-900 truncate">
                   {formatSafeDate(receipt.paymentDate)}
                 </p>
               </div>
             </div>
 
             {/* Payment Details */}
-            <div className="mb-6">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Payment Details</p>
-              <div className="bg-gray-50 rounded-lg overflow-hidden">
+            <div className="mb-5 sm:mb-6">
+              <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 sm:mb-4">Payment Details</p>
+              <div className="bg-gray-50 rounded-lg overflow-x-auto border border-gray-200">
                 {receipt.daysPaid && receipt.daysPaid.length > 0 ? (
-                  <table className="w-full">
-                    <thead className="bg-gray-100">
+                  <table className="w-full min-w-[300px] sm:min-w-full text-left">
+                    <thead className="bg-gray-100/90 border-b border-gray-200">
                       <tr>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-700 uppercase">Date</th>
-                        <th className="text-right p-3 text-xs font-semibold text-gray-700 uppercase">Amount Due</th>
-                        <th className="text-right p-3 text-xs font-semibold text-gray-700 uppercase">Amount Paid</th>
-                        <th className="text-right p-3 text-xs font-semibold text-gray-700 uppercase">Status</th>
+                        <th className="py-2 px-2.5 sm:p-3 text-[10px] sm:text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Date</th>
+                        <th className="py-2 px-2.5 sm:p-3 text-[10px] sm:text-xs font-semibold text-gray-700 uppercase tracking-wider text-right whitespace-nowrap">Amount Due</th>
+                        <th className="py-2 px-2.5 sm:p-3 text-[10px] sm:text-xs font-semibold text-gray-700 uppercase tracking-wider text-right whitespace-nowrap">Amount Paid</th>
+                        <th className="py-2 px-2.5 sm:p-3 text-[10px] sm:text-xs font-semibold text-gray-700 uppercase tracking-wider text-right whitespace-nowrap">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-200 bg-white">
                       {receipt.daysPaid.map((day, index) => (
-                        <tr key={index}>
-                          <td className="p-3 text-sm font-medium text-gray-900">
+                        <tr key={index} className="hover:bg-gray-50/70 transition-colors">
+                          <td className="py-2.5 px-2.5 sm:p-3 text-xs sm:text-sm font-medium text-gray-900 whitespace-nowrap">
                             {formatSafeDate(day.date)}
                           </td>
-                          <td className="p-3 text-sm text-right text-gray-600">
+                          <td className="py-2.5 px-2.5 sm:p-3 text-xs sm:text-sm text-right text-gray-600 whitespace-nowrap">
                             {formatCurrency(day.amountDue || 0)}
                           </td>
-                          <td className="p-3 text-sm text-right font-semibold text-gray-900">
+                          <td className="py-2.5 px-2.5 sm:p-3 text-xs sm:text-sm text-right font-semibold text-gray-900 whitespace-nowrap">
                             {formatCurrency(day.amountPaid || 0)}
                           </td>
-                          <td className="p-3 text-right">
-                            <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
+                          <td className="py-2.5 px-2.5 sm:p-3 text-right whitespace-nowrap">
+                            <span className={`inline-block px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold rounded ${
                               day.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                               day.status === 'partial' ? 'bg-orange-100 text-orange-700' :
                               day.status === 'no-class' ? 'bg-purple-100 text-purple-700' :
@@ -546,7 +548,7 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
                     </tbody>
                   </table>
                 ) : (
-                  <div className="p-4 text-sm text-gray-700 font-medium">
+                  <div className="p-3 sm:p-4 text-xs sm:text-sm text-gray-700 font-medium">
                     Monthly Tuition Payment
                   </div>
                 )}
@@ -554,22 +556,22 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
             </div>
 
             {/* Total */}
-            <div className="border-t-2 border-gray-200 pt-4 mb-6">
-              <div className="flex justify-between items-center">
-                <p className="text-lg font-semibold text-gray-900">Total Amount Paid</p>
-                <p className="text-2xl font-bold text-emerald-700">{formatCurrency(receipt.totalAmount || 0)}</p>
+            <div className="border-t sm:border-t-2 border-gray-200 pt-3 sm:pt-4 mb-5 sm:mb-6">
+              <div className="flex justify-between items-center gap-2">
+                <p className="text-sm sm:text-lg font-semibold text-gray-900">Total Amount Paid</p>
+                <p className="text-lg sm:text-2xl font-bold text-emerald-700">{formatCurrency(receipt.totalAmount || 0)}</p>
               </div>
             </div>
 
             {/* Payment Info Grid */}
-            <div className="grid grid-cols-2 gap-8 mb-6">
+            <div className="grid grid-cols-2 gap-4 sm:gap-8 mb-5 sm:mb-6">
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Method</p>
-                <p className="text-sm text-gray-900 font-semibold">{receipt.paymentMethod || 'Cash'}</p>
+                <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 sm:mb-2">Payment Method</p>
+                <p className="text-xs sm:text-sm text-gray-900 font-semibold">{receipt.paymentMethod || 'Cash'}</p>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Type</p>
-                <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg border ${
+              <div className="text-right sm:text-left">
+                <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 sm:mb-2">Payment Type</p>
+                <span className={`inline-block px-2 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold rounded-lg border ${
                   receipt.coverageType === 'full'
                     ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                     : 'bg-orange-50 border-orange-200 text-orange-700'
@@ -581,16 +583,16 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
 
             {/* Notes */}
             {receipt.notes && (
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Notes</p>
-                <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">{receipt.notes}</p>
+              <div className="mb-5 sm:mb-6">
+                <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 sm:mb-2">Notes</p>
+                <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 p-2.5 sm:p-3 rounded-lg break-words border border-gray-100">{receipt.notes}</p>
               </div>
             )}
 
             {/* Footer */}
-            <div className="text-center pt-6 border-t border-gray-200">
-              <p className="text-xs text-gray-500">Thank you for your payment!</p>
-              <p className="text-xs text-gray-400 mt-1">
+            <div className="text-center pt-4 sm:pt-6 border-t border-gray-200">
+              <p className="text-[11px] sm:text-xs text-gray-500">Thank you for your payment!</p>
+              <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5 sm:mt-1">
                 Generated on {formatSafeDate(new Date(), 'MMM dd, yyyy HH:mm')}
               </p>
             </div>
@@ -598,19 +600,19 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
         </div>
 
         {/* Actions */}
-        <div className="p-6 border-t border-gray-200 flex gap-3">
+        <div className="p-3 sm:p-6 border-t border-gray-200 flex gap-2 sm:gap-3 bg-white shrink-0">
           <button
             onClick={downloadReceipt}
             disabled={isDownloading}
-            className="flex-1 inline-flex items-center justify-center gap-2 bg-green-700 text-white px-6 py-3 rounded-xl hover:bg-green-800 disabled:opacity-60 shadow-lg shadow-green-700/20 transition-all font-medium cursor-pointer disabled:cursor-not-allowed"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-green-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:bg-green-800 disabled:opacity-60 shadow-md sm:shadow-lg shadow-green-700/20 transition-all text-xs sm:text-base font-medium cursor-pointer disabled:cursor-not-allowed"
           >
-            {isDownloading ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
-            {isDownloading ? 'Generating Receipt...' : 'Download Receipt'}
+            {isDownloading ? <Loader2 size={16} className="animate-spin sm:w-5 sm:h-5" /> : <Download size={16} className="sm:w-5 sm:h-5" />}
+            <span>{isDownloading ? 'Generating...' : 'Download Receipt'}</span>
           </button>
           <button
             onClick={onClose}
             disabled={isDownloading}
-            className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-200 transition-all font-medium cursor-pointer"
+            className="flex-1 bg-gray-100 text-gray-700 px-3 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:bg-gray-200 transition-all text-xs sm:text-base font-medium cursor-pointer"
           >
             Close
           </button>

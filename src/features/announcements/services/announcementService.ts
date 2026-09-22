@@ -2,6 +2,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, d
 import { db } from '@/shared/lib/firebase/config';
 import { sendAnnouncementNotification } from '@/shared/lib/notifications/sendPush';
 import { Announcement, AnnouncementFormData } from '@/features/announcements/types/announcement';
+import { getSchoolYearFromDate } from '@/shared/utils/schoolYear';
 
 class AnnouncementService {
   subscribe(tutorId: string, callback: (announcements: Announcement[]) => void) {
@@ -24,11 +25,13 @@ class AnnouncementService {
 
   async create(tutorId: string, data: AnnouncementFormData) {
     const collRef = collection(db, 'users', tutorId, 'announcements');
+    const now = Timestamp.now();
     const docRef = await addDoc(collRef, {
       ...data,
       tutorId,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+      schoolYear: getSchoolYearFromDate(now.toDate()),
+      createdAt: now,
+      updatedAt: now,
     });
 
     // Fire-and-forget push to all parents linked to this tutor.

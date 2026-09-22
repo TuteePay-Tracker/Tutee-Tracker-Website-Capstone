@@ -5,7 +5,7 @@ import {
   User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
   Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
   Download, Eye, Calendar, Clock, Activity, FileText, CheckCircle2, ChevronRight,
-  BellRing, Copy, AlertCircle
+  BellRing, Copy, AlertCircle, CalendarRange
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
@@ -13,6 +13,8 @@ import { db } from '@/shared/lib/firebase/config';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { setupWebPushNotifications, getNotificationPermissionState, getStoredFcmToken } from '@/shared/services/fcmService';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { formatSchoolYear, getNextSchoolYear, getDefaultSchoolYears } from '@/shared/utils/schoolYear';
 import gcashLogo from '@/assets/gcash-com-logo.png';
 import mayaLogo from '@/assets/id5dWPPLkV_logos.jpeg';
 
@@ -32,7 +34,15 @@ const MODULE_ACTIONS: Record<string, string[]> = {
 export const Settings = () => {
   const { user, updateProfilePhoto, updatePaymentMethods } = useAuth();
   const { subjects, addSubject, deleteSubject, isLoading: subjectsLoading } = useSubjects();
-  const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'payments' | 'subjects' | 'logs' | 'backup'>(() => {
+  const {
+    selectedYear,
+    setSelectedYear,
+    availableYears,
+    addSchoolYear,
+    removeSchoolYear,
+    refreshSchoolYears,
+  } = useSchoolYear();
+  const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'payments' | 'subjects' | 'schoolyear' | 'logs' | 'backup'>(() => {
     return (sessionStorage.getItem('settingsActiveTab') as any) || 'account';
   });
 
@@ -56,6 +66,8 @@ export const Settings = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [newSchoolYear, setNewSchoolYear] = useState('');
+  const [isAddingSchoolYear, setIsAddingSchoolYear] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   // Backup Recovery states
@@ -261,12 +273,72 @@ export const Settings = () => {
     }
   };
 
+  const handleAddSchoolYear = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const year = newSchoolYear.trim();
+    if (!year) {
+      toast.error('Please enter a school year');
+      return;
+    }
+    if (availableYears.includes(year)) {
+      toast.error('This school year already exists');
+      return;
+    }
+    setIsAddingSchoolYear(true);
+    try {
+      await addSchoolYear(year);
+      setNewSchoolYear('');
+      toast.success(`School year ${formatSchoolYear(year)} added successfully`);
+    } catch (error) {
+      toast.error('Failed to add school year');
+    } finally {
+      setIsAddingSchoolYear(false);
+    }
+  };
+
+  const handleRemoveSchoolYear = async (year: string) => {
+    const suggestion = `Suggest: ${formatSchoolYear(getNextSchoolYear(year) ?? year)}`;
+    if (window.confirm(
+      `Are you sure you want to remove school year ${formatSchoolYear(year)}? You can re-add it anytime; existing data is preserved.`
+    )) {
+      try {
+        await removeSchoolYear(year);
+        toast.success(`School year ${formatSchoolYear(year)} removed`);
+        toast.info(suggestion);
+      } catch (error) {
+        toast.error('Failed to remove school year');
+      }
+    }
+  };
+
+  const handleSetActiveYear = async (year: string) => {
+    if (year === selectedYear) return;
+    if (!window.confirm(`Switch the entire app to ${formatSchoolYear(year)}? All pages will show data for this school year only.`)) {
+      return;
+    }
+    setSelectedYear(year);
+    toast.success(`Now viewing ${formatSchoolYear(year)}`);
+  };
+
+  const handleRebuildTotals = async () => {
+    if (!user) return;
+    try {
+      // Re-run the migration backfill to guarantee every existing record
+      // carries a schoolYear stamp and tutee totalsByYear is present.
+      const importer = await import('@/shared/utils/migrateSchoolYears');
+      importer.migrateSchoolYears(user.id, true);
+      toast.success('School year backfill re-run in the background');
+    } catch (error) {
+      toast.error('Failed to re-run backfill');
+    }
+  };
+
   const handleExportData = async () => {
     if (!user) return;
     setIsExporting(true);
     try {
       toast.info('Preparing your data backup...');
-      const collectionsToExport = ['tutees', 'payments', 'sessions', 'paymentRecords', 'paymentTransactions', 'subjects', 'assessments', 'progressReports', 'announcements'];
+      const collectionsToExport = ['tutees', 'payments', 'sessions', 'paymentRecords', 'paymentTransactions', 'subjects', 'assessments', 'progressReports', 'announcements', 'schoolYears'];
       const backupData: Record<string, any[]> = {};
 
       for (const col of collectionsToExport) {
@@ -380,7 +452,7 @@ export const Settings = () => {
     try {
       toast.info('Restoring records to cloud...');
 
-      const collectionsToRestore = ['tutees', 'payments', 'sessions', 'paymentRecords', 'paymentTransactions', 'subjects', 'assessments', 'progressReports', 'announcements'];
+      const collectionsToRestore = ['tutees', 'payments', 'sessions', 'paymentRecords', 'paymentTransactions', 'subjects', 'assessments', 'progressReports', 'announcements', 'schoolYears'];
 
       // 1. Restore subcollections
       for (const col of collectionsToRestore) {
@@ -617,6 +689,7 @@ export const Settings = () => {
     { id: 'account', label: 'Account Information', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     ...(user?.role === 'tutor' ? [
+      { id: 'schoolyear', label: 'School Year Management', icon: CalendarRange },
       { id: 'payments', label: 'Payment Settings', icon: CreditCard },
       { id: 'subjects', label: 'Subject Management', icon: BookOpen },
       { id: 'logs', label: 'Audit Logs', icon: ShieldAlert },
@@ -1091,7 +1164,128 @@ export const Settings = () => {
             </div>
           )}
 
-          {/* 5. Audit Logs Tab */}
+          {/* 5. School Year Management Tab */}
+          {activeTab === 'schoolyear' && user?.role === 'tutor' && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm animate-in fade-in-50 duration-200 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0">
+                  <CalendarRange size={20} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">School Year Management</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Students, payments, attendance, and reports are tracked per school year (June 1 – May 31).
+                  </p>
+                </div>
+              </div>
+
+              {/* Active year card */}
+              <div className="p-5 rounded-2xl border border-green-200 bg-green-50/60">
+                <p className="text-xs uppercase font-extrabold tracking-wider text-green-700">Currently Viewing</p>
+                <p className="text-2xl font-black text-green-900 mt-1">{formatSchoolYear(selectedYear)}</p>
+                <p className="text-xs text-green-800 mt-1">
+                  Only data belonging to this school year is shown across the app. Switch anytime from the sidebar switcher.
+                </p>
+              </div>
+
+              {/* Suggestion row */}
+              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
+                <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800">
+                  When your next school year starts (June), add it here or use the suggested year below. Students from the
+                  previous year stay archived under their old year and won't appear in the new one until you enroll them.
+                </p>
+              </div>
+
+              {/* Existing school years */}
+              <div>
+                <p className="text-xs uppercase font-extrabold tracking-wider text-gray-400 mb-2">
+                  Your School Years ({availableYears.length})
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {availableYears.map((year) => (
+                    <div
+                      key={year}
+                      className={`flex items-center justify-between p-3.5 rounded-xl border transition-colors ${
+                        year === selectedYear
+                          ? 'border-green-300 bg-green-50'
+                          : 'border-gray-200 bg-gray-50/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <CalendarRange size={16} className={year === selectedYear ? 'text-green-700' : 'text-gray-400'} />
+                        <span className="font-bold text-sm text-gray-800">{formatSchoolYear(year)}</span>
+                        {year === selectedYear && (
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-green-700 text-white">Active</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {year !== selectedYear && (
+                          <button
+                            onClick={() => handleSetActiveYear(year)}
+                            className="text-xs font-bold text-green-700 hover:bg-green-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                          >
+                            Switch
+                          </button>
+                        )}
+                        {year !== selectedYear && (
+                          <button
+                            onClick={() => handleRemoveSchoolYear(year)}
+                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                            title={`Remove ${formatSchoolYear(year)}`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add new school year */}
+              <form onSubmit={handleAddSchoolYear} className="space-y-2">
+                <p className="text-xs uppercase font-extrabold tracking-wider text-gray-400">Add a School Year</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={newSchoolYear}
+                    onChange={(e) => setNewSchoolYear(e.target.value)}
+                    placeholder={getDefaultSchoolYears().length ? `e.g., ${formatSchoolYear(getNextSchoolYear(selectedYear) ?? selectedYear)}` : 'e.g., 2027-28'}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 text-sm font-semibold"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isAddingSchoolYear || !newSchoolYear.trim()}
+                    className="flex items-center justify-center gap-2 bg-green-700 text-white px-4 py-2.5 rounded-xl hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+                  >
+                    <Plus size={18} />
+                    Add School Year
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Format: <code className="font-mono font-bold">YYYY-YY</code> of the starting year (e.g., <code className="font-mono font-bold">2026-27</code> for June 2026 – May 2027).
+                </p>
+              </form>
+
+              {/* Backfill maintenance */}
+              <div className="pt-2 border-t border-gray-100">
+                <button
+                  onClick={handleRebuildTotals}
+                  className="flex items-center gap-2 text-xs font-bold text-gray-600 hover:text-gray-900 hover:bg-gray-50 px-3 py-2 rounded-lg transition-colors border border-gray-200"
+                >
+                  <Clock size={14} />
+                  Re-run School Year & Totals Backfill
+                </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  Re-scans all records and ensures every payment, session, and attendance entry is tagged with its school year,
+                  and recalculates per-year totals.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 6. Audit Logs Tab */}
           {activeTab === 'logs' && user?.role === 'tutor' && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
 

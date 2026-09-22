@@ -5,9 +5,12 @@ import { announcementService } from '@/features/announcements/services/announcem
 import { Megaphone, Plus, Pencil, Trash2, X, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
 
 export const Announcements = () => {
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAnnounce, setEditingAnnounce] = useState<Announcement | null>(null);
@@ -21,9 +24,11 @@ export const Announcements = () => {
 
   useEffect(() => {
     if (tutorId) {
-      return announcementService.subscribe(tutorId, setAnnouncements);
+      return announcementService.subscribe(tutorId, (data) => {
+        setAnnouncements(data.filter((a) => belongsToSchoolYear(selectedYear, a)));
+      });
     }
-  }, [tutorId]);
+  }, [tutorId, selectedYear]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

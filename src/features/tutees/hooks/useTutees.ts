@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 
-import { Tutee } from '@/features/tutees/types/tutee';
+import { Tutee, isTuteeInSchoolYear } from '@/features/tutees/types/tutee';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 
 export const useTutees = () => {
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [tutees, setTutees] = useState<Tutee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const applyScope = (data: Tutee[]): Tutee[] => data.filter((t) => isTuteeInSchoolYear(t, selectedYear));
 
   useEffect(() => {
     if (user === undefined) return;
@@ -21,7 +25,7 @@ export const useTutees = () => {
     if (user?.role === 'parent') {
       if (user.createdByTutorId) {
         unsubscribe = tuteeService.subscribeAll((data) => {
-          setTutees(data);
+          setTutees(applyScope(data));
           setIsLoading(false);
           setError(null);
         }, user.createdByTutorId);
@@ -31,7 +35,7 @@ export const useTutees = () => {
       }
     } else if (user) {
       unsubscribe = tuteeService.subscribeAll((data) => {
-        setTutees(data);
+        setTutees(applyScope(data));
         setIsLoading(false);
         setError(null);
       });
@@ -41,7 +45,7 @@ export const useTutees = () => {
     }
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, selectedYear]);
 
   const loadTutees = async () => {
     try {
@@ -59,11 +63,11 @@ export const useTutees = () => {
         }
         // tuteeService.getAll() already filters by parentId == auth.currentUser.uid,
         // so no additional client-side filtering is needed here.
-        setTutees(data);
+        setTutees(applyScope(data));
       } else {
         // For tutors, it uses their own ID
         data = await tuteeService.getAll();
-        setTutees(data);
+        setTutees(applyScope(data));
       }
 
       setError(null);
@@ -81,7 +85,7 @@ export const useTutees = () => {
 
   const addTutee = async (tutee: Omit<Tutee, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
-      const newTutee = await tuteeService.create(tutee);
+      const newTutee = await tuteeService.create(tutee, { schoolYear: selectedYear });
       // NOTE: Do NOT call setTutees here.
       // The real-time Firestore listener (subscribeAll) automatically
       // updates the state when the document is written, preventing duplicates.
@@ -121,7 +125,7 @@ export const useTutees = () => {
 
   const archiveTutee = async (id: string) => {
     try {
-      await tuteeService.archive(id);
+      await tuteeService.archive(id, selectedYear);
       // Real-time listener handles the state update automatically.
     } catch (err: any) {
       const errorMessage = err?.message || 'Failed to archive tutee';
@@ -133,7 +137,7 @@ export const useTutees = () => {
 
   const unarchiveTutee = async (id: string) => {
     try {
-      await tuteeService.unarchive(id);
+      await tuteeService.unarchive(id, selectedYear);
       // Real-time listener handles the state update automatically.
     } catch (err: any) {
       const errorMessage = err?.message || 'Failed to unarchive tutee';

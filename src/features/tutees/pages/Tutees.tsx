@@ -5,10 +5,14 @@ import { logActivity } from '@/shared/utils/auditLogger';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
-import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User, CalendarRange } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS } from '@/features/tutees/types/tutee';
+import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals } from '@/features/tutees/types/tutee';
+import { tuteeService } from '@/features/tutees/services/tuteeService';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { formatSchoolYear } from '@/shared/utils/schoolYear';
 import { formatTime12h } from '@/shared/utils/formatDate';
+import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { toast } from 'sonner';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -34,6 +38,7 @@ export const Tutees = () => {
   const { subjects } = useSubjects();
   const { payments } = usePayments();
   const { user } = useAuth();
+  const { selectedYear, availableYears } = useSchoolYear();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -44,6 +49,45 @@ export const Tutees = () => {
   const [createdParentCredentials, setCreatedParentCredentials] = useState<CreatedParentCredentials | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [allTutees, setAllTutees] = useState<Tutee[]>([]);
+
+  // A student is "archived" per school year. Legacy records without
+  // archivedForYears fall back to the old flat `archived` flag.
+  const isArchivedThisYear = (t: Tutee): boolean => {
+    if (Array.isArray(t.archivedForYears)) return t.archivedForYears.includes(selectedYear);
+    return !!t.archived;
+  };
+
+  // Load the unfiltered list once to power the carry-over (enroll) panel.
+  useEffect(() => {
+    if (user?.role !== 'tutor') return;
+    let cancelled = false;
+    tuteeService.getAll().then((data) => {
+      if (!cancelled) setAllTutees(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.role, user?.id]);
+
+  // Students from other school years who are NOT yet enrolled in the current one.
+  const carryOverCandidates = allTutees.filter((t) => {
+    const years = t.schoolYears;
+    if (!Array.isArray(years) || years.length === 0) return false;
+    return !years.includes(selectedYear);
+  });
+
+  const handleCarryOver = async (t: Tutee) => {
+    try {
+      const yearTotals = { ...(t.totalsByYear || {}), [selectedYear]: { totalSessions: 0, totalPaid: 0, balance: 0 } };
+      await updateTutee(t.id, {
+        schoolYears: [...(t.schoolYears || []), selectedYear],
+        archivedForYears: (t.archivedForYears || []).filter((y) => y !== selectedYear),
+        totalsByYear: yearTotals,
+      });
+      toast.success(`${t.firstName} ${t.surname} enrolled in ${formatSchoolYear(selectedYear)}`);
+    } catch (error) {
+      toast.error('Failed to enroll student in this school year');
+    }
+  };
 
   // Close card menus on outside click
   useEffect(() => {
@@ -96,7 +140,7 @@ export const Tutees = () => {
 
   const filteredAndSortedTutees = tutees
     .filter(tutee => {
-      const isArchived = !!tutee.archived;
+      const isArchived = isArchivedThisYear(tutee);
       if (showArchived) {
         if (!isArchived) return false;
       } else {
@@ -118,7 +162,7 @@ export const Tutees = () => {
         case 'subject':
           return a.subject.localeCompare(b.subject);
         case 'balance':
-          return b.balance - a.balance;
+          return getTuteeYearTotals(b, selectedYear).balance - getTuteeYearTotals(a, selectedYear).balance;
         case 'grade':
           return (a.gradeLevel || '').localeCompare(b.gradeLevel || '');
         default:
@@ -150,10 +194,10 @@ export const Tutees = () => {
   };
 
   const handleArchive = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to archive ${name}?`)) {
+    if (window.confirm(`Archive ${name} for ${formatSchoolYear(selectedYear)}? They will be hidden from this school year's view but remain visible in their other school years.`)) {
       try {
         await archiveTutee(id);
-        toast.success(`${name} archived successfully`);
+        toast.success(`${name} archived for ${formatSchoolYear(selectedYear)}`);
         if (user) {
           await logActivity(
             user.id,
@@ -161,7 +205,7 @@ export const Tutees = () => {
             user.role,
             'Student Archived',
             'Students',
-            `Archived student ${name}`
+            `Archived student ${name} for ${formatSchoolYear(selectedYear)}`
           );
         }
       } catch (error) {
@@ -173,7 +217,7 @@ export const Tutees = () => {
   const handleUnarchive = async (id: string, name: string) => {
     try {
       await unarchiveTutee(id);
-      toast.success(`${name} unarchived successfully`);
+      toast.success(`${name} restored for ${formatSchoolYear(selectedYear)}`);
       if (user) {
         await logActivity(
           user.id,
@@ -181,7 +225,7 @@ export const Tutees = () => {
           user.role,
           'Student Updated',
           'Students',
-          `Unarchived student ${name}`
+          `Unarchived student ${name} for ${formatSchoolYear(selectedYear)}`
         );
       }
     } catch (error) {
@@ -312,6 +356,9 @@ export const Tutees = () => {
                 const parentChanged = editingTutee.parentId !== data.parentId;
 
                 await updateTutee(editingTutee.id, data);
+                if (scheduleChanged) {
+                  await dayPaymentService.syncTuteeScheduleRecords(editingTutee.id, data.schedule);
+                }
                 studentId = editingTutee.id;
                 toast.success('Tutee updated successfully');
 
@@ -484,6 +531,38 @@ export const Tutees = () => {
         />
       )}
 
+      {user?.role === 'tutor' && carryOverCandidates.length > 0 && (
+        <div className="bg-white rounded-2xl border-2 border-dashed border-green-300 p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-xl bg-green-50 text-green-700 flex items-center justify-center shrink-0">
+              <CalendarRange size={18} />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 text-base">Students from other school years</h3>
+              <p className="text-xs text-gray-500">
+                These students are not enrolled in {formatSchoolYear(selectedYear)} yet. Enroll them to carry them over to this school year.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {carryOverCandidates.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                <span className="text-sm font-semibold text-gray-800">{t.firstName} {t.surname}</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase">
+                  {t.schoolYears?.map(formatSchoolYear).join(', ')}
+                </span>
+                <button
+                  onClick={() => handleCarryOver(t)}
+                  className="text-xs font-bold text-green-700 hover:bg-green-100 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  Enroll
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-center py-12">
           <div className="text-gray-500">Loading tutees...</div>
@@ -499,12 +578,14 @@ export const Tutees = () => {
             const verifiedTotalPaid = tuteePayments
               .filter(p => p.status === 'verified' || !p.status)
               .reduce((sum, p) => sum + (p.amount || 0), 0);
-            const totalBilled = (tutee.totalPaid || 0) + (tutee.balance || 0);
+            const yearTotals = getTuteeYearTotals(tutee, selectedYear);
+            const totalBilled = (yearTotals.totalPaid || 0) + (yearTotals.balance || 0);
             const calculatedBalance = Math.max(0, totalBilled - verifiedTotalPaid);
+            const isArchived = isArchivedThisYear(tutee);
             const tuteeFullName = `${tutee.firstName} ${tutee.surname}`;
 
             return (
-              <div key={tutee.id} className={`glass-panel stat-card-premium ${tutee.archived ? 'stat-warning opacity-75 bg-amber-50/10 border-amber-200/50' : 'stat-primary'} flex flex-col justify-between`}>
+              <div key={tutee.id} className={`glass-panel stat-card-premium ${isArchived ? 'stat-warning opacity-75 bg-amber-50/10 border-amber-200/50' : 'stat-primary'} flex flex-col justify-between`}>
                 {/* Card Header with avatar + name + 3-dot menu */}
                 <div className="flex items-center gap-3 p-5 pb-3">
                   <div className="shrink-0">
@@ -529,9 +610,9 @@ export const Tutees = () => {
                         </span>
                       ))}
                     </div>
-                    {tutee.archived && (
+                    {isArchived && (
                       <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/40 px-1.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
-                        Archived
+                        Archived · {formatSchoolYear(selectedYear)}
                       </span>
                     )}
                   </div>
@@ -566,13 +647,13 @@ export const Tutees = () => {
                           <Pencil size={15} className="text-gray-400" />
                           Edit
                         </button>
-                        {tutee.archived ? (
+                        {isArchived ? (
                           <button
                             onClick={() => { handleUnarchive(tutee.id, tuteeFullName); setActiveMenuId(null); }}
                             className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
                           >
                             <Users size={15} className="text-amber-400" />
-                            Unarchive
+                            Unarchive for {formatSchoolYear(selectedYear)}
                           </button>
                         ) : (
                           <button
@@ -580,7 +661,7 @@ export const Tutees = () => {
                             className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:hover:bg-slate-800 transition-colors text-left font-medium"
                           >
                             <Users size={15} className="text-amber-400" />
-                            Archive
+                            Archive for {formatSchoolYear(selectedYear)}
                           </button>
                         )}
                         <div className="border-t border-gray-100 dark:border-slate-800 my-1" />
@@ -607,16 +688,16 @@ export const Tutees = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-slate-400 font-medium">Sessions:</span>
-                    <span className="font-semibold text-gray-800 dark:text-slate-200">{tutee.totalSessions}</span>
+                    <span className="font-semibold text-gray-800 dark:text-slate-200">{yearTotals.totalSessions}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-slate-400 font-medium">Total Paid:</span>
-                    <span className="font-semibold text-gray-800 dark:text-slate-200">{formatCurrency(tutee.totalPaid)}</span>
+                    <span className="font-semibold text-gray-800 dark:text-slate-200">{formatCurrency(yearTotals.totalPaid)}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-gray-100/40 dark:border-slate-800/40">
                     <span className="text-gray-500 dark:text-slate-400 font-bold">Balance:</span>
-                    <span className={`font-bold ${tutee.balance > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
-                      {formatCurrency(tutee.balance)}
+                    <span className={`font-bold ${yearTotals.balance > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+                      {formatCurrency(yearTotals.balance)}
                     </span>
                   </div>
                 </div>

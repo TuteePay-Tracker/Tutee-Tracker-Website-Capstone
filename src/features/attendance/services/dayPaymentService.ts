@@ -20,7 +20,8 @@ import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
 import { sendPaymentStatusNotification } from '@/shared/lib/notifications/sendPush';
 import { logActivity } from '@/shared/utils/auditLogger';
-import { startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
+import { startOfMonth, endOfMonth, eachDayOfInterval, format, parseISO } from 'date-fns';
+import { getSchoolYearFromMonth } from '@/shared/utils/schoolYear';
 
 class DayPaymentService {
   private getUserId(providedId?: string): string {
@@ -102,9 +103,11 @@ class DayPaymentService {
       const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
       // Get tutee's schedule days
-      const scheduleDays = Array.isArray(tutee.schedule)
-        ? tutee.schedule.map(s => s.day)
-        : [];
+      const scheduleDays: string[] = Array.isArray(tutee.schedule)
+        ? tutee.schedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
+        : typeof tutee.schedule === 'string'
+          ? (tutee.schedule as string).split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
+          : [];
 
       // Create day payments only for scheduled days
       const dayPayments: DayPayment[] = allDays
@@ -122,6 +125,7 @@ class DayPaymentService {
         }));
 
       const totalDue = tutee.ratePerSession;
+      const schoolYear = getSchoolYearFromMonth(month) || '';
 
       const record: Omit<PaymentRecord, 'id'> = {
         tuteeId,
@@ -129,6 +133,7 @@ class DayPaymentService {
         parentId: tutee.parentId || null,
         tutorId: userId,
         month,
+        schoolYear,
         dayPayments,
         totalDue,
         totalPaid: 0,
@@ -143,6 +148,14 @@ class DayPaymentService {
         createdAt: Timestamp.fromDate(new Date()),
         lastUpdated: Timestamp.fromDate(new Date()),
       });
+
+      // Ensure the record's school year is part of the student's enrolled years.
+      if (schoolYear) {
+        const current = tutee.schoolYears || [];
+        if (!current.includes(schoolYear)) {
+          await tuteeService.update(tuteeId, { schoolYears: [...current, schoolYear] });
+        }
+      }
 
       await this.syncTuteeTotals(tuteeId);
 
@@ -223,6 +236,7 @@ class DayPaymentService {
         paymentMethod,
         month,
         notes,
+        schoolYear: getSchoolYearFromMonth(month) || undefined,
         createdAt: new Date().toISOString(),
       };
 
@@ -287,8 +301,10 @@ class DayPaymentService {
   ): Promise<PaymentRecord> {
     try {
       const record = await this.getMonthlyRecord(tuteeId, month);
+      let found = false;
       const updatedDayPayments = record.dayPayments.map(day => {
         if (day.date === date) {
+          found = true;
           const next = { ...day };
           if (attendance === 'none') {
             delete next.attendance;
@@ -299,6 +315,19 @@ class DayPaymentService {
         }
         return day;
       });
+
+      if (!found && attendance !== 'none') {
+        updatedDayPayments.push({
+          date,
+          amountDue: 0,
+          amountPaid: 0,
+          status: 'unpaid' as PaymentStatus,
+          attendance,
+          tuteeId,
+          tuteeName: record.tuteeName,
+        });
+        updatedDayPayments.sort((a, b) => a.date.localeCompare(b.date));
+      }
 
       const userId = this.getUserId();
       const recordId = `${tuteeId}_${month}`;
@@ -317,6 +346,63 @@ class DayPaymentService {
     } catch (error) {
       console.error('Error setting day attendance:', error);
       throw error;
+    }
+  }
+
+  // Synchronize all existing payment records for a tutee with a new schedule
+  async syncTuteeScheduleRecords(tuteeId: string, schedule: any): Promise<void> {
+    try {
+      const userId = this.getUserId();
+      const recordsRef = collection(db, 'users', userId, 'paymentRecords');
+      const q = query(recordsRef, where('tuteeId', '==', tuteeId));
+      const snap = await getDocs(q);
+
+      const scheduleDays: string[] = Array.isArray(schedule)
+        ? schedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
+        : typeof schedule === 'string'
+          ? (schedule as string).split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
+          : [];
+
+      for (const docSnap of snap.docs) {
+        const recordData = docSnap.data();
+        const month = recordData.month;
+        if (!month) continue;
+
+        const monthDate = parseISO(month + '-01');
+        const monthStart = startOfMonth(monthDate);
+        const monthEnd = endOfMonth(monthDate);
+        const allDaysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+        const expectedDates = allDaysInMonth
+          .filter(day => scheduleDays.includes(format(day, 'EEEE')))
+          .map(day => format(day, 'yyyy-MM-dd'));
+
+        const existingMap = new Map<string, DayPayment>();
+        (recordData.dayPayments || []).forEach((dp: DayPayment) => {
+          existingMap.set(dp.date, dp);
+        });
+
+        const newDayPayments: DayPayment[] = expectedDates.map(date => {
+          if (existingMap.has(date)) {
+            return existingMap.get(date)!;
+          }
+          return {
+            date,
+            amountDue: 0,
+            amountPaid: 0,
+            status: 'unpaid' as PaymentStatus,
+            tuteeId,
+            tuteeName: recordData.tuteeName || '',
+          };
+        });
+
+        await updateDoc(docSnap.ref, {
+          dayPayments: newDayPayments,
+          lastUpdated: Timestamp.fromDate(new Date()),
+        });
+      }
+    } catch (error) {
+      console.error('Error syncing tutee schedule records:', error);
     }
   }
 
@@ -528,12 +614,69 @@ class DayPaymentService {
         if (p.month) billedMonths.add(p.month);
       });
 
-      const totalSessions = billedMonths.size;
-      const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-      const totalDue = totalSessions * tutee.ratePerSession;
-      const balance = totalDue - totalPaid;
+      // Per-year financial rollups.
+      const yearMap = new Map<string, {
+        months: Set<string>;
+        paid: number;
+        lastPaymentDate?: string;
+      }>();
 
-      // Find latest payment date
+      const addMonth = (month: string | undefined | null, paid: number, paymentDate?: string) => {
+        if (!month) return;
+        const year = getSchoolYearFromMonth(month) || '';
+        if (!year) return;
+        let entry = yearMap.get(year);
+        if (!entry) {
+          entry = { months: new Set(), paid: 0 };
+          yearMap.set(year, entry);
+        }
+        entry.months.add(month);
+        entry.paid += paid;
+        if (paymentDate && (!entry.lastPaymentDate || paymentDate > entry.lastPaymentDate)) {
+          entry.lastPaymentDate = paymentDate;
+        }
+      };
+
+      records.forEach((r) => addMonth(r.month, 0));
+      payments.forEach((p) => addMonth(p.month || p.paymentDate?.slice(0, 7), p.amount, p.paymentDate));
+
+      const totalsByYear: Record<string, { totalSessions: number; totalPaid: number; balance: number; lastPaymentDate?: string }> = {};
+
+      // Initialize all enrolled school years to 0
+      const enrolledYears = Array.isArray(tutee.schoolYears) ? tutee.schoolYears : [];
+      enrolledYears.forEach((year) => {
+        totalsByYear[year] = { totalSessions: 0, totalPaid: 0, balance: 0 };
+      });
+
+      // Also ensure any existing tracked years are preserved with clean initial values
+      if (tutee.totalsByYear) {
+        Object.keys(tutee.totalsByYear).forEach((year) => {
+          totalsByYear[year] = { totalSessions: 0, totalPaid: 0, balance: 0 };
+        });
+      }
+
+      let totalSessions = 0;
+      let totalPaid = 0;
+
+      yearMap.forEach((entry, year) => {
+        const sessions = entry.months.size;
+        const due = sessions * tutee.ratePerSession;
+        const balance = Math.round((due - entry.paid) * 100) / 100;
+        totalsByYear[year] = {
+          totalSessions: sessions,
+          totalPaid: Math.round(entry.paid * 100) / 100,
+          balance,
+          lastPaymentDate: entry.lastPaymentDate,
+        };
+        totalSessions += sessions;
+        totalPaid += entry.paid;
+      });
+
+      totalPaid = Math.round(totalPaid * 100) / 100;
+      const totalDue = totalSessions * tutee.ratePerSession;
+      const balance = Math.round((totalDue - totalPaid) * 100) / 100;
+
+      // Find latest payment date overall
       let lastPaymentDate = undefined;
       if (payments.length > 0) {
         const sorted = [...payments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
@@ -545,6 +688,7 @@ class DayPaymentService {
         totalPaid,
         balance,
         lastPaymentDate,
+        totalsByYear,
       });
     } catch (error) {
       console.error('Error syncing tutee totals:', error);
@@ -688,6 +832,7 @@ class DayPaymentService {
         paymentMethod: payment.paymentMethod,
         month: payment.month,
         notes: payment.notes || `Verified parent payment proof`,
+        schoolYear: payment.schoolYear || (payment.month ? getSchoolYearFromMonth(payment.month) : undefined),
         paymentId: payment.id,
         createdAt: Timestamp.fromDate(new Date()),
       });

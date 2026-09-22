@@ -20,6 +20,8 @@ export interface Assessment {
   recommendations?: string;
   score: number; // calculated average score (0–100) or total average if totalScore is set
   remarks: Remarks;
+  /** School year this assessment belongs to, e.g. "2026-27". */
+  schoolYear?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -13,6 +13,7 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
+import { getSchoolYearFromDate } from '@/shared/utils/schoolYear';
 
 class ProgressReportService {
   private getUserId(providedId?: string): string {
@@ -79,8 +80,11 @@ class ProgressReportService {
         Object.entries(report).filter(([_, value]) => value !== undefined)
       );
 
+      const reportDate = (cleanedReport.date as string | Date | undefined) || now;
+
       const reportData = {
         ...cleanedReport,
+        schoolYear: cleanedReport.schoolYear || getSchoolYearFromDate(reportDate),
         createdAt: Timestamp.fromDate(now),
         updatedAt: Timestamp.fromDate(now),
       };

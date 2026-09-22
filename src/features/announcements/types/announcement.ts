@@ -4,6 +4,8 @@ export interface Announcement {
   content: string;
   priority: 'low' | 'medium' | 'high';
   tutorId: string;
+  /** School year this announcement belongs to, e.g. "2026-27". */
+  schoolYear?: string;
   createdAt: string;
   updatedAt: string;
 }

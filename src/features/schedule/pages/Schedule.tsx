@@ -1,15 +1,40 @@
 import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Tutee, ScheduleItem } from '@/features/tutees/types/tutee';
 import { Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { formatTime12h } from '@/shared/utils/formatDate';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '@/shared/lib/firebase/config';
 
 export const Schedule = () => {
   const { tutees, isLoading } = useTutees();
+  const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
+  const [chargedTuteeMonths, setChargedTuteeMonths] = useState<Set<string>>(new Set());
+
+  // Listen to payment records to know which months each tutee has been charged for
+  useEffect(() => {
+    const tutorId = user?.role === 'parent' ? user.createdByTutorId : user?.id;
+    if (!tutorId) return;
+
+    const recordsRef = collection(db, 'users', tutorId, 'paymentRecords');
+    const unsubscribe = onSnapshot(recordsRef, (snapshot) => {
+      const set = new Set<string>();
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.tuteeId && data.month) {
+          set.add(`${data.tuteeId}_${data.month}`);
+        }
+      });
+      setChargedTuteeMonths(set);
+    });
+
+    return () => unsubscribe();
+  }, [user?.id, user?.role, user?.createdByTutorId]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 }); // Sunday
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -25,11 +50,17 @@ export const Schedule = () => {
     ? tutees.filter(t => t.id === selectedStudent)
     : tutees;
 
-  // Get schedule for a specific day
-  const getScheduleForDay = (dayName: string) => {
+  // Get schedule for a specific day and date (only include if charged for that month)
+  const getScheduleForDay = (dayName: string, date: Date) => {
+    const monthKey = format(date, 'yyyy-MM');
     const schedules: Array<{ tutee: Tutee; schedule: ScheduleItem }> = [];
 
     filteredTutees.forEach(tutee => {
+      // If tutee wasn't added to this month in payments, don't show on schedule
+      if (!chargedTuteeMonths.has(`${tutee.id}_${monthKey}`)) {
+        return;
+      }
+
       if (Array.isArray(tutee.schedule)) {
         const daySchedule = tutee.schedule.find(s => s.day === dayName);
         if (daySchedule && 'startTime' in daySchedule && 'endTime' in daySchedule) {
@@ -188,7 +219,7 @@ export const Schedule = () => {
                       const date = weekDays[index];
                       const isToday = isSameDay(date, new Date());
                       const isWeekend = day === 'Sunday' || day === 'Saturday';
-                      const schedules = getScheduleForDay(day);
+                      const schedules = getScheduleForDay(day, date);
                       const sessionsInSlot = schedules.filter(({ schedule }) => {
                         const slotHour = parseInt(time.split(':')[0]);
                         const startHour = parseInt(schedule.startTime.split(':')[0]);
@@ -240,7 +271,7 @@ export const Schedule = () => {
           {(() => {
             const dayName = format(currentDate, 'EEEE');
             const isWeekend = dayName === 'Sunday' || dayName === 'Saturday';
-            const schedules = getScheduleForDay(dayName);
+            const schedules = getScheduleForDay(dayName, currentDate);
 
             return (
               <>

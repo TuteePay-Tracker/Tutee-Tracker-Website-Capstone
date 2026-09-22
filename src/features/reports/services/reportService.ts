@@ -16,7 +16,7 @@ import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
 import { Assessment } from '@/features/tutee-progress/types/assessment';
 import { PaymentRecord, getDayAttendance } from '@/features/attendance/types/dayPayment';
-import { Tutee } from '@/features/tutees/types/tutee';
+import { Tutee, TuteeTotalsByYear, isTuteeInSchoolYear, getTuteeYearTotals } from '@/features/tutees/types/tutee';
 import { Payment } from '@/features/payments/types/payment';
 import {
   collection,
@@ -152,16 +152,6 @@ class ReportService {
           month,
           rate: data.scheduled > 0 ? Math.round((data.present / data.scheduled) * 100) : 0,
         }));
-
-      // If no records in database yet for this tutee, derive scheduled days from tutee.schedule (same as Attendance page)
-      if (tuteeRecords.length === 0 && Array.isArray(tutee.schedule) && tutee.schedule.length > 0) {
-        const now = new Date();
-        const monthStart = startOfMonth(now);
-        const monthEnd = endOfMonth(now);
-        const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-        const scheduleDays = tutee.schedule.map((s) => s.day);
-        totalScheduled = allDays.filter((day: Date) => scheduleDays.includes(format(day, 'EEEE'))).length;
-      }
 
       const attendanceRate = totalScheduled > 0
         ? Math.round((totalPaid / totalScheduled) * 100)
@@ -331,7 +321,8 @@ class ReportService {
   private computeAtRiskStudents(
     tutees: Tutee[],
     attendanceSummaries: AttendanceSummary[],
-    studentPerformance: StudentPerformanceReport[]
+    studentPerformance: StudentPerformanceReport[],
+    tuteeTotals?: Map<string, TuteeTotalsByYear>
   ): AtRiskStudent[] {
     const now = new Date();
     const attendanceMap = new Map(attendanceSummaries.map((a) => [a.tuteeId, a]));
@@ -345,7 +336,10 @@ class ReportService {
 
         const attendanceRate = attendance?.attendanceRate ?? 100;
         const averageScore = perf?.averageScore ?? 0;
-        const unpaidBalance = Math.max(tutee.balance || 0, 0);
+        // Use the per-year rollup when a school year is being reported on.
+        const unpaidBalance = tuteeTotals
+          ? Math.max(tuteeTotals.get(tutee.id)?.balance || 0, 0)
+          : Math.max(tutee.balance || 0, 0);
 
         // Factor 1: Low attendance
         if (attendanceRate < 70) {
@@ -527,14 +521,24 @@ class ReportService {
 
   // ── Main Generator ──────────────────────────────────
 
-  async generateReport(dateRange?: { start: Date; end: Date }): Promise<ReportData> {
+  async generateReport(dateRange?: { start: Date; end: Date }, schoolYear?: string): Promise<ReportData> {
     const userId = this.getUserId();
-    const [tutees, allPayments, allAssessments, allRecords] = await Promise.all([
+    const [allTutees, allPayments, allAssessments, allRecords] = await Promise.all([
       tuteeService.getAll(),
       paymentService.getAll(),
       this.fetchAssessments(userId),
       this.fetchPaymentRecords(userId),
     ]);
+
+    // Only students enrolled in the reported school year count toward it.
+    const tutees = schoolYear
+      ? allTutees.filter((t) => isTuteeInSchoolYear(t, schoolYear))
+      : allTutees;
+
+    // Per-year canonical totals (falls back to all-years fields for legacy data).
+    const yearTotalsByTutee: Map<string, TuteeTotalsByYear> | undefined = schoolYear
+      ? new Map(tutees.map((t) => [t.id, getTuteeYearTotals(t, schoolYear)]))
+      : undefined;
 
     // Apply school year date filter if provided
     const inRange = (dateStr: string) => {
@@ -623,10 +627,13 @@ class ReportService {
       .map((tutee) => {
         const tuteePayments = payments.filter((p) => p.tuteeId === tutee.id);
         const earnings = tuteePayments.reduce((sum, p) => sum + p.amount, 0);
+        const sessions = schoolYear && yearTotalsByTutee
+          ? yearTotalsByTutee.get(tutee.id)?.totalSessions || 0
+          : tutee.totalSessions;
         return {
           tuteeId: tutee.id,
           tuteeName: `${tutee.firstName} ${tutee.surname}`,
-          sessions: tutee.totalSessions,
+          sessions: sessions,
           earnings,
         };
       })
@@ -635,15 +642,18 @@ class ReportService {
     // Unpaid balances
     const unpaidBalances = tutees
       .map((tutee) => {
-        const balance =
-          Math.round(
-            ((tutee.totalSessions || 0) * (tutee.ratePerSession || 0) - (tutee.totalPaid || 0)) * 100
-          ) / 100;
+        const balance = schoolYear && yearTotalsByTutee
+          ? yearTotalsByTutee.get(tutee.id)?.balance || 0
+          : Math.round(
+              ((tutee.totalSessions || 0) * (tutee.ratePerSession || 0) - (tutee.totalPaid || 0)) * 100
+            ) / 100;
         return {
           tuteeId: tutee.id,
           tuteeName: `${tutee.firstName} ${tutee.surname}`,
           balance,
-          lastPaymentDate: tutee.lastPaymentDate,
+          lastPaymentDate: schoolYear && yearTotalsByTutee
+            ? yearTotalsByTutee.get(tutee.id)?.lastPaymentDate
+            : tutee.lastPaymentDate,
         };
       })
       .filter((t) => t.balance > 0)
@@ -655,14 +665,20 @@ class ReportService {
       return isWithinInterval(paymentDate, { start: currentMonthStart, end: currentMonthEnd });
     });
     const totalEarningsThisMonth = currentMonthPayments.reduce((sum, p) => sum + p.amount, 0);
-    const totalSessions = tutees.reduce((sum, t) => sum + t.totalSessions, 0);
+    const totalSessions = schoolYear && yearTotalsByTutee
+      ? tutees.reduce((sum, t) => sum + (yearTotalsByTutee.get(t.id)?.totalSessions || 0), 0)
+      : tutees.reduce((sum, t) => sum + t.totalSessions, 0);
     const totalTutees = tutees.length;
     const totalPendingBalance = tutees.reduce((sum, t) => {
-      const balance =
-        Math.round(
-          ((t.totalSessions || 0) * (t.ratePerSession || 0) - (t.totalPaid || 0)) * 100
-        ) / 100;
-      return sum + Math.max(balance, 0);
+      const balance = schoolYear && yearTotalsByTutee
+        ? Math.max(yearTotalsByTutee.get(t.id)?.balance || 0, 0)
+        : Math.max(
+            Math.round(
+              ((t.totalSessions || 0) * (t.ratePerSession || 0) - (t.totalPaid || 0)) * 100
+            ) / 100,
+            0
+          );
+      return sum + balance;
     }, 0);
 
     // ── New analytics ─────────────────────────────────
@@ -670,7 +686,7 @@ class ReportService {
     const attendanceSummaries = this.computeAttendanceSummaries(tutees, records);
     const studentPerformance = this.computeStudentPerformance(tutees, assessments);
     const subjectReports = this.computeSubjectReports(assessments);
-    const atRiskStudents = this.computeAtRiskStudents(tutees, attendanceSummaries, studentPerformance);
+    const atRiskStudents = this.computeAtRiskStudents(tutees, attendanceSummaries, studentPerformance, yearTotalsByTutee);
     const paymentBehavior = this.computePaymentBehavior(tutees, payments, records);
     const tutorWorkload = this.computeTutorWorkload(tutees, assessments, records);
     const monthlyAcademicTrend = this.computeMonthlyAcademicTrend(assessments);

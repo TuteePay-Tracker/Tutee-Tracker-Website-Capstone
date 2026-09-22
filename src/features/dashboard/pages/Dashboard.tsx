@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useReports } from '@/features/reports/hooks/useReports';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
+import { getTuteeYearTotals } from '@/features/tutees/types/tutee';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
-import { isInSchoolYear } from '@/shared/utils/schoolYear';
+import { isInSchoolYear, belongsToSchoolYear } from '@/shared/utils/schoolYear';
 import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell, CheckSquare, CalendarRange } from 'lucide-react';
 import { Link } from 'react-router';
 import { LineChart, Line, BarChart, Bar, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -72,26 +73,33 @@ import { ScheduleItem } from '@/features/tutees/types/tutee';
 import { Assessment } from '@/features/tutee-progress/types/assessment';
 import { formatTime12h } from '@/shared/utils/formatDate';
 
+import { format } from 'date-fns';
+
 // Parent portal view: aggregated summary of all children
 const ParentDashboard = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [tuteeAttendance, setTuteeAttendance] = useState<Record<string, { presentCount: number; absentCount: number; totalSessions: number }>>({});
   const [tuteeAssessments, setTuteeAssessments] = useState<Record<string, Assessment[]>>({});
+  const [chargedChildrenThisMonth, setChargedChildrenThisMonth] = useState<Set<string>>(new Set());
   const [assessmentPage, setAssessmentPage] = useState(0);
   const ASSESSMENT_PAGE_SIZE = 3;
 
   useEffect(() => {
     if (user?.createdByTutorId) {
-      return announcementService.subscribe(user.createdByTutorId, setAnnouncements);
+      return announcementService.subscribe(user.createdByTutorId, (data) => {
+        setAnnouncements(data.filter((a) => belongsToSchoolYear(selectedYear, a)));
+      });
     }
-  }, [user?.createdByTutorId]);
+  }, [user?.createdByTutorId, selectedYear]);
 
   useEffect(() => {
     if (!user?.createdByTutorId || tutees.length === 0) {
       setTuteeAttendance({});
       setTuteeAssessments({});
+      setChargedChildrenThisMonth(new Set());
       return;
     }
 
@@ -105,8 +113,19 @@ const ParentDashboard = () => {
           let present = 0;
           let absent = 0;
           let total = 0;
+          const currentMonthKey = format(new Date(), 'yyyy-MM');
+          const hasCurrentMonth = snapshot.docs.some((docSnap) => docSnap.data().month === currentMonthKey);
+
+          setChargedChildrenThisMonth((prev) => {
+            const next = new Set(prev);
+            if (hasCurrentMonth) next.add(tutee.id);
+            else next.delete(tutee.id);
+            return next;
+          });
+
           snapshot.docs.forEach((docSnap) => {
             const recData = docSnap.data();
+            if (!belongsToSchoolYear(selectedYear, recData)) return;
             const dayPayments = (recData.dayPayments || []) as any[];
             dayPayments.forEach((dp) => {
               const attendance = getDayAttendance(dp);
@@ -139,7 +158,7 @@ const ParentDashboard = () => {
           })) as Assessment[];
           setTuteeAssessments((prev) => ({
             ...prev,
-            [tutee.id]: list
+            [tutee.id]: list.filter((a) => belongsToSchoolYear(selectedYear, a))
           }));
         },
         (error) => {
@@ -152,17 +171,16 @@ const ParentDashboard = () => {
       unsubAttendance.forEach((unsub) => unsub());
       unsubAssessments.forEach((unsub) => unsub());
     };
-  }, [user?.createdByTutorId, tutees]);
+  }, [user?.createdByTutorId, tutees, selectedYear]);
 
   // Compute aggregated stats
   const totalChildren = tutees.length;
 
-  // Use the tutor-maintained canonical counters (totalPaid / balance) rather than
-  // summing paymentTransactions, which used to double-count recorded payments.
-  const totalPaid = tutees.reduce((sum, tutee) => sum + (tutee.totalPaid || 0), 0);
+  // Use the tutor-maintained canonical counters (totalPaid / balance) scoped to selectedYear.
+  const totalPaid = tutees.reduce((sum, tutee) => sum + (getTuteeYearTotals(tutee, selectedYear).totalPaid || 0), 0);
 
   const totalOutstandingBalance = tutees.reduce((sum, tutee) => {
-    return sum + Math.max(tutee.balance || 0, 0);
+    return sum + Math.max(getTuteeYearTotals(tutee, selectedYear).balance || 0, 0);
   }, 0);
 
   let totalPresent = 0;
@@ -250,6 +268,9 @@ const ParentDashboard = () => {
 
   const combinedSchedule: CombinedScheduleItem[] = [];
   tutees.forEach((tutee) => {
+    // Only include children who have been added/charged for the current month by the tutor
+    if (!chargedChildrenThisMonth.has(tutee.id)) return;
+
     const childName = `${tutee.firstName} ${tutee.surname}`;
     const firstSubject = tutee.subjects?.[0] || tutee.subject || 'Tutoring';
 
@@ -695,9 +716,11 @@ export const Dashboard = () => {
 
   useEffect(() => {
     if (user?.id && user.role === 'tutor') {
-      return announcementService.subscribe(user.id, setAnnouncements);
+      return announcementService.subscribe(user.id, (data) => {
+        setAnnouncements(data.filter((a) => belongsToSchoolYear(selectedYear, a)));
+      });
     }
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, selectedYear]);
 
   const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();

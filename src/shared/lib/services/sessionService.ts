@@ -13,6 +13,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
+import { getSchoolYearFromDate } from '@/shared/utils/schoolYear';
 
 class SessionService {
   private getUserId(): string {
@@ -96,6 +97,7 @@ class SessionService {
 
       const sessionData = {
         ...session,
+        schoolYear: session.schoolYear || getSchoolYearFromDate(session.date || now),
         createdAt: Timestamp.fromDate(now),
         updatedAt: Timestamp.fromDate(now),
       };

@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
 import { Assessment, AssessmentFormData } from '@/features/tutee-progress/types/assessment';
+import { getSchoolYearFromDate, getSchoolYearFromMonth } from '@/shared/utils/schoolYear';
 
 class AssessmentService {
   private getCollectionRef(tutorId: string) {
@@ -51,6 +52,10 @@ class AssessmentService {
               recommendations: data.recommendations || '',
               score: typeof data.score === 'number' ? data.score : 0,
               remarks: data.remarks || 'Good',
+              schoolYear:
+                data.schoolYear ||
+                getSchoolYearFromDate(data.date || data.createdAt?.toDate?.()?.toISOString?.()) ||
+                undefined,
               createdAt:
                 data.createdAt?.toDate?.()?.toISOString() ||
                 new Date().toISOString(),
@@ -76,9 +81,13 @@ class AssessmentService {
   async add(tutorId: string, data: AssessmentFormData): Promise<Assessment> {
     const colRef = this.getCollectionRef(tutorId);
     const now = Timestamp.now();
+    const schoolYear = data.date
+      ? getSchoolYearFromDate(data.date) || (data.date.length === 7 ? getSchoolYearFromMonth(data.date) : undefined)
+      : getSchoolYearFromDate(now.toDate());
 
     const docRef = await addDoc(colRef, {
       ...data,
+      schoolYear,
       createdAt: now,
       updatedAt: now,
     });
@@ -86,6 +95,7 @@ class AssessmentService {
     return {
       id: docRef.id,
       ...data,
+      schoolYear,
       createdAt: now.toDate().toISOString(),
       updatedAt: now.toDate().toISOString(),
     };

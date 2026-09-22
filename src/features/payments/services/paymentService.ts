@@ -14,6 +14,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
+import { getSchoolYearFromDate, getSchoolYearFromMonth } from '@/shared/utils/schoolYear';
 
 class PaymentService {
   private getUserId(providedId?: string): string {
@@ -150,10 +151,15 @@ class PaymentService {
     try {
       const collectionRef = this.getCollectionRef(tutorId);
       const now = new Date();
+      const schoolYear =
+        payment.schoolYear ||
+        (payment.month ? getSchoolYearFromMonth(payment.month) : undefined) ||
+        getSchoolYearFromDate(payment.paymentDate || now);
 
       // Strip undefined values — Firestore rejects them
       const rawData: Record<string, unknown> = {
         ...payment,
+        schoolYear,
         createdAt: Timestamp.fromDate(now),
         updatedAt: Timestamp.fromDate(now),
       };
@@ -179,6 +185,7 @@ class PaymentService {
           paymentMethod: payment.paymentMethod,
           month: payment.month || now.toISOString().substring(0, 7),
           notes: payment.notes || 'Recorded payment',
+          schoolYear,
           paymentId: docRef.id,
           createdAt: Timestamp.fromDate(now),
         });
@@ -187,6 +194,7 @@ class PaymentService {
       return {
         id: docRef.id,
         ...payment,
+        schoolYear,
         createdAt: now.toISOString(),
       };
     } catch (error) {

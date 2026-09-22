@@ -7,6 +7,8 @@ export interface Session {
   duration: number; // in minutes
   status: 'Completed' | 'Cancelled' | 'Scheduled';
   notes?: string;
+  /** School year this session belongs to, e.g. "2026-27". */
+  schoolYear?: string;
   createdAt: string;
 }
 

@@ -1,4 +1,5 @@
-import { Tutee } from '@/features/tutees/types/tutee';
+import { Tutee, initTotalsByYear } from '@/features/tutees/types/tutee';
+import { getSchoolYearFromDate } from '@/shared/utils/schoolYear';
 import { 
   collection, 
   doc, 
@@ -12,6 +13,8 @@ import {
   orderBy,
   Timestamp,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
@@ -162,10 +165,11 @@ class TuteeService {
     }
   }
 
-  async create(tutee: Omit<Tutee, 'id' | 'createdAt' | 'updatedAt'>): Promise<Tutee> {
+  async create(tutee: Omit<Tutee, 'id' | 'createdAt' | 'updatedAt'>, options?: { schoolYear?: string }): Promise<Tutee> {
     try {
       const collectionRef = this.getCollectionRef();
       const now = new Date();
+      const schoolYear = options?.schoolYear || getSchoolYearFromDate(now) || '';
 
       // Filter out undefined values to avoid Firestore errors
       const cleanedTutee = Object.fromEntries(
@@ -174,6 +178,12 @@ class TuteeService {
 
       const tuteeData = {
         ...cleanedTutee,
+        schoolYears:
+          Array.isArray(cleanedTutee.schoolYears) && cleanedTutee.schoolYears.length > 0
+            ? cleanedTutee.schoolYears
+            : [schoolYear],
+        archivedForYears: cleanedTutee.archivedForYears || [],
+        totalsByYear: cleanedTutee.totalsByYear || initTotalsByYear(schoolYear),
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
         balance: tutee.balance || 0,
@@ -187,6 +197,9 @@ class TuteeService {
       return {
         id: docRef.id,
         ...tutee,
+        schoolYears: tuteeData.schoolYears as string[],
+        archivedForYears: tuteeData.archivedForYears as string[],
+        totalsByYear: tuteeData.totalsByYear as NonNullable<Tutee['totalsByYear']>,
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
         balance: tutee.balance || 0,
@@ -267,11 +280,19 @@ class TuteeService {
     }
   }
 
-  async archive(id: string): Promise<Tutee> {
+  async archive(id: string, schoolYear?: string): Promise<Tutee> {
+    if (schoolYear) {
+      // Per-school-year archive — only affects the given school year.
+      return this.update(id, { archivedForYears: arrayUnion(schoolYear) as unknown as string[] });
+    }
+    // Legacy archive (no school year resolves) — keep the global flag.
     return this.update(id, { archived: true });
   }
 
-  async unarchive(id: string): Promise<Tutee> {
+  async unarchive(id: string, schoolYear?: string): Promise<Tutee> {
+    if (schoolYear) {
+      return this.update(id, { archivedForYears: arrayRemove(schoolYear) as unknown as string[] });
+    }
     return this.update(id, { archived: false });
   }
 }
