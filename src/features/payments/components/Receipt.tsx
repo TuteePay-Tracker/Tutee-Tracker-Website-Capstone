@@ -121,7 +121,7 @@ function renderReceiptCanvas(receipt: ReceiptData): HTMLCanvasElement {
       c.textAlign = 'center';
       fmt(c, 30, '700');
       c.fillStyle = ink;
-      c.fillText('TuteePay Tracker', WIDTH / 2, y + 34);
+      c.fillText('Tutor Track', WIDTH / 2, y + 34);
       fmt(c, 14, '500');
       c.fillStyle = gray;
       c.fillText('Payment Receipt', WIDTH / 2, y + 58);
@@ -488,7 +488,7 @@ export const Receipt = ({ receipt, onClose }: ReceiptProps) => {
           <div ref={receiptRef} className="border border-gray-200 sm:border-2 rounded-xl p-4 sm:p-8 bg-white shadow-xs">
             {/* Brand Header */}
             <div className="text-center mb-5 sm:mb-8 pb-4 sm:pb-6 border-b sm:border-b-2 border-gray-200">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">TuteePay Tracker</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">Tutor Track</h1>
               <p className="text-gray-600 text-xs sm:text-sm font-medium">Payment Receipt</p>
               <p className="text-[11px] sm:text-xs text-gray-400 mt-1 sm:mt-2">Receipt #: {receipt.receiptNumber || 'N/A'}</p>
             </div>

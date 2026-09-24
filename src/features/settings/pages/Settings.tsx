@@ -1749,7 +1749,7 @@ export const Settings = () => {
                   <div>
                     <h3 className="font-bold text-green-900 mb-1">Firebase Sync Connected</h3>
                     <p className="text-sm text-green-800 leading-relaxed font-semibold">
-                      Your TuteePay Tracker is synchronized in real-time with your Google Firebase Cloud.
+                      Your Tutor Track application is synchronized in real-time with your Google Firebase Cloud.
                       All security updates, automated hourly backups, and database transaction tracking are active.
                     </p>
                   </div>

@@ -20,7 +20,7 @@ export const exportAcademicReport = (reportData: ReportData, filename: string = 
   ].join('\n');
 
   const content = `
-TUTEEPAY TRACKER - ACADEMIC PERFORMANCE REPORT
+TUTOR TRACK - ACADEMIC PERFORMANCE REPORT
 Generated: ${formatDate(new Date())}
 
 STUDENT PERFORMANCE SUMMARIES
@@ -42,7 +42,7 @@ export const exportAttendanceReport = (reportData: ReportData, filename: string 
   ].join('\n');
 
   const content = `
-TUTEEPAY TRACKER - ATTENDANCE REPORT
+TUTOR TRACK - ATTENDANCE REPORT
 Generated: ${formatDate(new Date())}
 
 ATTENDANCE SUMMARIES
@@ -82,7 +82,7 @@ export const exportPaymentsReport = (reportData: ReportData, filename: string = 
   ].join('\n');
 
   const content = `
-TUTEEPAY TRACKER - PAYMENTS & EARNINGS REPORT
+TUTOR TRACK - PAYMENTS & EARNINGS REPORT
 Generated: ${formatDate(new Date())}
 
 SUMMARY

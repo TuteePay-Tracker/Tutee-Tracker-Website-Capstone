@@ -13,11 +13,29 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Helper: check if caller is a parent linked to this tutor and this specific tutee
+    // Helper: check if the caller is linked to a specific tutee of this tutor
+    // via the tutee document's parentId field (the source the mobile app's
+    // tuteeService.subscribeAll already uses to list a parent's tutees).
+    // This is the reliable link check — it does NOT depend on the parent
+    // profile's linkedStudentIds/createdByTutorId, which can be missing or stale.
+    function isLinkedToTutee(userId, tuteeId) {
+      return request.auth != null &&
+             tuteeId != null &&
+             exists(/databases/$(database)/documents/users/$(userId)/tutees/$(tuteeId)) &&
+             get(/databases/$(database)/documents/users/$(userId)/tutees/$(tuteeId)).data.parentId == request.auth.uid;
+    }
+
+    // Helper: check if caller is a parent linked to this tutor and this specific tutee.
+    // Accepts BOTH link mechanisms so parents keep access whether they are linked
+    // through the profile's linkedStudentIds or through the tutee doc's parentId.
     function isParentOfTutee(userId, tuteeId) {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId &&
-             tuteeId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentIds;
+      return isAuthenticated() && (
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId &&
+         tuteeId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentIds)
+        ||
+        isLinkedToTutee(userId, tuteeId)
+      );
     }
 
     function isValidUserCreate() {

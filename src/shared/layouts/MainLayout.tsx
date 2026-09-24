@@ -560,7 +560,7 @@ export const MainLayout = () => {
         <header className="md:hidden flex justify-between items-center h-16 bg-white border-b border-gray-200 px-4 sticky top-0 z-50">
           <div className="flex items-center gap-2">
             <img src={logoUrl} alt="Tutor Track Logo" className="w-9 h-9 object-contain rounded-lg shadow-sm" />
-            <span className="font-bold text-base text-gray-900">TuteePay Tracker</span>
+            <span className="font-bold text-base text-gray-900">Tutor Track</span>
           </div>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -922,7 +922,7 @@ export const MainLayout = () => {
           <footer className={`bg-white border-t py-6 ${location.pathname === '/chat' ? 'hidden md:block' : ''
             }`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-400 font-medium">
-              <p>© 2026 TuteePay Tracker. Built for tutors, by tutors.</p>
+              <p>© 2026 Tutor Track. Built for tutors, by tutors.</p>
             </div>
           </footer>
         </div>

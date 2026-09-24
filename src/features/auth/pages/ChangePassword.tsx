@@ -49,7 +49,7 @@ export const ChangePassword = () => {
       }
 
       await refreshUser();
-      toast.success('Password changed successfully! Welcome to TuteePay Tracker.');
+      toast.success('Password changed successfully! Welcome to Tutor Track.');
       navigate('/');
     } catch (error: any) {
       if (error.code === 'auth/requires-recent-login') {
@@ -156,7 +156,7 @@ export const ChangePassword = () => {
         <div className="mt-4 text-center">
           <div className="inline-flex items-center gap-2 text-gray-600 text-sm">
             <GraduationCap size={16} className="text-green-700" />
-            <span>TuteePay Tracker — Secure Parent Portal</span>
+            <span>Tutor Track — Secure Parent Portal</span>
           </div>
         </div>
       </div>
