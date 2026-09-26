@@ -128,22 +128,6 @@ export const Signup = () => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-4">
-                      <button
-                        type="button"
-                        onClick={() => setRole('tutor')}
-                        className={`py-3 px-4 rounded-xl border-2 transition-all ${
-                          role === 'tutor'
-                            ? 'border-green-700 bg-green-50 text-green-700 font-semibold'
-                            : 'border-gray-200 hover:border-green-200 text-gray-500'
-                        }`}
-                      >
-                        Tutor
-                      </button>
-                      
-                    </div>
-                  </div>
 
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">Full Name</label>

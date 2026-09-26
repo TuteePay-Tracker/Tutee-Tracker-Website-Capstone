@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import logoUrl from '@/assets/logo.jpg';
 import { Mail, Lock, ArrowRight, Sparkles, Eye, EyeOff, Download, X, UserCheck, Smartphone, CheckCircle2, Calendar, CreditCard, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { ReCaptchaWidget } from '@/shared/components/ReCaptchaWidget';
 
 export const Login = () => {
   const [identifier, setIdentifier] = useState('');
@@ -12,6 +13,7 @@ export const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -29,6 +31,13 @@ export const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    if (siteKey && !captchaToken) {
+      toast.error('Please check the "I\'m not a robot" box to continue.');
+      return;
+    }
+
     setIsLoading(true);
 
     let loginIdentifier = identifier.trim();
@@ -283,13 +292,11 @@ export const Login = () => {
                     Remember me
                   </span>
                 </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                >
-                  Forgot password?
-                </Link>
+
               </div>
+
+              {/* CAPTCHA Widget */}
+              <ReCaptchaWidget onVerify={setCaptchaToken} />
 
               <button
                 type="submit"
