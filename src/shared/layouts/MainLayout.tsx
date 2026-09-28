@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
-import logoUrl from '@/assets/logo.jpg';
+import logoUrl from '@/assets/logo.png';
 import {
   LayoutDashboard,
   Users,
@@ -236,7 +236,7 @@ export const MainLayout = () => {
             <img src={logoUrl} alt="Tutor Track Logo" className="w-10 h-10 object-contain rounded-xl shadow-md" />
             <div className="flex-1 min-w-0">
               <h1 className="font-bold text-lg text-gray-900 tracking-tight leading-none">Tutor Track</h1>
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mt-1 block">Tracker</span>
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mt-1 block">Portal</span>
             </div>
           </div>
 
@@ -526,7 +526,7 @@ export const MainLayout = () => {
           {/* User Card & Logout at bottom */}
           <div className="p-4 border-t border-gray-100 bg-gray-50/50">
             <div className="flex items-center gap-3 mb-3">
-              {user?.photoUrl ? (
+              {user?.photoUrl ? ( 
                 <img
                   src={user.photoUrl}
                   alt={user.name}

@@ -85,6 +85,7 @@ export const Settings = () => {
   // Payment methods local states
   const [isSavingPayments, setIsSavingPayments] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState({
+    dueDay: 5,
     gcash: { enabled: false, accountName: '', accountNumber: '', qrUrl: '' },
     maya: { enabled: false, accountName: '', accountNumber: '', qrUrl: '' },
     bank: { enabled: false, accountName: '', accountNumber: '', bankName: '', qrUrl: '' },
@@ -95,6 +96,7 @@ export const Settings = () => {
   useEffect(() => {
     if (user?.paymentMethods) {
       setPaymentMethods({
+        dueDay: user.paymentMethods.dueDay ?? 5,
         gcash: {
           enabled: user.paymentMethods.gcash?.enabled ?? false,
           accountName: user.paymentMethods.gcash?.accountName ?? '',
@@ -871,6 +873,56 @@ export const Settings = () => {
               </div>
 
               <div className="space-y-6">
+                {/* Monthly Due Date Configuration */}
+                <div className="p-5 border border-green-200 rounded-2xl bg-green-50/40 space-y-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-green-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+                      <Calendar size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-base">Monthly Payment Due Date</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        Set the day of the month when tutee tuition payments are due for parent billing & notifications
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs uppercase font-extrabold text-gray-500 tracking-wider mb-1.5">
+                        Select Due Day of Month
+                      </label>
+                      <select
+                        value={paymentMethods.dueDay}
+                        onChange={(e) => setPaymentMethods(prev => ({ ...prev, dueDay: parseInt(e.target.value, 10) }))}
+                        className="w-full px-4 py-2.5 border border-gray-300 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 font-bold text-gray-900 text-sm shadow-sm"
+                      >
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+                          let suffix = 'th';
+                          if (day === 1 || day === 21 || day === 31) suffix = 'st';
+                          else if (day === 2 || day === 22) suffix = 'nd';
+                          else if (day === 3 || day === 23) suffix = 'rd';
+                          return (
+                            <option key={day} value={day}>
+                              Every {day}{suffix} of the month
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="bg-white border border-green-200 rounded-xl p-3.5 flex flex-col justify-center">
+                      <span className="text-[11px] uppercase font-bold tracking-wider text-green-700">Active Setting</span>
+                      <span className="text-sm font-extrabold text-gray-900 mt-0.5">
+                        Tuition Due Date: Every {paymentMethods.dueDay}{
+                          paymentMethods.dueDay === 1 || paymentMethods.dueDay === 21 || paymentMethods.dueDay === 31 ? 'st' :
+                          paymentMethods.dueDay === 2 || paymentMethods.dueDay === 22 ? 'nd' :
+                          paymentMethods.dueDay === 3 || paymentMethods.dueDay === 23 ? 'rd' : 'th'
+                        } of the month
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 {(['gcash', 'maya'] as Array<'gcash' | 'maya' | 'bank' | 'other'>).map((method) => {
                   const config = paymentMethods[method];
                   const label = method === 'gcash' ? 'GCash' : 'Maya';

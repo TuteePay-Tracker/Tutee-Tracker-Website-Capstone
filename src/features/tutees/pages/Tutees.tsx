@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { normalizePhoneNumber, isValidPHPhoneNumber } from '@/shared/utils/phoneUtils';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
@@ -452,7 +453,7 @@ export const Tutees = () => {
 
                 try {
                   // Create auth user with contact number as email (sanitize it first)
-                  const sanitizedContact = parentData.contactNumber.replace(/\D/g, '');
+                  const sanitizedContact = normalizePhoneNumber(parentData.contactNumber);
                   const parentEmail = `${sanitizedContact}@tuteepay.local`;
                   const credential = await createUserWithEmailAndPassword(secondaryAuth, parentEmail, tempPassword);
                   await updateProfile(credential.user, { displayName: parentData.name });
@@ -752,10 +753,9 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Ref guard prevents double-submit even before React state re-renders
   const submittingRef = useRef(false);
-  const [parentEmail, setParentEmail] = useState('');
   const [parentName, setParentName] = useState('');
+  const [parentContact, setParentContact] = useState('');
   const [linkedParentId, setLinkedParentId] = useState<string | null>(tutee?.parentId || null);
-  const [parentSearching, setParentSearching] = useState(false);
   const { user: currentUser } = useAuth();
 
   // Parent account status toggles
@@ -876,6 +876,18 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
     });
   }, [formData.guardianNumber]);
 
+  useEffect(() => {
+    if (linkedParentId) {
+      getDoc(doc(db, 'users', linkedParentId)).then(snap => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setParentName(data.name || 'Parent Account');
+          setParentContact(data.contactNumber || data.email || '');
+        }
+      }).catch(err => console.error('Error fetching linked parent:', err));
+    }
+  }, [linkedParentId]);
+
   const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const [scheduleTime, setScheduleTime] = useState(getInitialTime());
 
@@ -949,9 +961,9 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
           return;
         }
         // Basic phone validation
-        const phoneRegex = /^[0-9]{10,11}$/;
-        if (!phoneRegex.test(newParentContactNumber.replace(/\D/g, ''))) {
-          toast.error('Please enter a valid contact number (10-11 digits)');
+        const sanitizedContact = normalizePhoneNumber(newParentContactNumber);
+        if (!isValidPHPhoneNumber(sanitizedContact)) {
+          toast.error('Please enter a valid contact number (e.g., 09XXXXXXXXX or +63 9XX XXX XXXX)');
           return;
         }
       }
@@ -1324,14 +1336,16 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
                   <div>
                     <p className="text-sm text-gray-600">Linked Parent:</p>
                     <p className="font-semibold text-gray-900">{parentName || 'Parent Account'}</p>
-                    <p className="text-sm text-gray-500">{parentEmail}</p>
+                    <p className="text-sm text-gray-500">{parentContact}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setLinkedParentId(null);
-                      setParentEmail('');
                       setParentName('');
+                      setParentContact('');
+                      setParentSearchQuery('');
+                      setSearchResults([]);
                     }}
                     className="text-red-600 hover:text-red-700 text-sm font-medium"
                   >
@@ -1342,49 +1356,65 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600">
-                  Search for a parent account by email to link this student
+                  Search Parent by Name or Contact Number
                 </p>
                 <div className="flex gap-2">
                   <input
-                    type="email"
-                    value={parentEmail}
-                    onChange={(e) => setParentEmail(e.target.value)}
-                    className="flex-1 p-2 border rounded-lg text-sm placeholder:text-xs"
-                    placeholder="parent@example.com"
+                    type="text"
+                    value={parentSearchQuery}
+                    onChange={(e) => {
+                      setParentSearchQuery(e.target.value);
+                      if (!e.target.value.trim()) setSearchResults([]);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSearchParents();
+                      }
+                    }}
+                    className="flex-1 p-2 border rounded-lg text-sm placeholder:text-xs bg-white"
+                    placeholder="e.g. Maria Santos or 09171234567"
                   />
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (!parentEmail) return;
-                      setParentSearching(true);
-                      try {
-                        const usersQuery = query(
-                          collection(db, 'users'),
-                          where('email', '==', parentEmail),
-                          where('role', '==', 'parent')
-                        );
-                        const snapshot = await getDocs(usersQuery);
-
-                        if (snapshot.empty) {
-                          toast.error('No parent account found with this email');
-                        } else {
-                          const parentData = snapshot.docs[0].data();
-                          setLinkedParentId(snapshot.docs[0].id);
-                          setParentName(parentData.name);
-                          toast.success('Parent account linked successfully!');
-                        }
-                      } catch (error) {
-                        toast.error('Failed to search for parent account');
-                      } finally {
-                        setParentSearching(false);
-                      }
-                    }}
-                    disabled={parentSearching || !parentEmail}
-                    className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={handleSearchParents}
+                    disabled={searchingParents || !parentSearchQuery.trim()}
+                    className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium transition-colors"
                   >
-                    {parentSearching ? 'Searching...' : 'Link'}
+                    {searchingParents ? 'Searching...' : 'Search'}
                   </button>
                 </div>
+
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y bg-white shadow-sm mt-2">
+                    {searchResults.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex justify-between items-center p-3 text-sm hover:bg-gray-50 transition-colors"
+                      >
+                        <div>
+                          <p className="font-semibold text-gray-900">{p.name}</p>
+                          <p className="text-gray-500 text-xs">{p.contactNumber || 'No phone'} • {p.email}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLinkedParentId(p.id);
+                            setParentName(p.name);
+                            setParentContact(p.contactNumber || p.email || '');
+                            setSearchResults([]);
+                            setParentSearchQuery('');
+                            toast.success('Parent account linked!');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-700 text-white hover:bg-green-800 transition-colors"
+                        >
+                          Link
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

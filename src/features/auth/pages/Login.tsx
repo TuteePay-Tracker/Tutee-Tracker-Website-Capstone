@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useNavigate } from 'react-router';
 import { Link } from 'react-router';
-import logoUrl from '@/assets/logo.jpg';
+import logoUrl from '@/assets/logo.png';
 import { Mail, Lock, ArrowRight, Sparkles, Eye, EyeOff, Download, X, UserCheck, Smartphone, CheckCircle2, Calendar, CreditCard, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReCaptchaWidget } from '@/shared/components/ReCaptchaWidget';
+import { normalizePhoneNumber, isValidPHPhoneNumber } from '@/shared/utils/phoneUtils';
 
 export const Login = () => {
   const [identifier, setIdentifier] = useState('');
@@ -41,9 +42,9 @@ export const Login = () => {
     setIsLoading(true);
 
     let loginIdentifier = identifier.trim();
-    // If it's a contact number (pure digits, 10 or 11 digits)
-    const sanitizedPhone = loginIdentifier.replace(/\D/g, '');
-    if (sanitizedPhone.length >= 10 && sanitizedPhone.length <= 11 && /^\d+$/.test(sanitizedPhone)) {
+    // If it's a contact number (e.g., 09XXXXXXXXX or +63 9XX XXX XXXX)
+    const sanitizedPhone = normalizePhoneNumber(loginIdentifier);
+    if (isValidPHPhoneNumber(sanitizedPhone)) {
       loginIdentifier = `${sanitizedPhone}@tuteepay.local`;
     }
 

@@ -8,6 +8,7 @@ import { db, firebaseConfig } from '@/shared/lib/firebase/config';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { normalizePhoneNumber, isValidPHPhoneNumber } from '@/shared/utils/phoneUtils';
 
 interface CreatedAccount {
   name: string;
@@ -113,9 +114,9 @@ export const CreateParentAccount = () => {
       toast.error('Please fill in parent name and phone number');
       return;
     }
-    const sanitizedPhone = parentPhone.replace(/\D/g, '');
-    if (sanitizedPhone.length < 10 || sanitizedPhone.length > 11) {
-      toast.error('Please enter a valid phone number (10-11 digits)');
+    const sanitizedPhone = normalizePhoneNumber(parentPhone);
+    if (!isValidPHPhoneNumber(sanitizedPhone)) {
+      toast.error('Please enter a valid mobile number (e.g., 09XXXXXXXXX or +63 9XX XXX XXXX)');
       return;
     }
     if (selectedStudentIds.length === 0) {

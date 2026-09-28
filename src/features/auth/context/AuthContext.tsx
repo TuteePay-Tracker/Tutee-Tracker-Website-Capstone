@@ -19,6 +19,7 @@ interface User {
   contactNumber?: string;
   photoUrl?: string;
   paymentMethods?: {
+    dueDay?: number;
     gcash?: { qrUrl?: string; accountName?: string; accountNumber?: string; enabled: boolean };
     maya?: { qrUrl?: string; accountName?: string; accountNumber?: string; enabled: boolean };
     bank?: { qrUrl?: string; accountName?: string; accountNumber?: string; bankName?: string; enabled: boolean };
