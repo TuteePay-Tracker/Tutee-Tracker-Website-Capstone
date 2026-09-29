@@ -3,6 +3,9 @@ import cors from 'cors';
 import {
   HttpError,
   assertCanManageParent,
+  credentialHint,
+  deleteUserSubcollections,
+  ensureAdminCredential,
   findAuthUser,
   getAdminAuth,
   requireIdToken,
@@ -35,6 +38,13 @@ app.use(
   })
 );
 app.use(express.json());
+
+// Validate the service-account credential at boot. Without this a misconfigured
+// deployment looks healthy right up until the first privileged request fails
+// with an error that names Firestore rather than the credentials.
+ensureAdminCredential()
+  .then(() => console.log('[admin] service account credential verified.'))
+  .catch((err) => console.error('[admin] CREDENTIAL CHECK FAILED ->', credentialHint(err)));
 
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 const PORT = process.env.PORT || 4000;
@@ -207,7 +217,8 @@ app.post('/send-push', async (req, res) => {
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 /**
- * Deletes a parent account from Firebase Authentication by UID.
+ * Deletes a parent account: its Firestore subcollections plus its Firebase
+ * Authentication record, identified by UID.
  *
  * The client MUST NOT treat the account as deleted unless this returns 200 with
  * `ok: true`, and MUST NOT delete the Firestore user document unless it does.
@@ -217,6 +228,14 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
  *   - the Auth record for `uid` is the one that belongs to that parent document
  *     (verified by comparing the Auth email to the Firestore `email`)
  *   - a follow-up `getUser` confirms the record is actually gone
+ *
+ * Ordering is deliberate. The subcollection cascade runs BEFORE the Auth delete
+ * so that every fallible write happens ahead of the one irreversible, security
+ * critical step, leaving only a read-only verification afterwards. The cascade
+ * also runs unconditionally rather than only when an Auth record exists, so a
+ * retry after a partial failure still clears whatever the first attempt stranded.
+ *
+ * `users/{uid}` itself is left for the client to delete, under Firestore rules.
  */
 app.post('/delete-auth-user', async (req, res, next) => {
   try {
@@ -226,28 +245,45 @@ app.post('/delete-auth-user', async (req, res, next) => {
 
     const existing = await findAuthUser(uid);
 
-    if (!existing) {
-      // Nothing left to delete. The caller is still authorized, and the desired
-      // end state already holds, so this is a success rather than a failure.
-      console.log(`[admin] ${caller.uid} requested delete of ${uid}, already absent from Auth`);
-      return res.json({ ok: true, uid, email: parent.email ?? null, alreadyDeleted: true });
+    // Guard against passing the wrong UID: the Auth record we are about to delete
+    // must correspond to this parent document, not some other account. Checked
+    // before the cascade so a mismatched uid never has data removed.
+    if (existing) {
+      if (parent.email && existing.email && existing.email !== parent.email) {
+        throw new HttpError(
+          409,
+          `Refusing to delete: uid ${uid} belongs to ${existing.email} in Firebase Authentication, ` +
+            `but the parent record is ${parent.email}.`
+        );
+      }
+      if (expectedEmail && existing.email && existing.email !== expectedEmail) {
+        throw new HttpError(
+          409,
+          `Refusing to delete: uid ${uid} is ${existing.email} in Firebase Authentication, ` +
+            `but ${expectedEmail} was expected.`
+        );
+      }
     }
 
-    // Guard against passing the wrong UID: the Auth record we are about to delete
-    // must correspond to this parent document, not some other account.
-    if (parent.email && existing.email && existing.email !== parent.email) {
-      throw new HttpError(
-        409,
-        `Refusing to delete: uid ${uid} belongs to ${existing.email} in Firebase Authentication, ` +
-          `but the parent record is ${parent.email}.`
+    const deletedCollections = await deleteUserSubcollections(uid);
+    if (deletedCollections.length > 0) {
+      console.log(
+        `[admin] cascade-deleted subcollections [${deletedCollections.join(', ')}] for ${uid} ` +
+          `(requested by ${caller.uid})`
       );
     }
-    if (expectedEmail && existing.email && existing.email !== expectedEmail) {
-      throw new HttpError(
-        409,
-        `Refusing to delete: uid ${uid} is ${existing.email} in Firebase Authentication, ` +
-          `but ${expectedEmail} was expected.`
-      );
+
+    if (!existing) {
+      // Nothing left in Auth. The caller is still authorized and the desired end
+      // state already holds, so this is a success rather than a failure.
+      console.log(`[admin] ${caller.uid} requested delete of ${uid}, already absent from Auth`);
+      return res.json({
+        ok: true,
+        uid,
+        email: parent.email ?? null,
+        alreadyDeleted: true,
+        deletedCollections,
+      });
     }
 
     await getAdminAuth().deleteUser(uid);
@@ -259,7 +295,13 @@ app.post('/delete-auth-user', async (req, res, next) => {
     }
 
     console.log(`[admin] deleted auth user ${uid} (${existing.email}) requested by ${caller.uid}`);
-    res.json({ ok: true, uid, email: existing.email ?? null, alreadyDeleted: false });
+    res.json({
+      ok: true,
+      uid,
+      email: existing.email ?? null,
+      alreadyDeleted: false,
+      deletedCollections,
+    });
   } catch (err) {
     next(err);
   }
@@ -306,15 +348,25 @@ app.post('/update-user-password', async (req, res, next) => {
   }
 });
 
-// Central error handler: HttpErrors carry a safe, client-facing message.
-// Anything else is logged in full but reported generically.
+// Central error handler.
+//
+// The status is duck-typed rather than read via `err instanceof HttpError`.
+// A duplicated module instance in the deployed bundle makes `instanceof` false
+// for every HttpError, which silently downgrades a specific 401/403/404/409 into
+// an opaque 500 and leaves the client unable to tell the user what happened.
 app.use((err, _req, res, _next) => {
-  const status = err instanceof HttpError && err.status >= 400 ? err.status : 500;
-  if (status >= 500) {
-    console.error('[relay] unhandled error:', err);
-    return res.status(500).json({ error: 'Internal server error.' });
+  // HttpError messages are authored to be client-safe, so they are passed
+  // through at any status. Anything unexpected is logged in full and reported
+  // generically, exposing only its code to aid diagnosis.
+  if (Number.isInteger(err?.status) && err.status >= 400) {
+    if (err.status >= 500) {
+      console.error('[relay] server error:', err);
+    }
+    return res.status(err.status).json({ error: err.message, code: err.code ?? null });
   }
-  res.status(status).json({ error: err.message });
+
+  console.error('[relay] unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error.', code: err?.code ?? null });
 });
 
 if (process.env.VERCEL !== '1') {

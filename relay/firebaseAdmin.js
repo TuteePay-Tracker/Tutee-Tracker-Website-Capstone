@@ -25,6 +25,29 @@ export class HttpError extends Error {
 let adminApp = null;
 
 /**
+ * Reads FIREBASE_PRIVATE_KEY and normalises the ways a pasted PEM can arrive.
+ *
+ * Copying the value straight out of the service-account JSON often drags the
+ * surrounding double quotes along with it. A quoted key is accepted by `cert()`
+ * without complaint and only fails much later, deep inside gRPC, as an opaque
+ * "16 UNAUTHENTICATED" from Firestore — while `verifyIdToken` keeps working,
+ * because it validates signatures against Google's public certs and never signs
+ * anything itself. Stripping the quotes here turns that silent, deeply
+ * misreported failure into a non-event.
+ */
+function readPrivateKey() {
+  const raw = process.env.FIREBASE_PRIVATE_KEY;
+  if (!raw) return undefined;
+
+  return raw
+    .trim()
+    .replace(/^"([\s\S]*)"$/, '$1')
+    // A multi-line PEM may be stored as literal "\n" sequences on a single line.
+    .replace(/\\n/g, '\n')
+    .trim();
+}
+
+/**
  * Lazily initializes the Admin SDK. Credentials come from Vercel env vars;
  * locally they can come from `gcloud auth application-default login`.
  */
@@ -33,8 +56,7 @@ export function getAdminApp() {
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  // Vercel stores multi-line PEM values with literal "\n" sequences.
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = readPrivateKey();
 
   const options = { projectId };
   if (clientEmail && privateKey) {
@@ -67,6 +89,16 @@ export async function requireIdToken(req) {
 
   if (scheme?.toLowerCase() !== 'bearer' || !token) {
     throw new HttpError(401, 'Missing or malformed Authorization bearer token.');
+  }
+
+  // Prove the service-account credential works before relying on it. A relay with
+  // bad credentials is a configuration fault, not a caller fault, so it must not
+  // be reported to the browser as though the request were unauthorized.
+  try {
+    await ensureAdminCredential();
+  } catch (err) {
+    console.error('[admin] service account credential is unusable:', err);
+    throw new HttpError(503, credentialHint(err));
   }
 
   try {
@@ -135,4 +167,99 @@ export async function findAuthUser(uid) {
     if (err?.code === 'auth/user-not-found') return null;
     throw err;
   }
+}
+
+let credentialReady = null;
+
+/**
+ * Proves the configured credential can actually mint an OAuth2 access token.
+ *
+ * `cert()` happily accepts an unusable key, so a misconfigured deployment
+ * otherwise shows its first symptom as a gRPC UNAUTHENTICATED raised by whichever
+ * Admin call happens to run first — a symptom that points at Firestore rather
+ * than at the credentials. Verifying up front turns that into one named failure.
+ * The result is memoised per warm instance.
+ */
+export function ensureAdminCredential() {
+  if (!credentialReady) {
+    credentialReady = (async () => {
+      const credential = getAdminApp().options?.credential;
+      if (typeof credential?.getAccessToken === 'function') {
+        await credential.getAccessToken();
+      }
+      return true;
+    })().catch((err) => {
+      credentialReady = null;
+      throw err;
+    });
+  }
+
+  return credentialReady;
+}
+
+/**
+ * Turns a credential failure into a message naming the variable that needs
+ * fixing, so a misconfiguration is actionable without exposing anything secret.
+ */
+export function credentialHint(err) {
+  const message = String(err?.message ?? err);
+
+  if (/secretOrPrivateKey|asymmetric key|key_parse|invalid.*pem|malformed private key/i.test(message)) {
+    return (
+      'The relay service account key is unusable. FIREBASE_PRIVATE_KEY must be a bare PEM ' +
+      'starting with -----BEGIN PRIVATE KEY----- and must not be wrapped in quotes.'
+    );
+  }
+  if (/client_?email/i.test(message)) {
+    return 'FIREBASE_CLIENT_EMAIL is not a valid service account email address.';
+  }
+  if (/default credentials/i.test(message)) {
+    return 'The relay has no Firebase credentials. Set FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY in Vercel.';
+  }
+
+  return 'The relay could not authenticate to Firebase with its configured service account.';
+}
+
+/**
+ * Upper bound on subcollections removed by a single account deletion.
+ *
+ * `assertCanManageParent` already guarantees the target document is a parent, so
+ * this is defence in depth rather than the primary guard: it bounds the blast
+ * radius should a wrong uid ever reach here, since a tutor profile owns far more
+ * subcollections (tutees, payments, sessions) than a parent ever does.
+ */
+const MAX_CASCADE_COLLECTIONS = 25;
+
+/**
+ * Deletes every subcollection under `users/{uid}`, leaving the profile document
+ * itself in place.
+ *
+ * Firestore never cascades, so `deleteDoc(users/{uid})` orphans anything nested
+ * beneath it — which is exactly how a deleted parent ends up still owning live
+ * push tokens. The caller deletes the profile document separately, under Firestore
+ * rules; doing it here as well would leave that rule to evaluate against a null
+ * `resource` and get denied.
+ *
+ * @returns the ids of the subcollections that were removed.
+ */
+export async function deleteUserSubcollections(uid) {
+  const db = getAdminDb();
+  const collections = await db.doc(`users/${uid}`).listCollections();
+
+  if (collections.length > MAX_CASCADE_COLLECTIONS) {
+    throw new HttpError(
+      500,
+      `Refusing to cascade delete: ${uid} unexpectedly has ${collections.length} subcollections.`
+    );
+  }
+
+  const deleted = [];
+  for (const collection of collections) {
+    // recursiveDelete accepts a Query and CollectionReference extends Query, so
+    // this clears the whole subcollection without touching `users/{uid}`.
+    await db.recursiveDelete(collection);
+    deleted.push(collection.id);
+  }
+
+  return deleted;
 }
