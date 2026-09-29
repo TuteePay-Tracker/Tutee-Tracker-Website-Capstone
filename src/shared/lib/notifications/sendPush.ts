@@ -7,10 +7,8 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
+import { RELAY_URL } from '@/shared/lib/relay';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
-
-const PUSH_RELAY_URL =
-  (import.meta.env.VITE_PUSH_RELAY_URL as string | undefined) ?? 'http://localhost:4000';
 
 // Matches the reply category registered in the parent mobile app
 // (TutorTrack-Mobile). expo-notifications reads `categoryId` from the Android
@@ -87,7 +85,7 @@ export async function sendPushMessage({
       const chunk = expoTokens.slice(i, i + 100);
 
       try {
-        const response = await fetch(`${PUSH_RELAY_URL}/send-push`, {
+        const response = await fetch(`${RELAY_URL}/send-push`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

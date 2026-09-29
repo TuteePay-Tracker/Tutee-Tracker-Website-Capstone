@@ -465,6 +465,7 @@ export const Tutees = () => {
                     contactNumber: parentData.contactNumber,
                     role: 'parent',
                     mustChangePassword: true,
+                    tempPassword: tempPassword,
                     linkedStudentIds: [studentId],
                     createdAt: new Date().toISOString(),
                     createdByTutorId: user.id,

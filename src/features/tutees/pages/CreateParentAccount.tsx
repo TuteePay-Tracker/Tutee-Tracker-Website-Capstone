@@ -9,6 +9,7 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { normalizePhoneNumber, isValidPHPhoneNumber } from '@/shared/utils/phoneUtils';
+import { removeParentAccount } from '@/features/tutees/services/parentManagementService';
 
 interface CreatedAccount {
   name: string;
@@ -18,12 +19,9 @@ interface CreatedAccount {
 }
 
 const generateTempPassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let password = 'TuteePay@';
-  for (let i = 0; i < 6; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
+  const year = new Date().getFullYear();
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  return `JT${year}-${randomNum}`;
 };
 
 export const CreateParentAccount = () => {
@@ -40,39 +38,24 @@ export const CreateParentAccount = () => {
   const [loadingParents, setLoadingParents] = useState(true);
 
   const handleDeleteParent = async (parentId: string, parentName: string) => {
-    if (!window.confirm(`Are you sure you want to delete parent account "${parentName}"? This will unlink all their children.`)) return;
+    if (!window.confirm(`Are you sure you want to delete parent account "${parentName}"? This will delete the account from Firebase Authentication and Firestore, and unlink all their children.`)) return;
 
     try {
-      // 1. Delete parent Firestore doc
-      await deleteDoc(doc(db, 'users', parentId));
-
-      // 2. Unlink tutees from this parent
-      if (user?.id) {
-        const linkedTutees = tutees.filter(t => t.parentId === parentId);
-        for (const student of linkedTutees) {
-          await updateDoc(doc(db, 'users', user.id, 'tutees', student.id), {
-            parentId: null
-          });
-        }
-      }
-
-      // 3. Log "Parent Account Deleted"
       if (user) {
-        await logActivity(
-          user.id,
-          user.name,
-          user.role,
-          'Parent Account Deleted',
-          'Parent Management',
-          `Deleted parent account ${parentName}`
-        );
+        await removeParentAccount({
+          parentId,
+          tutorId: user.id,
+          tutorName: user.name,
+          tutorRole: user.role,
+          parentName,
+        });
       }
 
       toast.success('Parent account deleted successfully');
       await loadParents();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting parent:', error);
-      toast.error('Failed to delete parent account');
+      toast.error(error?.message || 'Failed to delete parent account');
     }
   };
 
@@ -144,6 +127,7 @@ export const CreateParentAccount = () => {
         contactNumber: parentPhone,
         role: 'parent',
         mustChangePassword: true,
+        tempPassword,
         linkedStudentIds: selectedStudentIds,
         createdAt: new Date().toISOString(),
         createdByTutorId: user?.id || '',

@@ -1,5 +1,5 @@
 {
-  "name": "tutor-track-push-relay",
+  "name": "tutor-track-relay",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "firebase-admin": "^12.7.0"
   }
 }

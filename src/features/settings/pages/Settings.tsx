@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
+import { removeParentAccount } from '@/features/tutees/services/parentManagementService';
 import {
   User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
   Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
@@ -562,16 +563,42 @@ export const Settings = () => {
         const announcementsSnapshot = await getDocs(announcementsRef);
         await Promise.all(announcementsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
 
-        // Parent accounts created by this tutor
+        // Parent accounts created by this tutor. Routed through
+        // removeParentAccount so the Firebase Authentication record is deleted
+        // too — deleting only the Firestore document would leave a login that
+        // still works.
         const parentsQuery = query(
           collection(db, 'users'),
           where('createdByTutorId', '==', user.id),
           where('role', '==', 'parent')
         );
         const parentsSnapshot = await getDocs(parentsQuery);
-        await Promise.all(parentsSnapshot.docs.map(doc => deleteDoc(doc.ref)));
 
-        toast.success('All data cleared successfully. Please refresh the page.');
+        const failedParents: string[] = [];
+        for (const parentDoc of parentsSnapshot.docs) {
+          const parentName = (parentDoc.data().name as string) || parentDoc.id;
+          try {
+            await removeParentAccount({
+              parentId: parentDoc.id,
+              tutorId: user.id,
+              tutorName: user.name,
+              tutorRole: user.role,
+              parentName,
+            });
+          } catch (parentErr) {
+            console.error(`Error deleting parent account ${parentName}:`, parentErr);
+            failedParents.push(parentName);
+          }
+        }
+
+        if (failedParents.length > 0) {
+          toast.error(
+            `Data cleared, but ${failedParents.length} parent account(s) still exist in Firebase Authentication: ${failedParents.join(', ')}. Retry from the student's page to revoke their login.`,
+            { duration: 12000 }
+          );
+        } else {
+          toast.success('All data cleared successfully. Please refresh the page.');
+        }
       } catch (error) {
         console.error('Error clearing data:', error);
         toast.error('Failed to clear data. Please try again.');

@@ -187,3 +187,10 @@ exports.sendExpoPush = onCall(async (request) => {
 
   return { ok: true, sent: uniqueTokens.length, tickets };
 });
+
+// NOTE: The `deleteUserAccount` and `updateUserPassword` callables that used to
+// live here have been removed. This project is on the Spark plan, so these
+// functions could never be deployed and every `httpsCallable` to them failed
+// silently. The equivalent privileged operations are served by the relay
+// server (relay/server.js): POST /delete-auth-user and /update-user-password.
+

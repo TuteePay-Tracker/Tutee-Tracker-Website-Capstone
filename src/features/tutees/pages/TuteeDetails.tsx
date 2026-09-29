@@ -6,7 +6,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { formatDate, formatTime12h } from '@/shared/utils/formatDate';
 import {
-  ArrowLeft, Mail, Phone, Calendar, CalendarX, DollarSign, BookOpen, Users,
+  ArrowLeft, Mail, Phone, Calendar, CalendarX, DollarSign, BookOpen, Users, UserPlus, Trash2, Key,
   X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
   Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash,
   Pencil, GraduationCap, ChevronUp, ChevronDown
@@ -28,6 +28,9 @@ import mayaLogo from '@/assets/id5dWPPLkV_logos.jpeg';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { removeParentAccount, updateParentTempPassword, CreatedParentCredentials } from '@/features/tutees/services/parentManagementService';
+import { CreateOrLinkParentModal } from '@/features/tutees/components/CreateOrLinkParentModal';
+import { ParentCredentialsModal } from '@/features/tutees/components/ParentCredentialsModal';
 
 export const TuteeDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -201,6 +204,9 @@ export const TuteeDetails = () => {
   const [showParentModal, setShowParentModal] = useState(false);
   const [parentData, setParentData] = useState<any>(null);
   const [loadingParent, setLoadingParent] = useState(false);
+  const [showCreateOrLinkModal, setShowCreateOrLinkModal] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<CreatedParentCredentials | null>(null);
+  const [isRemovingParent, setIsRemovingParent] = useState(false);
 
   // Parent payment states
   const [tutorPaymentMethods, setTutorPaymentMethods] = useState<any>(null);
@@ -339,6 +345,70 @@ export const TuteeDetails = () => {
     } finally {
       setLoadingParent(false);
     }
+  };
+
+  const handleRemoveParent = async () => {
+    if (!tutee || !user || !tutee.parentId) return;
+    const parentName = parentData?.name || 'this parent';
+    if (
+      !window.confirm(
+        `Are you sure you want to remove parent account "${parentName}"? This will delete the parent's account from Firebase Authentication and Firestore, and unlink them from all students.`
+      )
+    ) {
+      return;
+    }
+
+    setIsRemovingParent(true);
+    try {
+      await removeParentAccount({
+        parentId: tutee.parentId,
+        tutorId: user.id,
+        tutorName: user.name,
+        tutorRole: user.role,
+        parentName,
+      });
+
+      setShowParentModal(false);
+      setParentData(null);
+      toast.success('Parent account removed successfully');
+    } catch (error: any) {
+      console.error('Error removing parent account:', error);
+      toast.error(error.message || 'Failed to remove parent account');
+    } finally {
+      setIsRemovingParent(false);
+    }
+  };
+
+  const handleViewCredentialsModal = async () => {
+    if (!tutee || !user || !tutee.parentId || !parentData) return;
+
+    let tempPass = parentData.tempPassword;
+    if (!tempPass) {
+      try {
+        tempPass = await updateParentTempPassword({
+          parentId: tutee.parentId,
+          tutorId: user.id,
+          tutorName: user.name,
+          tutorRole: user.role,
+        });
+        setParentData((prev: any) => ({ ...prev, tempPassword: tempPass, mustChangePassword: true }));
+      } catch (err: any) {
+        console.error('Failed to generate temp password:', err);
+        toast.error(err?.message || 'Failed to retrieve temporary password');
+        return;
+      }
+    }
+
+    const contactNum = parentData.contactNumber || (parentData.email?.endsWith('@tuteepay.local') ? parentData.email.split('@')[0] : parentData.email);
+
+    setShowParentModal(false);
+    setCreatedCredentials({
+      name: parentData.name,
+      contactNumber: contactNum,
+      tempPassword: tempPass,
+      studentName: `${tutee.firstName} ${tutee.surname}`,
+      parentId: tutee.parentId,
+    });
   };
 
   const getStudentName = (studentId: string) => {
@@ -733,10 +803,19 @@ export const TuteeDetails = () => {
                           </button>
                         </>
                       ) : (
-                        <div className="mt-2 text-xs text-gray-500 flex items-center gap-1.5">
-                          <Users size={14} className="text-gray-400" />
-                          No parent portal account linked
-                        </div>
+                        <>
+                          <div className="mt-2 text-xs text-gray-500 flex items-center gap-1.5">
+                            <Users size={14} className="text-gray-400" />
+                            No parent portal account linked
+                          </div>
+                          <button
+                            onClick={() => setShowCreateOrLinkModal(true)}
+                            className="w-full flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800 text-white px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors mt-1 shadow-sm"
+                          >
+                            <UserPlus size={16} />
+                            Create or Link Parent Account
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
@@ -1221,9 +1300,34 @@ export const TuteeDetails = () => {
       {/* Parent account details modal */}
       {showParentModal && parentData && (
         <ParentAccountModal
+          parentId={tutee?.parentId}
           parent={parentData}
           linkedStudentNames={parentData.linkedStudentIds?.map(getStudentName) || []}
           onClose={() => setShowParentModal(false)}
+          onRemoveParent={handleRemoveParent}
+          isRemoving={isRemovingParent}
+          onViewCredentialsModal={handleViewCredentialsModal}
+        />
+      )}
+
+      {showCreateOrLinkModal && tutee && (
+        <CreateOrLinkParentModal
+          tuteeId={tutee.id}
+          tuteeName={`${tutee.firstName} ${tutee.surname}`}
+          onClose={() => setShowCreateOrLinkModal(false)}
+          onSuccess={(creds) => {
+            setShowCreateOrLinkModal(false);
+            if (creds) {
+              setCreatedCredentials(creds);
+            }
+          }}
+        />
+      )}
+
+      {createdCredentials && (
+        <ParentCredentialsModal
+          credentials={createdCredentials}
+          onClose={() => setCreatedCredentials(null)}
         />
       )}
 
@@ -1275,22 +1379,59 @@ export const TuteeDetails = () => {
 
 /* ─── Parent account details modal ─────────────────────────────────────── */
 interface ParentModalProps {
+  parentId?: string;
   parent: {
     name: string;
     email: string;
     contactNumber?: string;
     role: string;
     mustChangePassword?: boolean;
+    tempPassword?: string;
     linkedStudentIds?: string[];
     createdAt?: string;
   };
   linkedStudentNames: string[];
   onClose: () => void;
+  onRemoveParent?: () => void;
+  isRemoving?: boolean;
+  onViewCredentialsModal?: () => void;
 }
 
-const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModalProps) => {
+const ParentAccountModal = ({
+  parentId,
+  parent,
+  linkedStudentNames,
+  onClose,
+  onRemoveParent,
+  isRemoving,
+  onViewCredentialsModal,
+}: ParentModalProps) => {
+  const { user } = useAuth();
+  const [tempPasswordState, setTempPasswordState] = useState(parent.tempPassword || '');
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => toast.success(`${label} copied!`));
+  };
+
+  const handleGeneratePassword = async () => {
+    if (!parentId || !user) return;
+    setIsGenerating(true);
+    try {
+      const newPass = await updateParentTempPassword({
+        parentId,
+        tutorId: user.id,
+        tutorName: user.name,
+        tutorRole: user.role,
+      });
+      setTempPasswordState(newPass);
+      toast.success('Temporary password generated successfully!');
+    } catch (err: any) {
+      console.error('Failed to generate password:', err);
+      toast.error(err?.message || 'Failed to generate temporary password');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -1309,6 +1450,7 @@ const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModal
             </div>
             <button
               onClick={onClose}
+              disabled={isRemoving}
               className="text-white/70 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
             >
               <X size={20} />
@@ -1363,7 +1505,7 @@ const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModal
             </div>
           )}
 
-          <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-2">
             <div>
               <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Account Status</p>
               {parent.mustChangePassword ? (
@@ -1378,6 +1520,23 @@ const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModal
                 </span>
               )}
             </div>
+
+            {parent.mustChangePassword && (
+              <div className="pt-2 border-t border-gray-200 flex flex-col gap-2">
+                
+
+                {onViewCredentialsModal && (
+                  <button
+                    type="button"
+                    onClick={onViewCredentialsModal}
+                    className="w-full flex items-center justify-center gap-2 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 py-2.5 px-3 rounded-xl text-xs font-semibold transition-colors shadow-sm mt-1"
+                  >
+                    <Key size={14} />
+                    View Credentials
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {linkedStudentNames.length > 0 && (
@@ -1392,12 +1551,24 @@ const ParentAccountModal = ({ parent, linkedStudentNames, onClose }: ParentModal
           )}
         </div>
 
-        <div className="px-6 pb-6 pt-2">
+        <div className="px-6 pb-6 pt-2 flex flex-col gap-2.5">
+          {onRemoveParent && (
+            <button
+              type="button"
+              onClick={onRemoveParent}
+              disabled={isRemoving}
+              className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 shadow-sm"
+            >
+              <Trash2 size={16} />
+              {isRemoving ? 'Removing Parent...' : 'Remove Parent'}
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold text-sm transition-colors"
+            disabled={isRemoving}
+            className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
           >
-            Close
+            Cancel
           </button>
         </div>
       </div>
