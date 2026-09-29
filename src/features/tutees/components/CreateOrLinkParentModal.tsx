@@ -154,9 +154,9 @@ export const CreateOrLinkParentModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
-        <div className="bg-gradient-to-br from-green-700 to-green-900 p-6 text-white flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-y-auto max-h-[92vh] border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-gradient-to-br from-green-700 to-green-900 p-4 sm:p-6 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
               <UserPlus size={22} className="text-white" />
@@ -174,13 +174,13 @@ export const CreateOrLinkParentModal = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div className="border rounded-xl p-4 bg-gray-50/50 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+          <div className="border rounded-xl p-3 sm:p-4 bg-gray-50/50 space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Parent Account Status
               </label>
-              <div className="flex gap-6">
+              <div className="flex gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
@@ -192,9 +192,9 @@ export const CreateOrLinkParentModal = ({
                       setNewParentName('');
                       setNewParentPhone('');
                     }}
-                    className="w-4 h-4 text-green-700 focus:ring-green-700"
+                    className="w-4 h-4 text-green-700 focus:ring-green-700 shrink-0"
                   />
-                  <span className="text-sm font-medium text-gray-900">Existing Parent</span>
+                  <span className="text-sm font-medium text-gray-900 whitespace-nowrap">Existing Parent</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -208,9 +208,9 @@ export const CreateOrLinkParentModal = ({
                       setSelectedParentId(null);
                       setSearchResults([]);
                     }}
-                    className="w-4 h-4 text-green-700 focus:ring-green-700"
+                    className="w-4 h-4 text-green-700 focus:ring-green-700 shrink-0"
                   />
-                  <span className="text-sm font-medium text-gray-900">New Parent</span>
+                  <span className="text-sm font-medium text-gray-900 whitespace-nowrap">New Parent</span>
                 </label>
               </div>
             </div>
@@ -221,7 +221,7 @@ export const CreateOrLinkParentModal = ({
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
                     Search Parent by Name or Contact Number
                   </label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       value={searchQuery}
@@ -235,14 +235,14 @@ export const CreateOrLinkParentModal = ({
                           handleSearch();
                         }
                       }}
-                      className="flex-1 p-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 text-sm placeholder:text-xs bg-white"
+                      className="w-full p-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-green-700 text-sm placeholder:text-xs bg-white"
                       placeholder="e.g. Maria Santos or 09171234567"
                     />
                     <button
                       type="button"
                       onClick={handleSearch}
                       disabled={isSearching || !searchQuery.trim()}
-                      className="px-4 py-2.5 bg-green-700 text-white rounded-xl hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium transition-colors flex items-center gap-1.5 shrink-0"
+                      className="w-full sm:w-auto px-4 py-2.5 bg-green-700 text-white rounded-xl hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium transition-colors flex items-center justify-center gap-1.5 shrink-0"
                     >
                       <Search size={16} />
                       {isSearching ? 'Searching...' : 'Search'}
@@ -328,7 +328,16 @@ export const CreateOrLinkParentModal = ({
             )}
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="w-full sm:w-auto px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -344,15 +353,6 @@ export const CreateOrLinkParentModal = ({
               ) : (
                 'Create & Link Parent Account'
               )}
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
-            >
-              Cancel
             </button>
           </div>
         </form>
