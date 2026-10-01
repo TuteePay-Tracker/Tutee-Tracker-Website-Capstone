@@ -326,7 +326,7 @@ export const Login = () => {
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">New to TuteePay?</span>
+                <span className="px-4 bg-white text-gray-500">New to TutorTrack?</span>
               </div>
             </div>
 
