@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Link } from 'react-router';
-import logoUrl from '@/assets/logo.jpg';
+import logoUrl from '@/assets/logo.png';
 import { GraduationCap, ArrowLeft, Mail, Send, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 

@@ -25,13 +25,7 @@ import { ReactNode } from 'react';
 const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; tutorOnly?: boolean }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -51,13 +45,7 @@ const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; 
 const PublicRoute = ({ children }: { children: ReactNode }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   if (user) {
     // Parent who must change password goes to change-password, not home
@@ -74,13 +62,7 @@ const PublicRoute = ({ children }: { children: ReactNode }) => {
 const ChangePasswordRoute = ({ children }: { children: ReactNode }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   if (!user) return <Navigate to="/login" replace />;
 

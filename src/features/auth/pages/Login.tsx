@@ -3,6 +3,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useNavigate } from 'react-router';
 import { Link } from 'react-router';
 import logoUrl from '@/assets/logo.png';
+import logoRemoveBg from '@/assets/logo removebg.png';
 import { Mail, Lock, ArrowRight, Sparkles, Eye, EyeOff, Download, X, UserCheck, Smartphone, CheckCircle2, Calendar, CreditCard, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReCaptchaWidget } from '@/shared/components/ReCaptchaWidget';
@@ -55,7 +56,6 @@ export const Login = () => {
       navigate('/');
     } catch (error: any) {
       toast.error(error.message || 'Login failed. Please check your credentials.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -72,6 +72,39 @@ export const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden p-4 md:p-8">
+      {/* Full-screen Loading Screen when Signing In */}
+      {isLoading && (
+        <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-gradient-to-b from-blue-50/40 via-white to-slate-50 select-none px-4">
+          {/* Soft ambient background glow */}
+          <div className="absolute w-72 h-72 sm:w-96 sm:h-96 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+
+          {/* Logo without rings */}
+          <div className="relative flex items-center justify-center">
+            <img
+              src={logoRemoveBg}
+              alt="TutorTrack Logo"
+              className="w-28 h-28 sm:w-36 sm:h-36 object-contain drop-shadow-md select-none pointer-events-none"
+            />
+          </div>
+
+          {/* Modern Blue Spinner & Indicator */}
+          <div className="mt-6 flex items-center gap-2.5">
+            <div className="w-4 h-4 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-blue-600">TutorTrack</span>
+            <div className="flex items-center gap-1 ml-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce" />
+            </div>
+          </div>
+
+          {/* Status Caption */}
+          <p className="mt-2 text-xs sm:text-sm text-gray-500 font-medium">
+            Signing you in...
+          </p>
+        </div>
+      )}
+
       {/* Animated Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-white via-blue-100 to-blue-200">
         <div className="absolute inset-0 opacity-25">
@@ -144,10 +177,6 @@ export const Login = () => {
                 <Download size={22} className="group-hover:translate-y-0.5 transition-transform" />
               </button>
             </div>
-          </div>
-
-          <div className="pt-4 border-t border-blue-200/60 text-xs text-gray-500">
-            Smart Tutee & Session Management Platform • Need help? <a href="mailto:support@tuteepay.com" className="text-blue-600 hover:underline font-semibold">Contact Support</a>
           </div>
         </div>
 

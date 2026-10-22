@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useNavigate } from 'react-router';
 import { Link } from 'react-router';
-import logoUrl from '@/assets/logo.jpg';
+import logoUrl from '@/assets/logo.png';
 import { GraduationCap, User, Mail, Lock, ArrowRight, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -71,7 +71,7 @@ export const Signup = () => {
           </h1>
 
           <p className="text-xl text-gray-700 max-w-md">
-            Join thousands of tutors who are already managing their business efficiently with TuteePay.
+            Join thousands of tutors who are already managing their business efficiently with Tutor Track.
           </p>
 
           <div className="space-y-4 pt-4">

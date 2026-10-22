@@ -1,46 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>TutorTrack</title>
-      <!-- Favicon -->
-      <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
-      <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
-      <!-- PWA Manifest -->
-      <link rel="manifest" href="/manifest.json">
-      <!-- PWA Android -->
-      <meta name="theme-color" content="#1565C0">
-      <meta name="mobile-web-app-capable" content="yes">
-      <!-- PWA iOS -->
-      <meta name="apple-mobile-web-app-capable" content="yes">
-      <meta name="apple-mobile-web-app-status-bar-style" content="default">
-      <meta name="apple-mobile-web-app-title" content="TutorTrack">
-      <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-      <!-- SEO -->
-      <meta name="description" content="Streamline tutoring management with a platform that tracks payments, monitors balances, and generates income reports for private tutors." />
-      <meta name="robots" content="noindex, nofollow" />
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
-      <style>
-        html, body { 
-          height: 100%; 
-          margin: 0; 
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-        } 
-        #root { height: 100%; }
-      </style>
-    </head>
+<head>
 
-    <body>
-      
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-    </body>
-  </html>
-  
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TutorTrack</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
+  <!-- PWA Android -->
+  <meta name="theme-color" content="#1565C0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <!-- PWA iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TutorTrack">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <!-- SEO -->
+  <meta name="description"
+    content="Streamline tutoring management with a platform that tracks payments, monitors balances, and generates income reports for private tutors." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+    rel="stylesheet">
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    #root {
+      height: 100%;
+    }
+
+    @keyframes loaderSpin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes loaderBounce {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-4px);
+      }
+    }
+
+    .initial-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      background: linear-gradient(to bottom, rgba(239, 246, 255, 0.4), #ffffff, #f8fafc);
+      padding: 0 16px;
+    }
+
+    .initial-loader-glow {
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      border-radius: 9999px;
+      background-color: rgba(37, 99, 235, 0.08);
+      filter: blur(48px);
+      pointer-events: none;
+    }
+
+    .initial-loader-logo {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.06));
+    }
+
+    .initial-loader-status {
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .initial-loader-spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid #bfdbfe;
+      border-top-color: #2563eb;
+      animation: loaderSpin 0.55s linear infinite;
+    }
+
+    .initial-loader-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #2563eb;
+    }
+
+    .initial-loader-dots {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .initial-loader-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #2563eb;
+      animation: loaderBounce 0.6s ease-in-out infinite;
+    }
+
+    .initial-loader-caption {
+      margin: 8px 0 0 0;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b7280;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="initial-loader" class="initial-loader">
+    <div class="initial-loader-glow"></div>
+    <img src="/src/assets/logo removebg.png" alt="TutorTrack Logo" class="initial-loader-logo" />
+    <div class="initial-loader-status">
+      <div class="initial-loader-spinner"></div>
+      <span class="initial-loader-title">TutorTrack</span>
+      <div class="initial-loader-dots">
+        <span class="initial-loader-dot" style="animation-delay: -0.2s;"></span>
+        <span class="initial-loader-dot" style="animation-delay: -0.1s;"></span>
+        <span class="initial-loader-dot"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+
+  <script>
+    (function () {
+      var root = document.getElementById('root');
+      var loader = document.getElementById('initial-loader');
+      if (!root || !loader) return;
+
+      function dismiss() {
+        if (!loader || loader.dataset.dismissed) return;
+        loader.dataset.dismissed = 'true';
+        loader.style.opacity = '0';
+        loader.style.transition = 'opacity 0.08s ease-out';
+        setTimeout(function () {
+          if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+        }, 80);
+      }
+
+      var observer = new MutationObserver(function () {
+        if (root.firstElementChild) {
+          observer.disconnect();
+          dismiss();
+        }
+      });
+
+      if (root.firstElementChild) {
+        dismiss();
+      } else {
+        observer.observe(root, { childList: true, subtree: true });
+      }
+
+      // Fallback safety timeout
+      setTimeout(dismiss, 3000);
+    })();
+  </script>
+</body>
+
+</html>

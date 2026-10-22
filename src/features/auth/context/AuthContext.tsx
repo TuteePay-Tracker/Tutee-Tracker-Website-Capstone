@@ -54,8 +54,32 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUserState] = useState<User | null>(() => {
+    try {
+      const cached = localStorage.getItem('tutortrack_auth_user');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const setUser = (newUser: User | null | ((prev: User | null) => User | null)) => {
+    setUserState((prev) => {
+      const next = typeof newUser === 'function' ? newUser(prev) : newUser;
+      try {
+        if (next) {
+          localStorage.setItem('tutortrack_auth_user', JSON.stringify(next));
+        } else {
+          localStorage.removeItem('tutortrack_auth_user');
+        }
+      } catch (err) {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     // Listen to Firebase auth state changes
@@ -112,14 +136,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        await logActivity(
+        logActivity(
           firebaseUser.uid,
           userData.name || 'User',
           userData.role || 'tutor',
           'Login',
           'Authentication',
           `User ${userData.name || firebaseUser.email} logged in`
-        );
+        ).catch((err) => console.warn('Activity logging non-blocking error:', err));
       }
     } catch (error: any) {
       setIsLoading(false);
