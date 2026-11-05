@@ -14,6 +14,11 @@ import { db } from '@/shared/lib/firebase/config';
 import { relayRequest } from '@/shared/lib/relay';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { normalizePhoneNumber } from '@/shared/utils/phoneUtils';
+import {
+  RestoredParentCredentialsModal,
+  type RestoredParentCredential,
+} from '@/features/settings/components/RestoredParentCredentialsModal';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { formatSchoolYear, getNextSchoolYear, getDefaultSchoolYears, MONTH_OPTIONS } from '@/shared/utils/schoolYear';
 import gcashLogo from '@/assets/gcash-com-logo.png';
@@ -67,6 +72,9 @@ export const Settings = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedBackupData, setParsedBackupData] = useState<any | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [restoredParentCredentials, setRestoredParentCredentials] = useState<RestoredParentCredential[]>([]);
+  const [restoredParentFailures, setRestoredParentFailures] = useState<string[]>([]);
+  const [showRestoredCredentials, setShowRestoredCredentials] = useState(false);
 
   // Audit Logs states
   const [logs, setLogs] = useState<any[]>([]);
@@ -499,35 +507,106 @@ export const Settings = () => {
       //    A backup only contains the Firestore profile; the Auth account is
       //    deleted when data is cleared, so it must be recreated with the same
       //    uid or the parent cannot sign in and every parentId reference breaks.
+      //
+      //    Always issue a fresh temporary password. A backup's tempPassword goes
+      //    stale as soon as the parent changes their own password (the change
+      //    flow only clears mustChangePassword), so reusing it would hand the
+      //    parent a password that no longer works. A fresh temp, persisted with
+      //    mustChangePassword=true, keeps Auth and Firestore in sync and makes
+      //    the credential retrievable from the parent's View Credentials modal.
       const parentAccounts = parsedBackupData['parentAccounts'];
+      const backupTutees: any[] = Array.isArray(parsedBackupData['tutees'])
+        ? parsedBackupData['tutees']
+        : [];
       const parentRestoreFailures: string[] = [];
-      let recreatedLogins = 0;
+      const restoredCredentials: RestoredParentCredential[] = [];
+      let createdLogins = 0;
+      let resetLogins = 0;
+
+      const linkedStudentNamesFor = (parentId: string, linkedStudentIds?: unknown): string[] => {
+        const linkedIds = new Set(
+          Array.isArray(linkedStudentIds)
+            ? linkedStudentIds.filter((value): value is string => typeof value === 'string')
+            : []
+        );
+        const names: string[] = [];
+        for (const tutee of backupTutees) {
+          if (!tutee || (tutee.parentId !== parentId && !linkedIds.has(tutee.id))) continue;
+          const fullName = [tutee.firstName, tutee.surname]
+            .filter((part) => typeof part === 'string' && part.trim())
+            .join(' ')
+            .trim();
+          const name =
+            fullName || (typeof tutee.name === 'string' ? tutee.name : '') || tutee.id;
+          if (name && !names.includes(name)) names.push(name);
+        }
+        return names;
+      };
+
       if (Array.isArray(parentAccounts)) {
         for (const parent of parentAccounts) {
           const { id, ...data } = parent;
           if (!id) continue;
 
-          const parentLabel = (data.name as string) || id;
+          const parentLabel =
+            typeof data.name === 'string' && data.name.trim() ? data.name.trim() : id;
+          const rawEmail = typeof data.email === 'string' ? data.email.trim() : '';
+          const rawContact =
+            typeof data.contactNumber === 'string' ? data.contactNumber.trim() : '';
+          const normalizedContact = rawContact ? normalizePhoneNumber(rawContact) : '';
+          const derivedEmail = rawEmail.includes('@')
+            ? rawEmail
+            : normalizedContact
+              ? `${normalizedContact}@tuteepay.local`
+              : '';
+          const displayUsername =
+            rawContact ||
+            (derivedEmail.endsWith('@tuteepay.local')
+              ? derivedEmail.split('@')[0]
+              : derivedEmail);
+
+          const tempPassword = generateTempPassword();
+
           try {
-            // Without a usable temp password there is no way to recreate the
-            // login, so issue (and persist) a fresh one for the tutor to share.
-            const hasUsablePassword =
-              typeof data.tempPassword === 'string' && data.tempPassword.length >= 6;
-            const parentDoc = hasUsablePassword
-              ? data
-              : {
-                  ...data,
-                  tempPassword: generateTempPassword(),
-                  mustChangePassword: true,
-                };
+            await setDoc(doc(db, 'users', id), {
+              ...data,
+              email: derivedEmail,
+              tempPassword,
+              mustChangePassword: true,
+            });
 
-            await setDoc(doc(db, 'users', id), parentDoc);
+            const result = await relayRequest<{
+              created: boolean;
+              alreadyExisted: boolean;
+            }>('/restore-parent-auth', { uid: id });
 
-            const result = await relayRequest<{ created: boolean; alreadyExisted: boolean }>(
-              '/restore-parent-auth',
-              { uid: id }
-            );
-            if (result?.created) recreatedLogins += 1;
+            let status: 'created' | 'reset';
+            if (result?.created) {
+              status = 'created';
+              createdLogins += 1;
+            } else if (result?.alreadyExisted) {
+              // The login survived (e.g. restore without clearing data), so
+              // apply the freshly generated temp to it. Otherwise the password
+              // shown to the tutor would not match Firebase Auth.
+              await relayRequest('/update-user-password', {
+                uid: id,
+                newPassword: tempPassword,
+              });
+              status = 'reset';
+              resetLogins += 1;
+            } else {
+              throw new Error('The account server did not confirm the login state.');
+            }
+
+            restoredCredentials.push({
+              parentId: id,
+              name: parentLabel,
+              contactNumber: displayUsername,
+              email: derivedEmail,
+              tempPassword,
+              linkedStudentNames: linkedStudentNamesFor(id, data.linkedStudentIds),
+              status,
+            });
           } catch (e: any) {
             console.error(`Error restoring parent account ${id}:`, e);
             parentRestoreFailures.push(parentLabel);
@@ -542,18 +621,28 @@ export const Settings = () => {
         user.role,
         'Database Restored',
         'Backup & Recovery',
-        `Restored database records from backup JSON (${recreatedLogins} parent login(s) recreated)`
+        `Restored database records from backup JSON (${createdLogins} parent login(s) created, ${resetLogins} password(s) reset)`
       );
 
+      const restoredLoginCount = restoredCredentials.length;
       if (parentRestoreFailures.length > 0) {
         toast.error(
-          `Data restored, but ${parentRestoreFailures.length} parent login(s) could not be recreated: ${parentRestoreFailures.join(', ')}. ` +
-            'Open the parent account and regenerate the temporary password, then retry the restore.',
+          `Data restored. ${restoredLoginCount} parent login(s) ready (${createdLogins} created, ${resetLogins} reset). ` +
+            `${parentRestoreFailures.length} could not be recreated: ${parentRestoreFailures.join(', ')}. ` +
+            'Retry the restore; if it still fails, recreate that parent account.',
           { duration: 12000 }
         );
       } else {
-        toast.success('Backup data restored successfully! Please refresh the page to view updates.');
+        toast.success(
+          `Backup data restored. ${restoredLoginCount} parent login(s) ready (${createdLogins} created, ${resetLogins} reset). ` +
+            'Share the temporary passwords shown next.',
+          { duration: 8000 }
+        );
       }
+
+      setRestoredParentCredentials(restoredCredentials);
+      setRestoredParentFailures(parentRestoreFailures);
+      setShowRestoredCredentials(restoredCredentials.length > 0);
       setParsedBackupData(null);
       setSelectedFile(null);
     } catch (error: any) {
@@ -1947,6 +2036,14 @@ export const Settings = () => {
 
         </div>
       </div>
+
+      {showRestoredCredentials && (
+        <RestoredParentCredentialsModal
+          credentials={restoredParentCredentials}
+          failures={restoredParentFailures}
+          onClose={() => setShowRestoredCredentials(false)}
+        />
+      )}
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { GraduationCap, Lock, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { updatePassword } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/shared/lib/firebase/config';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
@@ -35,6 +35,9 @@ export const ChangePassword = () => {
       await updatePassword(firebaseUser, newPassword);
       await updateDoc(doc(db, 'users', firebaseUser.uid), {
         mustChangePassword: false,
+        // The backup's temporary password is no longer valid once the parent
+        // sets their own. Drop it so a later restore never reuses a dead value.
+        tempPassword: deleteField(),
       });
 
       if (user) {
