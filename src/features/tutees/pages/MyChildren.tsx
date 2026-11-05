@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { GraduationCap, Calendar, TrendingUp, CheckSquare } from 'lucide-react';
 import { Link } from 'react-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -146,12 +147,7 @@ export const MyChildren = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
-        <span className="ml-3 text-gray-500 font-medium">Loading children listing...</span>
-      </div>
-    );
+    return <LoadingScreen message="Loading children..." />;
   }
 
   return (

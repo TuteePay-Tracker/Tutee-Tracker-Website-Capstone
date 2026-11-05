@@ -6,6 +6,7 @@ import { normalizePhoneNumber, isValidPHPhoneNumber } from '@/shared/utils/phone
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User, CalendarRange } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals } from '@/features/tutees/types/tutee';
@@ -588,9 +589,7 @@ export const Tutees = () => {
       )}
 
       {isLoading ? (
-        <div className="text-center py-12">
-          <div className="text-gray-500">Loading tutees...</div>
-        </div>
+        <LoadingScreen message="Loading students..." />
       ) : filteredAndSortedTutees.length === 0 ? (
         <div className="bg-white rounded-lg border p-12 text-center">
           <p className="text-gray-500">No tutees found</p>

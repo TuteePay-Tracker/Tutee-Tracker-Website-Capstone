@@ -8,6 +8,7 @@ import { Users, Calendar, DollarSign, BookOpen, X, Eye, CheckCircle2, XCircle, A
 import { useSearchParams } from 'react-router';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -111,14 +112,7 @@ export const PaymentTracking = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-green-700 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-600 font-medium">Loading tutees...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen message="Loading payments..." />;
   }
 
   if (selectedTutee) {

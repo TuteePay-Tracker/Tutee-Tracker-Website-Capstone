@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { InstallPWAButton } from '@/shared/components/InstallPWAButton';
 import { setupWebPushNotifications, listenForForegroundMessages } from '@/shared/services/fcmService';
 import { SchoolYearConfirmDialog } from '@/shared/components/SchoolYearConfirmDialog';
+import { SystemDevelopers } from '@/shared/components/SystemDevelopers';
 
 export const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -921,9 +922,10 @@ export const MainLayout = () => {
           {/* Hide footer on mobile for the chat page — it wastes screen real estate */}
           <footer className={`bg-white border-t py-6 ${location.pathname === '/chat' ? 'hidden md:block' : ''
             }`}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-400 font-medium">
-              <p>© 2026 Tutor Track. Built for tutors, by tutors.</p>
-            </div>
+            <SystemDevelopers
+              showTopBorder={false}
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+            />
           </footer>
         </div>
       </div>

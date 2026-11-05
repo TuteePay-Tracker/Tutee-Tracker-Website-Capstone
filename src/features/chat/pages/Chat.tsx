@@ -23,6 +23,7 @@ import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 
 export const Chat = () => {
   const { user } = useAuth();
@@ -388,6 +389,15 @@ export const Chat = () => {
   };
 
   const chatList = getFilteredList();
+
+  if (loadingThreads || loadingTutees) {
+    return (
+      <LoadingScreen
+        message="Loading messages..."
+        className="h-full min-h-[calc(100vh-180px)] rounded-2xl border border-gray-200 md:min-h-[450px]"
+      />
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm h-full md:h-[calc(100vh-180px)] md:min-h-[450px] flex">

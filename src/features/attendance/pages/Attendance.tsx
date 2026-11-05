@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { db } from '@/shared/lib/firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { shouldShowFirestoreError } from '@/shared/utils/firestoreErrors';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { belongsToSchoolYear, isMonthInSchoolYear } from '@/shared/utils/schoolYear';
 
@@ -196,14 +197,7 @@ export const Attendance = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-green-700 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-600 font-medium">Loading students...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen message="Loading attendance..." />;
   }
 
   return (

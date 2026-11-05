@@ -344,8 +344,42 @@ service cloud.firestore {
             && data.createdAt is string && data.createdAt.size() > 0;
         }
 
-        allow read, delete: if isAuthenticated() && isOwner(userId);
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+        );
+        allow delete: if isAuthenticated() && isOwner(userId);
         allow create, update: if isAuthenticated() && isOwner(userId);
+      }
+
+      // TOPICS subcollection (tutor-managed topics/learning areas per subject)
+      match /topics/{topicId} {
+        function isValidTopic() {
+          let data = request.resource.data;
+          return data.keys().hasAll(['subject', 'name', 'createdAt'])
+            && data.subject is string && data.subject.size() > 0
+            && data.name is string && data.name.size() > 0;
+        }
+
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+        );
+        allow create, update: if isAuthenticated() && isOwner(userId) && isValidTopic();
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // TOPIC PROGRESS subcollection (student progress per tutor-defined topic)
+      match /topicProgress/{progressId} {
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+        );
+        allow create, update: if isAuthenticated() && isOwner(userId);
+        allow delete: if isAuthenticated() && isOwner(userId);
       }
 
       // ASSESSMENTS subcollection (tutor-managed student assessment records)

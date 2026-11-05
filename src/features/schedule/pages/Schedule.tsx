@@ -5,6 +5,7 @@ import { Tutee, ScheduleItem } from '@/features/tutees/types/tutee';
 import { Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { formatTime12h } from '@/shared/utils/formatDate';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 
@@ -86,11 +87,7 @@ export const Schedule = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-gray-500">Loading schedule...</div>
-      </div>
-    );
+    return <LoadingScreen message="Loading schedule..." />;
   }
 
   return (

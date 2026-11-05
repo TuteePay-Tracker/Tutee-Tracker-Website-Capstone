@@ -12,8 +12,13 @@ import {
   Pencil, GraduationCap, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { PaymentHistory } from '@/features/payments/components/PaymentHistory';
 import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
+import { useTopics } from '@/features/tutee-progress/hooks/useTopics';
+import { useTopicProgress } from '@/features/tutee-progress/hooks/useTopicProgress';
+import { getPerformanceLevelConfig } from '@/features/tutee-progress/types/topic';
+import { ProgressReportModal } from '@/features/tutee-progress/components/ProgressReportModal';
 import { Tutee, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals } from '@/features/tutees/types/tutee';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
@@ -199,7 +204,7 @@ export const TuteeDetails = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'reports' | 'topic-progress'>('overview');
   const [expandedAssessmentId, setExpandedAssessmentId] = useState<string | null>(null);
   const [showParentModal, setShowParentModal] = useState(false);
   const [parentData, setParentData] = useState<any>(null);
@@ -276,6 +281,12 @@ export const TuteeDetails = () => {
   };
 
   const { assessments } = useAssessments();
+  const { getTopicsForSubject } = useTopics();
+  const { progressMap, computeStudentSummary } = useTopicProgress();
+
+  // Topic progress tab state
+  const [activeTopicSubject, setActiveTopicSubject] = useState<string>('');
+  const [reportModalSubject, setReportModalSubject] = useState<string | null>(null);
 
   const studentAssessments = useMemo(() => {
     if (!tutee || !assessments.length) return [];
@@ -439,12 +450,7 @@ export const TuteeDetails = () => {
   };
 
   if (loadingTutees || loadingPayments) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
-        <span className="ml-3 text-gray-500 font-medium">Loading details...</span>
-      </div>
-    );
+    return <LoadingScreen message="Loading student details..." />;
   }
 
   if (!tutee) {
@@ -497,6 +503,7 @@ export const TuteeDetails = () => {
             ...(user?.role === 'parent' ? [{ id: 'attendance', name: 'Attendance' }] : []),
             { id: 'payments', name: 'Payments' },
             { id: 'reports', name: 'Progress Reports' },
+            { id: 'topic-progress', name: 'Topic Progress' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1297,6 +1304,22 @@ export const TuteeDetails = () => {
         </div>
       )}
 
+      {/* Topic Progress Tab */}
+      {activeTab === 'topic-progress' && tutee && (
+        <TopicProgressTabContent
+          tutee={tutee}
+          activeTopicSubject={activeTopicSubject}
+          setActiveTopicSubject={setActiveTopicSubject}
+          getTopicsForSubject={getTopicsForSubject}
+          progressMap={progressMap}
+          computeStudentSummary={computeStudentSummary}
+          assessments={assessments}
+          selectedYear={selectedYear}
+          reportModalSubject={reportModalSubject}
+          setReportModalSubject={setReportModalSubject}
+        />
+      )}
+
       {/* Parent account details modal */}
       {showParentModal && parentData && (
         <ParentAccountModal
@@ -1857,6 +1880,204 @@ const ParentPaymentModal = ({ record, tutorPaymentMethods, tutee, user, onClose,
           </form>
         )}
       </div>
+    </div>
+  );
+};
+
+/* ─── Topic Progress Tab ─────────────────────────────────────────────────── */
+interface TopicProgressTabProps {
+  tutee: import('@/features/tutees/types/tutee').Tutee;
+  activeTopicSubject: string;
+  setActiveTopicSubject: (s: string) => void;
+  getTopicsForSubject: (s: string) => import('@/features/tutee-progress/types/topic').Topic[];
+  progressMap: Map<string, import('@/features/tutee-progress/types/topic').StudentTopicProgress>;
+  computeStudentSummary: (studentId: string, subject: string, topicIds: string[]) => import('@/features/tutee-progress/types/topic').TopicProgressSummary;
+  assessments: import('@/features/tutee-progress/types/assessment').Assessment[];
+  selectedYear: string;
+  reportModalSubject: string | null;
+  setReportModalSubject: (s: string | null) => void;
+}
+
+const TopicProgressTabContent = ({
+  tutee,
+  activeTopicSubject,
+  setActiveTopicSubject,
+  getTopicsForSubject,
+  progressMap,
+  computeStudentSummary,
+  assessments,
+  selectedYear,
+  reportModalSubject,
+  setReportModalSubject,
+}: TopicProgressTabProps) => {
+  const tuteeSubjects = tutee.subjects?.length ? tutee.subjects : (tutee.subject ? [tutee.subject] : []);
+  const currentSubject = activeTopicSubject || tuteeSubjects[0] || '';
+  const subjectTopics = getTopicsForSubject(currentSubject);
+  const summary = computeStudentSummary(tutee.id, currentSubject, subjectTopics.map((t) => t.id));
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-2xl border p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Topic Progress</h2>
+          <p className="text-gray-500 text-sm mt-0.5">Learning topic mastery tracked by your tutor</p>
+        </div>
+        {subjectTopics.length > 0 && (
+          <button
+            onClick={() => setReportModalSubject(currentSubject)}
+            className="inline-flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors shadow-sm shrink-0"
+          >
+            <FileText size={15} />
+            View Full Report
+          </button>
+        )}
+      </div>
+
+      {/* Subject tabs (only shown when student has multiple subjects) */}
+      {tuteeSubjects.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          {tuteeSubjects.map((subj) => (
+            <button
+              key={subj}
+              onClick={() => setActiveTopicSubject(subj)}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-all ${
+                currentSubject === subj
+                  ? 'bg-green-700 text-white border-green-700'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {subj}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Summary KPI cards */}
+      {subjectTopics.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white rounded-2xl border p-4 shadow-sm text-center">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Topics</p>
+            <p className="text-2xl font-black text-gray-900 mt-1">{summary.totalTopics}</p>
+          </div>
+          <div className="bg-green-50 rounded-2xl border border-green-200 p-4 shadow-sm text-center">
+            <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider">Mastered</p>
+            <p className="text-2xl font-black text-green-700 mt-1">{summary.masteredCount}</p>
+          </div>
+          <div className="bg-blue-50 rounded-2xl border border-blue-200 p-4 shadow-sm text-center">
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">In Progress</p>
+            <p className="text-2xl font-black text-blue-700 mt-1">{summary.inProgressCount}</p>
+          </div>
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 p-4 shadow-sm text-center">
+            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Needs Work</p>
+            <p className="text-2xl font-black text-amber-700 mt-1">{summary.needsImprovementCount}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Topic cards */}
+      {subjectTopics.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border shadow-sm">
+          <BookOpen className="mx-auto text-gray-300 mb-4" size={48} />
+          <p className="text-gray-500 text-lg">No topics added yet</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Your tutor has not set up topics for {currentSubject || 'this subject'} yet.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {subjectTopics.map((topic) => {
+            const prog = progressMap.get(`${tutee.id}_${topic.id}`);
+            const cfg = prog ? getPerformanceLevelConfig(prog.performanceLevel) : null;
+            const barColor =
+              prog?.performanceLevel === 'mastered'
+                ? 'bg-green-500'
+                : prog?.performanceLevel === 'in-progress'
+                ? 'bg-blue-500'
+                : 'bg-amber-500';
+            return (
+              <div key={topic.id} className="bg-white rounded-2xl border p-5 shadow-sm space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-900 text-sm leading-tight">{topic.name}</p>
+                    {topic.description && (
+                      <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{topic.description}</p>
+                    )}
+                  </div>
+                  {cfg ? (
+                    <span className={`shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full border ${cfg.badgeClass}`}>
+                      {cfg.label}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full border bg-gray-100 text-gray-500 border-gray-200">
+                      Not Started
+                    </span>
+                  )}
+                </div>
+                {prog ? (
+                  <>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Score</span>
+                        <span className="font-bold text-gray-700">{prog.score}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full transition-all ${barColor}`}
+                          style={{ width: `${Math.min(prog.score, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    {prog.strengths && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Strengths</p>
+                        <p className="text-xs text-gray-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2 leading-relaxed">
+                          {prog.strengths}
+                        </p>
+                      </div>
+                    )}
+                    {prog.areasForImprovement && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                          Areas for Improvement
+                        </p>
+                        <p className="text-xs text-gray-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 leading-relaxed">
+                          {prog.areasForImprovement}
+                        </p>
+                      </div>
+                    )}
+                    {prog.notes && (
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tutor Notes</p>
+                        <p className="text-xs text-gray-600 italic bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 leading-relaxed">
+                          {prog.notes}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">No evaluation recorded yet for this topic.</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Progress Report Modal */}
+      {reportModalSubject && (
+        <ProgressReportModal
+          isOpen={!!reportModalSubject}
+          onClose={() => setReportModalSubject(null)}
+          studentId={tutee.id}
+          studentName={`${tutee.firstName} ${tutee.surname}`}
+          subject={reportModalSubject}
+          topics={getTopicsForSubject(reportModalSubject)}
+          progressMap={progressMap}
+          assessments={assessments}
+          schoolYear={selectedYear}
+        />
+      )}
     </div>
   );
 };

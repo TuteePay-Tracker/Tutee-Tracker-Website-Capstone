@@ -7,11 +7,13 @@ import { toast } from 'sonner';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 
 export const Announcements = () => {
   const { user } = useAuth();
   const { selectedYear } = useSchoolYear();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAnnounce, setEditingAnnounce] = useState<Announcement | null>(null);
   const [form, setForm] = useState<AnnouncementFormData>({
@@ -24,10 +26,13 @@ export const Announcements = () => {
 
   useEffect(() => {
     if (tutorId) {
+      setIsLoading(true);
       return announcementService.subscribe(tutorId, (data) => {
         setAnnouncements(data.filter((a) => belongsToSchoolYear(selectedYear, a)));
+        setIsLoading(false);
       });
     }
+    setIsLoading(false);
   }, [tutorId, selectedYear]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -96,6 +101,10 @@ export const Announcements = () => {
     });
     setIsModalOpen(true);
   };
+
+  if (isLoading) {
+    return <LoadingScreen message="Loading announcements..." />;
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">

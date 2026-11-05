@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { PaymentMethod } from '@/features/payments/types/payment';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { DollarSign, Calendar, CreditCard, FileText, User } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -11,7 +12,7 @@ interface QuickPaymentFormProps {
 }
 
 export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPaymentFormProps) => {
-  const { tutees, refreshTutees } = useTutees();
+  const { tutees, refreshTutees, isLoading } = useTutees();
   const { addPayment } = usePayments();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -113,6 +114,10 @@ export const QuickPaymentForm = ({ preselectedTuteeId, onSuccess }: QuickPayment
   const expectedAmount = selectedTutee && sessionsCovered
     ? selectedTutee.ratePerSession * parseInt(sessionsCovered || '0')
     : 0;
+
+  if (isLoading) {
+    return <LoadingScreen message="Loading payment form..." />;
+  }
 
   return (
     <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 shadow-sm">

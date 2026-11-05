@@ -8,18 +8,58 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { assessmentService } from '@/features/tutee-progress/services/assessmentService';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import {
   Assessment,
   AssessmentFormData,
-  AssessmentScore,
   scoreToRemarks,
 } from '@/features/tutee-progress/types/assessment';
+import { useTopics } from '@/features/tutee-progress/hooks/useTopics';
+import { useTopicProgress } from '@/features/tutee-progress/hooks/useTopicProgress';
+import { scoreToPerformanceLevel } from '@/features/tutee-progress/types/topic';
 import { Tutee } from '@/features/tutees/types/tutee';
 
 function tuteeSubjects(tutee: Tutee): string[] {
   if (tutee.subjects && tutee.subjects.length > 0) return tutee.subjects;
   return tutee.subject ? [tutee.subject] : [];
 }
+
+/** Score fields are kept as strings while editing so the input can be empty. */
+interface AssessmentScoreDraft {
+  name: string;
+  score: string;
+  totalScore: string;
+}
+
+type AssessmentFormDraft = Omit<AssessmentFormData, 'assessmentScores'> & {
+  assessmentScores: AssessmentScoreDraft[];
+};
+
+const emptyScoreDraft = (): AssessmentScoreDraft => ({ name: '', score: '', totalScore: '100' });
+
+/** Convert saved numeric scores into editable string drafts. */
+const toScoreDrafts = (editing?: Assessment | null): AssessmentScoreDraft[] => {
+  if (!editing?.assessmentScores || editing.assessmentScores.length === 0) {
+    return [emptyScoreDraft()];
+  }
+  return editing.assessmentScores.map((s) => ({
+    name: s.name || '',
+    score: s.score === 0 || s.score ? String(s.score) : '',
+    totalScore: s.totalScore ? String(s.totalScore) : '100',
+  }));
+};
+
+/** Parse an editable score string into a number (empty/invalid counts as 0). */
+const toScoreNumber = (value: string): number => {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** Keep only digits and drop leading zeros so "080" becomes "80". */
+const sanitizeScoreInput = (value: string): string =>
+  value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '');
 
 interface AssessmentFormProps {
   tutorId: string;
@@ -32,18 +72,11 @@ interface AssessmentFormProps {
 
 function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, onCancel }: AssessmentFormProps) {
   const { user } = useAuth();
-  const getInitialScores = (): AssessmentScore[] => {
-    if (!editing?.assessmentScores || editing.assessmentScores.length === 0) {
-      return [{ name: '', score: 0, totalScore: 100 }];
-    }
-    return editing.assessmentScores.map(s => ({
-      name: s.name || '',
-      score: s.score || 0,
-      totalScore: s.totalScore || 100
-    }));
-  };
+  const { getTopicsForSubject } = useTopics();
+  const { saveProgress } = useTopicProgress();
+  const getInitialScores = (): AssessmentScoreDraft[] => toScoreDrafts(editing);
 
-  const [form, setForm] = useState<AssessmentFormData>({
+  const [form, setForm] = useState<AssessmentFormDraft>({
     tuteeId: editing?.tuteeId ?? '',
     tuteeName: editing?.tuteeName ?? '',
     subject: editing?.subject ?? defaultSubject ?? subjects[0] ?? '',
@@ -59,9 +92,9 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
   });
   const [saving, setSaving] = useState(false);
 
-  const calculateScoreAndRemarks = (scores: AssessmentScore[]) => {
-    const earnedPoints = scores.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
-    const totalPoints = scores.reduce((sum, s) => sum + (Number(s.totalScore) || 0), 0);
+  const calculateScoreAndRemarks = (scores: AssessmentScoreDraft[]) => {
+    const earnedPoints = scores.reduce((sum, s) => sum + toScoreNumber(s.score), 0);
+    const totalPoints = scores.reduce((sum, s) => sum + toScoreNumber(s.totalScore), 0);
     let avgPercentage = 0;
     if (totalPoints > 0) {
       avgPercentage = Math.round((earnedPoints / totalPoints) * 100);
@@ -114,11 +147,18 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
     return selected ? [...enrolledTutees, selected] : enrolledTutees;
   }, [enrolledTutees, tutees, form.tuteeId]);
 
-  const updateAssessmentScore = (index: number, field: 'name' | 'score' | 'totalScore', value: string | number) => {
+  // Tutor-configured topics for this subject
+  const availableTopics = useMemo(
+    () => getTopicsForSubject(form.subject),
+    [getTopicsForSubject, form.subject]
+  );
+
+  const updateAssessmentScore = (index: number, field: 'name' | 'score' | 'totalScore', value: string) => {
+    const nextValue = field === 'name' ? value : sanitizeScoreInput(value);
     setForm((prev) => {
       const newScores = prev.assessmentScores.map((score, idx) => {
         if (idx !== index) return score;
-        return { ...score, [field]: value };
+        return { ...score, [field]: nextValue };
       });
       const { score, totalScore, remarks } = calculateScoreAndRemarks(newScores);
       return {
@@ -133,7 +173,7 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
 
   const addAssessmentScore = () => {
     setForm((prev) => {
-      const newScores = [...prev.assessmentScores, { name: '', score: 0, totalScore: 100 }];
+      const newScores = [...prev.assessmentScores, emptyScoreDraft()];
       const { score, totalScore, remarks } = calculateScoreAndRemarks(newScores);
       return {
         ...prev,
@@ -148,7 +188,7 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
   const removeAssessmentScore = (index: number) => {
     setForm((prev) => {
       const newScores = prev.assessmentScores.length === 1
-        ? [{ name: '', score: 0, totalScore: 100 }]
+        ? [emptyScoreDraft()]
         : prev.assessmentScores.filter((_, idx) => idx !== index);
       const { score, totalScore, remarks } = calculateScoreAndRemarks(newScores);
       return {
@@ -171,28 +211,33 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
       toast.error('Please enter a lesson Topic');
       return;
     }
-    if (!form.notes.trim()) {
-      toast.error('Please fill out all required fields');
-      return;
-    }
     if (form.assessmentScores.length === 0 || form.assessmentScores.some(s => !s.name.trim())) {
       toast.error('Please enter a name for all assessment scores');
       return;
     }
-    if (form.assessmentScores.some(s => s.score < 0 || s.totalScore <= 0)) {
+    if (form.assessmentScores.some(s => s.score.trim() === '' || s.totalScore.trim() === '')) {
+      toast.error('Please enter a score and maximum points for all assessments');
+      return;
+    }
+    if (form.assessmentScores.some(s => toScoreNumber(s.score) < 0 || toScoreNumber(s.totalScore) <= 0)) {
       toast.error('Scores and total possible points must be positive numbers');
       return;
     }
-    if (form.assessmentScores.some(s => s.score > s.totalScore)) {
+    if (form.assessmentScores.some(s => toScoreNumber(s.score) > toScoreNumber(s.totalScore))) {
       toast.error('Student score cannot exceed the maximum possible points');
       return;
     }
 
     setSaving(true);
     try {
-      const dataToSave = {
+      const dataToSave: AssessmentFormData = {
         ...form,
-        topicsCovered: form.topic
+        assessmentScores: form.assessmentScores.map((s) => ({
+          name: s.name,
+          score: toScoreNumber(s.score),
+          totalScore: toScoreNumber(s.totalScore),
+        })),
+        topicsCovered: form.topic,
       };
       if (editing) {
         await assessmentService.update(tutorId, editing.id, dataToSave);
@@ -237,6 +282,28 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
           );
         }
       }
+
+      // If the lesson topic matches a tutor-configured topic, sync student topic progress
+      const matchingTopic = availableTopics.find(
+        (t) => t.name.trim().toLowerCase() === form.topic.trim().toLowerCase()
+      );
+      if (matchingTopic && form.tuteeId) {
+        try {
+          await saveProgress({
+            tuteeId: form.tuteeId,
+            tuteeName: form.tuteeName,
+            subject: form.subject,
+            topicId: matchingTopic.id,
+            topicName: matchingTopic.name,
+            score: dataToSave.score,
+            performanceLevel: scoreToPerformanceLevel(dataToSave.score),
+            notes: form.notes || '',
+          });
+        } catch (progErr) {
+          console.warn('Unable to auto-sync topic progress:', progErr);
+        }
+      }
+
       onCancel();
     } catch {
       toast.error('Failed to save assessment');
@@ -311,18 +378,52 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
           />
         </div>
 
-        <div>
-          <label className="block text-xs font-bold uppercase text-gray-500 mb-1.5">
-            Lesson Topic *
-          </label>
+        <div className="sm:col-span-2 lg:col-span-1">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold uppercase text-gray-500">
+              Lesson Topic *
+            </label>
+            {availableTopics.length > 0 && (
+              <span className="text-[10px] text-green-700 font-semibold">
+                {availableTopics.length} topic{availableTopics.length > 1 ? 's' : ''} available
+              </span>
+            )}
+          </div>
           <input
             type="text"
+            list="tutor-configured-topics"
             required
-            placeholder="e.g., Fractions"
+            placeholder="e.g., Reading Comprehension"
             value={form.topic}
             onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
             className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
           />
+          <datalist id="tutor-configured-topics">
+            {availableTopics.map((t) => (
+              <option key={t.id} value={t.name} />
+            ))}
+          </datalist>
+          {availableTopics.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {availableTopics.slice(0, 4).map((t) => {
+                const isSelected = form.topic.trim().toLowerCase() === t.name.toLowerCase();
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, topic: t.name }))}
+                    className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${
+                      isSelected
+                        ? 'bg-green-700 text-white border-green-700 font-semibold'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-green-300 hover:text-green-700'
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -343,8 +444,9 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
 
         <div className="space-y-4">
           {form.assessmentScores.map((scoreItem, index) => {
-            const pct = scoreItem.totalScore > 0
-              ? Math.round((scoreItem.score / scoreItem.totalScore) * 100)
+            const totalPoints = toScoreNumber(scoreItem.totalScore);
+            const pct = totalPoints > 0
+              ? Math.round((toScoreNumber(scoreItem.score) / totalPoints) * 100)
               : 0;
             return (
               <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full p-3.5 border border-gray-200/80 rounded-2xl bg-gray-50/40 shadow-sm relative">
@@ -366,11 +468,11 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
                   <div className="relative w-20">
                     <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Score *</label>
                     <input
-                      type="number"
-                      min="0"
+                      type="text"
+                      inputMode="numeric"
                       required
                       value={scoreItem.score}
-                      onChange={(e) => updateAssessmentScore(index, 'score', Number(e.target.value))}
+                      onChange={(e) => updateAssessmentScore(index, 'score', e.target.value)}
                       placeholder="Score"
                       className="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-sm shadow-inner"
                     />
@@ -381,11 +483,11 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
                   <div className="relative w-20">
                     <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Max *</label>
                     <input
-                      type="number"
-                      min="1"
+                      type="text"
+                      inputMode="numeric"
                       required
                       value={scoreItem.totalScore}
-                      onChange={(e) => updateAssessmentScore(index, 'totalScore', Number(e.target.value))}
+                      onChange={(e) => updateAssessmentScore(index, 'totalScore', e.target.value)}
                       placeholder="Max"
                       className="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-sm shadow-inner"
                     />
@@ -416,8 +518,8 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
 
       {/* Overall Calculations Live Preview */}
       {(() => {
-        const overallEarned = form.assessmentScores.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
-        const overallTotal = form.assessmentScores.reduce((sum, s) => sum + (Number(s.totalScore) || 0), 0);
+        const overallEarned = form.assessmentScores.reduce((sum, s) => sum + toScoreNumber(s.score), 0);
+        const overallTotal = form.assessmentScores.reduce((sum, s) => sum + toScoreNumber(s.totalScore), 0);
         return (
           <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-4 grid grid-cols-3 gap-4 text-center shadow-sm">
             <div>
@@ -448,10 +550,9 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
 
       {/* Tutor Notes */}
       <div>
-        <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1.5">Tutor Notes & Observations *</label>
+        <label className="block text-xs uppercase font-extrabold text-gray-400 tracking-wider mb-1.5">Tutor Notes &amp; Observations <span className="normal-case font-semibold">(Optional)</span></label>
         <textarea
           rows={3}
-          required
           placeholder="How did the student perform? Any strengths or areas they struggled with?"
           value={form.notes}
           onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
@@ -519,12 +620,7 @@ export function AssessmentFormPage() {
   const goBack = () => navigate('/tutee-progress');
 
   if (assessmentsLoading || tuteesLoading || (isTutor && subjectsLoading)) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700" />
-        <span className="ml-3 text-gray-500 font-medium">Loading…</span>
-      </div>
-    );
+    return <LoadingScreen message="Loading assessment..." />;
   }
 
   if (id && !editing) {

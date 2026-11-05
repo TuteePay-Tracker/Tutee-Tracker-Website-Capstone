@@ -4,6 +4,7 @@ import { useReports } from '@/features/reports/hooks/useReports';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { getTuteeYearTotals } from '@/features/tutees/types/tutee';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { isInSchoolYear, belongsToSchoolYear } from '@/shared/utils/schoolYear';
 import { DollarSign, Users, AlertCircle, TrendingUp, GraduationCap, Calendar, Megaphone, Plus, Pencil, Trash2, X, Bell, CheckSquare, CalendarRange } from 'lucide-react';
@@ -371,12 +372,7 @@ const ParentDashboard = () => {
   combinedSchedule.sort((a, b) => dayIndex(a.day) - dayIndex(b.day));
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
-        <span className="ml-3 text-gray-500 font-medium">Loading parent dashboard...</span>
-      </div>
-    );
+    return <LoadingScreen message="Loading parent dashboard..." />;
   }
 
   const hasAssessments = allAssessmentsList.length > 0;
@@ -766,11 +762,7 @@ export const Dashboard = () => {
   if (user?.role === 'parent') return <ParentDashboard />;
 
   if (isLoading || !reportData) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading dashboard...</div>
-      </div>
-    );
+    return <LoadingScreen message="Loading dashboard..." />;
   }
 
   const mostActiveTutee = reportData.tuteeActivity[0];

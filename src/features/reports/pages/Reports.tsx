@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useReports } from '@/features/reports/hooks/useReports';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { formatSchoolYear } from '@/shared/utils/schoolYear';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { ExportButton } from '@/features/reports/components/ExportButton';
 import { OverviewTab } from '@/features/reports/components/OverviewTab';
 import { AcademicTab } from '@/features/reports/components/AcademicTab';
@@ -31,14 +32,7 @@ export const Reports = () => {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   if (isLoading || !reportData) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-green-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-500 text-sm">Loading analytics...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen message="Loading analytics..." />;
   }
 
   const tabs: Tab[] = [

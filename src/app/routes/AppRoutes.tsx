@@ -20,12 +20,15 @@ import { Signup } from '@/features/auth/pages/Signup';
 import { ForgotPassword } from '@/features/auth/pages/ForgotPassword';
 import { ChangePassword } from '@/features/auth/pages/ChangePassword';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; tutorOnly?: boolean }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return <LoadingScreen message="Loading your account..." className="min-h-screen" />;
+  }
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -45,7 +48,9 @@ const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; 
 const PublicRoute = ({ children }: { children: ReactNode }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return <LoadingScreen message="Loading your account..." className="min-h-screen" />;
+  }
 
   if (user) {
     // Parent who must change password goes to change-password, not home
@@ -62,7 +67,9 @@ const PublicRoute = ({ children }: { children: ReactNode }) => {
 const ChangePasswordRoute = ({ children }: { children: ReactNode }) => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return <LoadingScreen message="Loading your account..." className="min-h-screen" />;
+  }
 
   if (!user) return <Navigate to="/login" replace />;
 
