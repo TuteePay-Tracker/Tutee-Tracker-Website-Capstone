@@ -348,6 +348,92 @@ app.post('/update-user-password', async (req, res, next) => {
   }
 });
 
+/**
+ * Recreates a parent's Firebase Authentication login after a backup restore.
+ *
+ * The client restores the parent's Firestore profile first, then calls this
+ * endpoint. The Auth record is created with the SAME uid as the Firestore
+ * document so every `parentId` reference (tutees, chat threads, payment
+ * records) keeps pointing at a real account.
+ *
+ * An existing login is never modified: if the parent can already sign in there
+ * is nothing to restore, and silently resetting a working password would be
+ * destructive. The response reports whether a record was created.
+ */
+app.post('/restore-parent-auth', async (req, res, next) => {
+  try {
+    const { uid } = req.body || {};
+    const caller = await requireIdToken(req);
+    const parent = await assertCanManageParent(caller.uid, uid);
+
+    const email = typeof parent.email === 'string' ? parent.email.trim() : '';
+    const password = typeof parent.tempPassword === 'string' ? parent.tempPassword : '';
+
+    if (!email) {
+      throw new HttpError(400, 'Parent record has no email; cannot recreate a login.');
+    }
+    if (password.length < 6) {
+      throw new HttpError(
+        400,
+        'Parent record has no usable temporary password (minimum 6 characters).'
+      );
+    }
+
+    const existing = await findAuthUser(uid);
+    if (existing) {
+      if (existing.email && existing.email !== email) {
+        throw new HttpError(
+          409,
+          `Refusing to restore: uid ${uid} already belongs to ${existing.email} in Firebase Authentication, ` +
+            `but the parent record is ${email}.`
+        );
+      }
+      console.log(`[admin] restore requested for ${uid}, Auth record already exists`);
+      return res.json({
+        ok: true,
+        uid,
+        email: existing.email ?? email,
+        created: false,
+        alreadyExisted: true,
+      });
+    }
+
+    const auth = getAdminAuth();
+    try {
+      await auth.createUser({
+        uid,
+        email,
+        password,
+        displayName: typeof parent.name === 'string' ? parent.name : undefined,
+        emailVerified: false,
+      });
+    } catch (err) {
+      if (err?.code === 'auth/email-already-exists') {
+        throw new HttpError(
+          409,
+          `Refusing to restore: ${email} is already used by another Firebase Authentication account.`
+        );
+      }
+      throw err;
+    }
+
+    // Verify the record really exists with the expected identity before
+    // reporting success, so the client never records a login that cannot sign in.
+    const after = await findAuthUser(uid);
+    if (!after) {
+      throw new HttpError(500, `Auth record for ${uid} was not created.`);
+    }
+    if (after.email !== email) {
+      throw new HttpError(500, `Auth record for ${uid} was created with the wrong email.`);
+    }
+
+    console.log(`[admin] restored auth user ${uid} (${email}) requested by ${caller.uid}`);
+    res.json({ ok: true, uid, email, created: true, alreadyExisted: false });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Central error handler.
 //
 // The status is duck-typed rather than read via `err instanceof HttpError`.

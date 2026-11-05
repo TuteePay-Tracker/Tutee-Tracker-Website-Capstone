@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
-import { removeParentAccount } from '@/features/tutees/services/parentManagementService';
+import { removeParentAccount, generateTempPassword } from '@/features/tutees/services/parentManagementService';
 import {
   User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
   Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc, query, where, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
+import { relayRequest } from '@/shared/lib/relay';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
@@ -494,19 +495,42 @@ export const Settings = () => {
         }
       }
 
-      // 2. Restore parent accounts
+      // 2. Restore parent accounts AND their Firebase Authentication logins.
+      //    A backup only contains the Firestore profile; the Auth account is
+      //    deleted when data is cleared, so it must be recreated with the same
+      //    uid or the parent cannot sign in and every parentId reference breaks.
       const parentAccounts = parsedBackupData['parentAccounts'];
+      const parentRestoreFailures: string[] = [];
+      let recreatedLogins = 0;
       if (Array.isArray(parentAccounts)) {
         for (const parent of parentAccounts) {
           const { id, ...data } = parent;
-          if (id) {
-            const docRef = doc(db, 'users', id);
-            try {
-              await setDoc(docRef, data);
-            } catch (e: any) {
-              console.error(`Error restoring parent account ${id}:`, e);
-              throw new Error(`Failed to restore parent account (${id}): ${e.message}`);
-            }
+          if (!id) continue;
+
+          const parentLabel = (data.name as string) || id;
+          try {
+            // Without a usable temp password there is no way to recreate the
+            // login, so issue (and persist) a fresh one for the tutor to share.
+            const hasUsablePassword =
+              typeof data.tempPassword === 'string' && data.tempPassword.length >= 6;
+            const parentDoc = hasUsablePassword
+              ? data
+              : {
+                  ...data,
+                  tempPassword: generateTempPassword(),
+                  mustChangePassword: true,
+                };
+
+            await setDoc(doc(db, 'users', id), parentDoc);
+
+            const result = await relayRequest<{ created: boolean; alreadyExisted: boolean }>(
+              '/restore-parent-auth',
+              { uid: id }
+            );
+            if (result?.created) recreatedLogins += 1;
+          } catch (e: any) {
+            console.error(`Error restoring parent account ${id}:`, e);
+            parentRestoreFailures.push(parentLabel);
           }
         }
       }
@@ -518,10 +542,18 @@ export const Settings = () => {
         user.role,
         'Database Restored',
         'Backup & Recovery',
-        'Restored database records from backup JSON'
+        `Restored database records from backup JSON (${recreatedLogins} parent login(s) recreated)`
       );
 
-      toast.success('Backup data restored successfully! Please refresh the page to view updates.');
+      if (parentRestoreFailures.length > 0) {
+        toast.error(
+          `Data restored, but ${parentRestoreFailures.length} parent login(s) could not be recreated: ${parentRestoreFailures.join(', ')}. ` +
+            'Open the parent account and regenerate the temporary password, then retry the restore.',
+          { duration: 12000 }
+        );
+      } else {
+        toast.success('Backup data restored successfully! Please refresh the page to view updates.');
+      }
       setParsedBackupData(null);
       setSelectedFile(null);
     } catch (error: any) {

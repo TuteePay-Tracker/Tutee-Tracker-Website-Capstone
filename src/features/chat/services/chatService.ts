@@ -240,6 +240,45 @@ class ChatService {
     }
   }
   /**
+   * Re-point an existing chat thread at the tutee's current parent account.
+   *
+   * Removing and re-creating a parent account produces a new uid, while a chat
+   * thread (keyed by tutee id) keeps the old parent uid. The parent's thread
+   * subscription filters by `parentId`, so a stale thread disappears from their
+   * inbox and messages are addressed to the deleted account. This updates only
+   * the pointer; the thread and its messages are preserved.
+   *
+   * @returns true when the thread was updated.
+   */
+  async syncThreadParent(
+    tuteeId: string,
+    parentId: string,
+    parentName?: string
+  ): Promise<boolean> {
+    if (!tuteeId || !parentId) return false;
+
+    const threadRef = doc(db, 'chats', tuteeId);
+    const docSnap = await getDoc(threadRef);
+    if (!docSnap.exists()) return false;
+
+    const data = docSnap.data();
+    const nextName = parentName || data.parentName || 'Parent';
+    if (data.parentId === parentId && data.parentName === nextName) return false;
+
+    const updates: Record<string, any> = {
+      parentId,
+      parentName: nextName,
+    };
+    const unreadCount = data.unreadCount || {};
+    if (!(parentId in unreadCount)) {
+      updates[`unreadCount.${parentId}`] = 0;
+    }
+
+    await updateDoc(threadRef, updates);
+    return true;
+  }
+
+  /**
    * Delete a single message from a chat thread
    */
   async deleteMessage(chatId: string, messageId: string): Promise<void> {

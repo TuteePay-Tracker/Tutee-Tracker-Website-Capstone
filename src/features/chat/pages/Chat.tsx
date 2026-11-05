@@ -47,6 +47,7 @@ export const Chat = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const messageListenerRef = useRef<(() => void) | null>(null);
   const isFirstLoadRef = useRef(true);
+  const syncingThreadsRef = useRef<Set<string>>(new Set());
 
   // Load parent user profiles to map parentId -> parentName
   useEffect(() => {
@@ -137,6 +138,27 @@ export const Chat = () => {
 
     return () => unsubscribe();
   }, [user?.id, user?.role]);
+
+  // Repair threads whose stored parentId no longer matches the tutee's current
+  // parent (e.g. the parent account was removed and re-created with a new uid).
+  // Without this the conversation stays invisible to the new parent account.
+  useEffect(() => {
+    if (!user || user.role !== 'tutor' || threads.length === 0 || tutees.length === 0) return;
+
+    const tuteesById = new Map(tutees.map((t) => [t.id, t]));
+    threads.forEach((thread) => {
+      const tuteeId = thread.tuteeId || thread.id;
+      const tutee = tuteesById.get(tuteeId);
+      if (!tutee?.parentId || tutee.parentId === thread.parentId) return;
+      if (syncingThreadsRef.current.has(thread.id)) return;
+
+      syncingThreadsRef.current.add(thread.id);
+      chatService
+        .syncThreadParent(tuteeId, tutee.parentId)
+        .catch((err) => console.error('Failed to re-link stale chat thread:', err))
+        .finally(() => syncingThreadsRef.current.delete(thread.id));
+    });
+  }, [threads, tutees, user]);
 
   // Subscribe to messages when active thread changes
   useEffect(() => {

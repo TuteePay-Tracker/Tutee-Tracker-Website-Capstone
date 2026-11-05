@@ -18,6 +18,7 @@ import { db, firebaseConfig } from '@/shared/lib/firebase/config';
 import { relayRequest } from '@/shared/lib/relay';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { normalizePhoneNumber, isValidPHPhoneNumber } from '@/shared/utils/phoneUtils';
+import { chatService } from '@/features/chat/services/chatService';
 
 export interface CreatedParentCredentials {
   name: string;
@@ -154,8 +155,16 @@ export const linkExistingParent = async ({
   // 2. Add studentId to parent's linkedStudentIds and ensure createdByTutorId is set
   const parentRef = doc(db, 'users', parentId);
   const parentDoc = await getDoc(parentRef);
-  if (parentDoc.exists()) {
-    const parentData = parentDoc.data();
+  const parentData = parentDoc.exists() ? parentDoc.data() : null;
+
+  // Re-point any existing conversation at this parent so they can see it again.
+  try {
+    await chatService.syncThreadParent(studentId, parentId, parentData?.name);
+  } catch (chatErr) {
+    console.error('Error re-linking chat thread to parent:', chatErr);
+  }
+
+  if (parentData) {
     const currentLinked = parentData.linkedStudentIds || [];
     const updatePayload: Record<string, any> = {};
     if (!currentLinked.includes(studentId)) {
@@ -245,6 +254,13 @@ export const createNewParentAccount = async ({
     await updateDoc(doc(db, 'users', tutorId, 'tutees', studentId), {
       parentId: parentUid,
     });
+
+    // Re-point any existing conversation at the new account so the parent sees it.
+    try {
+      await chatService.syncThreadParent(studentId, parentUid, name);
+    } catch (chatErr) {
+      console.error('Error re-linking chat thread to new parent:', chatErr);
+    }
 
     await logActivity(
       tutorId,
