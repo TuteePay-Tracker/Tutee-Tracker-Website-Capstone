@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, X, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useAssessments } from '@/features/tutee-progress/hooks/useAssessments';
@@ -35,7 +35,7 @@ type AssessmentFormDraft = Omit<AssessmentFormData, 'assessmentScores'> & {
   assessmentScores: AssessmentScoreDraft[];
 };
 
-const emptyScoreDraft = (): AssessmentScoreDraft => ({ name: '', score: '', totalScore: '100' });
+const emptyScoreDraft = (): AssessmentScoreDraft => ({ name: '', score: '', totalScore: '' });
 
 /** Convert saved numeric scores into editable string drafts. */
 const toScoreDrafts = (editing?: Assessment | null): AssessmentScoreDraft[] => {
@@ -45,7 +45,7 @@ const toScoreDrafts = (editing?: Assessment | null): AssessmentScoreDraft[] => {
   return editing.assessmentScores.map((s) => ({
     name: s.name || '',
     score: s.score === 0 || s.score ? String(s.score) : '',
-    totalScore: s.totalScore ? String(s.totalScore) : '100',
+    totalScore: s.totalScore ? String(s.totalScore) : '',
   }));
 };
 
@@ -91,6 +91,18 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
     remarks: editing?.remarks ?? 'Good',
   });
   const [saving, setSaving] = useState(false);
+
+  /** Returns an error string for a row, or null if valid. */
+  const getRowError = (scoreItem: AssessmentScoreDraft): string | null => {
+    const score = toScoreNumber(scoreItem.score);
+    const max = toScoreNumber(scoreItem.totalScore);
+    if (scoreItem.score.trim() !== '' && scoreItem.totalScore.trim() !== '' && max > 0 && score > max) {
+      return `Score cannot exceed the maximum score of ${max}.`;
+    }
+    return null;
+  };
+
+  const hasAnyScoreError = form.assessmentScores.some((s) => getRowError(s) !== null);
 
   const calculateScoreAndRemarks = (scores: AssessmentScoreDraft[]) => {
     const earnedPoints = scores.reduce((sum, s) => sum + toScoreNumber(s.score), 0);
@@ -443,13 +455,15 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
         </div>
 
         <div className="space-y-4">
-          {form.assessmentScores.map((scoreItem, index) => {
+        {form.assessmentScores.map((scoreItem, index) => {
             const totalPoints = toScoreNumber(scoreItem.totalScore);
             const pct = totalPoints > 0
               ? Math.round((toScoreNumber(scoreItem.score) / totalPoints) * 100)
               : 0;
+            const rowError = getRowError(scoreItem);
+            const scoreExceedsMax = rowError !== null;
             return (
-              <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full p-3.5 border border-gray-200/80 rounded-2xl bg-gray-50/40 shadow-sm relative">
+              <div key={index} className={`flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full p-3.5 border rounded-2xl bg-gray-50/40 shadow-sm relative ${scoreExceedsMax ? 'border-red-300 bg-red-50/30' : 'border-gray-200/80'}`}>
                 {/* Assessment Name */}
                 <div className="flex-1 w-full">
                   <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Assessment Name *</label>
@@ -464,51 +478,73 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
                 </div>
 
                 {/* Scores Inputs & Percentage */}
-                <div className="flex items-end gap-2 w-full sm:w-auto shrink-0 pt-3 sm:pt-0">
-                  <div className="relative w-20">
-                    <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Score *</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      required
-                      value={scoreItem.score}
-                      onChange={(e) => updateAssessmentScore(index, 'score', e.target.value)}
-                      placeholder="Score"
-                      className="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-sm shadow-inner"
-                    />
-                  </div>
-
-                  <span className="text-gray-400 font-bold mb-2">/</span>
-
-                  <div className="relative w-20">
-                    <label className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider mb-1">Max *</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      required
-                      value={scoreItem.totalScore}
-                      onChange={(e) => updateAssessmentScore(index, 'totalScore', e.target.value)}
-                      placeholder="Max"
-                      className="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-center focus:outline-none focus:ring-2 focus:ring-green-500 font-bold text-sm shadow-inner"
-                    />
-                  </div>
-
-                  {/* Computed Percentage (Read-only) */}
-                  <div className="relative w-20">
-                    <label className="block text-[9px] uppercase font-extrabold text-blue-400 tracking-wider mb-1 text-center">Percentage</label>
-                    <div className="h-9 flex items-center justify-center bg-blue-50 border border-blue-100 rounded-xl text-blue-700 font-extrabold text-xs select-none">
-                      {pct}%
+                <div className="flex flex-col gap-1 w-full sm:w-auto shrink-0 pt-3 sm:pt-0">
+                  <div className="flex items-end gap-2">
+                    <div className="relative w-20">
+                      <label className={`block text-[9px] uppercase font-extrabold tracking-wider mb-1 ${scoreExceedsMax ? 'text-red-500' : 'text-gray-400'}`}>Score *</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        required
+                        value={scoreItem.score}
+                        onChange={(e) => updateAssessmentScore(index, 'score', e.target.value)}
+                        placeholder="Score"
+                        className={`w-full px-2 py-2 bg-white border rounded-xl text-center focus:outline-none focus:ring-2 font-bold text-sm shadow-inner ${
+                          scoreExceedsMax
+                            ? 'border-red-400 ring-red-200 focus:ring-red-400 text-red-600'
+                            : 'border-gray-200 focus:ring-green-500'
+                        }`}
+                      />
                     </div>
+
+                    <span className="text-gray-400 font-bold mb-2">/</span>
+
+                    <div className="relative w-20">
+                      <label className={`block text-[9px] uppercase font-extrabold tracking-wider mb-1 ${scoreExceedsMax ? 'text-red-500' : 'text-gray-400'}`}>Max *</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        required
+                        value={scoreItem.totalScore}
+                        onChange={(e) => updateAssessmentScore(index, 'totalScore', e.target.value)}
+                        placeholder="Max"
+                        className={`w-full px-2 py-2 bg-white border rounded-xl text-center focus:outline-none focus:ring-2 font-bold text-sm shadow-inner ${
+                          scoreExceedsMax
+                            ? 'border-red-400 ring-red-200 focus:ring-red-400 text-red-600'
+                            : 'border-gray-200 focus:ring-green-500'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Computed Percentage (Read-only) */}
+                    <div className="relative w-20">
+                      <label className="block text-[9px] uppercase font-extrabold text-blue-400 tracking-wider mb-1 text-center">Percentage</label>
+                      <div className={`h-9 flex items-center justify-center border rounded-xl font-extrabold text-xs select-none ${
+                        scoreExceedsMax
+                          ? 'bg-red-50 border-red-200 text-red-500'
+                          : 'bg-blue-50 border-blue-100 text-blue-700'
+                      }`}>
+                        {scoreExceedsMax ? '—' : `${pct}%`}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeAssessmentScore(index)}
+                      className="text-red-400 hover:text-red-600 p-2 rounded-xl transition-colors shrink-0 mb-0.5"
+                      title="Remove score"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => removeAssessmentScore(index)}
-                    className="text-red-400 hover:text-red-600 p-2 rounded-xl transition-colors shrink-0 mb-0.5"
-                    title="Remove score"
-                  >
-                    <X size={18} />
-                  </button>
+                  {/* Inline error message */}
+                  {rowError && (
+                    <p className="text-xs font-semibold text-red-600 flex items-center gap-1.5 mt-0.5">
+                      <AlertCircle size={13} className="shrink-0" />
+                      {rowError}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -521,28 +557,34 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
         const overallEarned = form.assessmentScores.reduce((sum, s) => sum + toScoreNumber(s.score), 0);
         const overallTotal = form.assessmentScores.reduce((sum, s) => sum + toScoreNumber(s.totalScore), 0);
         return (
-          <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-4 grid grid-cols-3 gap-4 text-center shadow-sm">
+          <div className={`border rounded-2xl p-4 grid grid-cols-3 gap-4 text-center shadow-sm ${hasAnyScoreError ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200/80'}`}>
             <div>
               <span className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider">Overall Score</span>
-              <span className="text-base font-black text-gray-900 mt-1 block">
-                {overallEarned} <span className="text-gray-400 font-normal">/</span> {overallTotal}
+              <span className={`text-base font-black mt-1 block ${hasAnyScoreError ? 'text-red-400' : 'text-gray-900'}`}>
+                {hasAnyScoreError ? '—' : <>{overallEarned} <span className="text-gray-400 font-normal">/</span> {overallTotal}</>}
               </span>
             </div>
             <div>
               <span className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider">Overall Percentage</span>
-              <span className="text-base font-black text-blue-600 mt-1 block">
-                {form.score}%
+              <span className={`text-base font-black mt-1 block ${hasAnyScoreError ? 'text-red-400' : 'text-blue-600'}`}>
+                {hasAnyScoreError ? '—' : `${form.score}%`}
               </span>
             </div>
             <div>
               <span className="block text-[9px] uppercase font-extrabold text-gray-400 tracking-wider">Performance Status</span>
-              <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border mt-1 ${
-                form.remarks === 'Excellent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                form.remarks === 'Good' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                'bg-amber-50 text-amber-700 border-amber-200'
-              }`}>
-                {form.remarks}
-              </span>
+              {hasAnyScoreError ? (
+                <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border mt-1 bg-red-50 text-red-600 border-red-200">
+                  Fix Errors
+                </span>
+              ) : (
+                <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border mt-1 ${
+                  form.remarks === 'Excellent' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                  form.remarks === 'Good' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                  'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  {form.remarks}
+                </span>
+              )}
             </div>
           </div>
         );
@@ -583,8 +625,8 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
         </button>
         <button
           type="submit"
-          disabled={saving}
-          className="px-6 py-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+          disabled={saving || hasAnyScoreError}
+          className="px-6 py-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? 'Saving...' : editing ? 'Save Changes' : 'Save Report'}
         </button>
