@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/shared/lib/firebase/config';
@@ -64,6 +64,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const isSigningUp = useRef<boolean>(false);
 
   const setUser = (newUser: User | null | ((prev: User | null) => User | null)) => {
     setUserState((prev) => {
@@ -84,46 +85,72 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     // Listen to Firebase auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUser({
-            id: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            name: userData.name || firebaseUser.displayName || '',
-            role: userData.role || 'tutor',
-            mustChangePassword: userData.mustChangePassword || false,
-            linkedStudentIds: userData.linkedStudentIds || [],
-            createdByTutorId: userData.createdByTutorId,
-            contactNumber: userData.contactNumber,
-            photoUrl: userData.photoUrl || null,
-            paymentMethods: userData.paymentMethods || {},
-          });
-        } else {
-          const userData: User = {
-            id: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            name: firebaseUser.displayName || '',
-            role: 'tutor',
-            mustChangePassword: false,
-            linkedStudentIds: [],
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), {
-            name: firebaseUser.displayName || '',
-            email: firebaseUser.email,
-            role: 'tutor',
-            mustChangePassword: false,
-            linkedStudentIds: [],
-            createdAt: new Date().toISOString(),
-          });
-          setUser(userData);
-        }
-      } else {
-        // User is signed out
-        setUser(null);
+      // If signup is in progress, signup() handles creating the user document and setting user state
+      if (isSigningUp.current) {
+        return;
       }
-      setIsLoading(false);
+
+      try {
+        if (firebaseUser) {
+          let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+
+          // If doc is not yet visible, retry briefly before falling back
+          if (!userDoc.exists()) {
+            for (let i = 0; i < 3 && !userDoc.exists(); i++) {
+              await new Promise((res) => setTimeout(res, 200));
+              userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            }
+          }
+
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUser({
+              id: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: userData.name || firebaseUser.displayName || '',
+              role: userData.role || 'tutor',
+              mustChangePassword: userData.mustChangePassword || false,
+              linkedStudentIds: userData.linkedStudentIds || [],
+              createdByTutorId: userData.createdByTutorId,
+              contactNumber: userData.contactNumber,
+              photoUrl: userData.photoUrl || null,
+              paymentMethods: userData.paymentMethods || {},
+            });
+          } else {
+            const fallbackName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+            const userData: User = {
+              id: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: fallbackName,
+              role: 'tutor',
+              mustChangePassword: false,
+              linkedStudentIds: [],
+            };
+            try {
+              await setDoc(doc(db, 'users', firebaseUser.uid), {
+                name: fallbackName,
+                email: firebaseUser.email || '',
+                role: 'tutor',
+                mustChangePassword: false,
+                linkedStudentIds: [],
+                createdAt: new Date().toISOString(),
+              });
+            } catch (writeErr) {
+              console.warn('Fallback setDoc in onAuthStateChanged skipped or failed:', writeErr);
+            }
+            setUser(userData);
+          }
+        } else {
+          // User is signed out
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Error in onAuthStateChanged:', error);
+      } finally {
+        if (!isSigningUp.current) {
+          setIsLoading(false);
+        }
+      }
     });
 
     return () => unsubscribe();
@@ -163,11 +190,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const signup = async (email: string, password: string, name: string, role: 'tutor' | 'parent' = 'tutor') => {
+    isSigningUp.current = true;
     setIsLoading(true);
     try {
       // Create user in Firebase Auth
       const firebaseUser = await registerUser(email, password, name);
       
+      const newUserData: User = {
+        id: firebaseUser.uid,
+        email: email,
+        name: name,
+        role: role,
+        mustChangePassword: false,
+        linkedStudentIds: [],
+      };
+
       // Create user document in Firestore
       await setDoc(doc(db, 'users', firebaseUser.uid), {
         name: name,
@@ -176,7 +213,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         createdAt: new Date().toISOString(),
       });
 
-      // User state will be updated by onAuthStateChanged listener
+      setUser(newUserData);
+      setIsLoading(false);
     } catch (error: any) {
       setIsLoading(false);
       // Re-throw error with user-friendly message
@@ -187,8 +225,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } else if (error.code === 'auth/weak-password') {
         throw new Error('Password is too weak. Please use a stronger password');
       } else {
-        throw new Error('Signup failed. Please try again');
+        throw new Error(error.message || 'Signup failed. Please try again');
       }
+    } finally {
+      isSigningUp.current = false;
     }
   };
 

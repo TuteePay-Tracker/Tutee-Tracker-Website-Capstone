@@ -693,7 +693,7 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const { payments } = usePayments();
   const { selectedYear, displayLabel } = useSchoolYear();
-  const { reportData, isLoading } = useReports(selectedYear);
+  const { reportData, isLoading, error: reportError, refreshReports } = useReports(selectedYear);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isAnnounceModalOpen, setIsAnnounceModalOpen] = useState(false);
   const [editingAnnounce, setEditingAnnounce] = useState<Announcement | null>(null);
@@ -761,8 +761,24 @@ export const Dashboard = () => {
   // Show parent-specific view
   if (user?.role === 'parent') return <ParentDashboard />;
 
-  if (isLoading || !reportData) {
+  if (isLoading) {
     return <LoadingScreen message="Loading dashboard..." />;
+  }
+
+  if (reportError || !reportData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mb-3" />
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Failed to load dashboard</h2>
+        <p className="text-sm text-gray-500 mb-4">{reportError || 'Unable to load dashboard data.'}</p>
+        <button
+          onClick={() => refreshReports()}
+          className="px-4 py-2 bg-green-700 text-white text-sm font-semibold rounded-lg hover:bg-green-800 transition-colors"
+        >
+          Try Again
+        </button>
+      </div>
+    );
   }
 
   const mostActiveTutee = reportData.tuteeActivity[0];

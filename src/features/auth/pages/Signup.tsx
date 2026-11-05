@@ -37,6 +37,7 @@ export const Signup = () => {
       await signup(email, password, name, role);
       setAccountCreated(true);
       toast.success('Account created successfully!');
+      navigate('/');
     } catch (error: any) {
       toast.error(error.message || 'Signup failed. Please try again.');
     } finally {
