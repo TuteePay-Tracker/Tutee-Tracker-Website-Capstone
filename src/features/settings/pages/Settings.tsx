@@ -5,7 +5,7 @@ import { removeParentAccount } from '@/features/tutees/services/parentManagement
 import {
   User, Bell, Database, Info, BookOpen, Plus, Trash2, Camera, CreditCard,
   Smartphone, ShieldAlert, Search, SlidersHorizontal, ArrowUpDown, X,
-  Download, Eye, Calendar, Clock, Activity, FileText, ChevronRight,
+  Download, Eye, Calendar, Clock, Activity, FileText, ChevronRight, ChevronLeft,
   BellRing, AlertCircle, CalendarRange
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -82,6 +82,7 @@ export const Settings = () => {
   const [endDate, setEndDate] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [logsPage, setLogsPage] = useState(1);
 
   // Payment methods local states
   const [isSavingPayments, setIsSavingPayments] = useState(false);
@@ -148,10 +149,11 @@ export const Settings = () => {
     if (activeTab === 'logs') {
       if (user?.id && user?.role === 'tutor') {
         setLoadingLogs(true);
+        // Query by tutorId without server-side orderBy so that it doesn't fail
+        // when Firestore lacks a composite index (tutorId + timestamp).
         const q = query(
           collection(db, 'audit_logs'),
-          where('tutorId', '==', user.id),
-          orderBy('timestamp', 'desc')
+          where('tutorId', '==', user.id)
         );
         const unsubscribe = onSnapshot(
           q,
@@ -161,9 +163,11 @@ export const Settings = () => {
               return {
                 id: docSnap.id,
                 ...data,
-                timestamp: data.timestamp ? data.timestamp.toDate() : new Date(),
+                timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : (data.timestamp ? new Date(data.timestamp) : new Date()),
               };
             });
+            // Client-side sort by newest first
+            fetchedLogs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
             setLogs(fetchedLogs);
             setLoadingLogs(false);
           },
@@ -184,6 +188,11 @@ export const Settings = () => {
     setFilterAction('all');
   }, [filterModule]);
 
+  // Reset logs page on filter, search, or sort change
+  useEffect(() => {
+    setLogsPage(1);
+  }, [searchQuery, filterModule, filterRole, filterAction, dateFilter, startDate, endDate, sortOrder]);
+
   // Retention Policy: Auto-archive/delete logs older than 2 years
   useEffect(() => {
     if (activeTab === 'logs' && user?.id && user?.role === 'tutor') {
@@ -194,15 +203,20 @@ export const Settings = () => {
 
           const q = query(
             collection(db, 'audit_logs'),
-            where('tutorId', '==', user.id),
-            where('timestamp', '<', twoYearsAgo)
+            where('tutorId', '==', user.id)
           );
 
           const snapshot = await getDocs(q);
-          if (!snapshot.empty) {
-            const deletePromises = snapshot.docs.map(docSnap => deleteDoc(docSnap.ref));
+          const oldDocs = snapshot.docs.filter((docSnap) => {
+            const data = docSnap.data();
+            const date = data.timestamp?.toDate ? data.timestamp.toDate() : (data.timestamp ? new Date(data.timestamp) : null);
+            return date && date < twoYearsAgo;
+          });
+
+          if (oldDocs.length > 0) {
+            const deletePromises = oldDocs.map(docSnap => deleteDoc(docSnap.ref));
             await Promise.all(deletePromises);
-            console.log(`Auto-deleted ${snapshot.docs.length} audit logs older than 2 years.`);
+            console.log(`Auto-deleted ${oldDocs.length} audit logs older than 2 years.`);
           }
         } catch (error) {
           console.error('Error cleaning up old audit logs:', error);
@@ -717,6 +731,14 @@ export const Settings = () => {
   };
 
   const filteredLogs = getFilteredLogs();
+
+  const LOGS_PER_PAGE = 5;
+  const totalLogsPages = Math.ceil(filteredLogs.length / LOGS_PER_PAGE) || 1;
+  const currentLogsPage = Math.min(Math.max(1, logsPage), totalLogsPages);
+  const paginatedLogs = filteredLogs.slice(
+    (currentLogsPage - 1) * LOGS_PER_PAGE,
+    currentLogsPage * LOGS_PER_PAGE
+  );
 
   const tabList = [
     { id: 'account', label: 'Account Information', icon: User },
@@ -1450,18 +1472,6 @@ export const Settings = () => {
                     </div>
                   )}
 
-                  {/* Role filter */}
-                  <div>
-                    <select
-                      value={filterRole}
-                      onChange={e => setFilterRole(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-200 bg-gray-50 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold text-sm text-gray-700"
-                    >
-                      <option value="all">All Roles</option>
-                      <option value="tutor">Tutor</option>
-                      <option value="parent">Parent</option>
-                    </select>
-                  </div>
 
                   {/* Sort Order & Reset */}
                   <div className="flex gap-2">
@@ -1508,19 +1518,19 @@ export const Settings = () => {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse table-fixed min-w-[820px]">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider">Date & Time</th>
-                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider">User</th>
-                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider">Role</th>
-                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider">Module</th>
-                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider">Action</th>
-                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider max-w-xs">Description</th>
+                        <tr className="bg-gray-50 border-b border-gray-200 h-[49px]">
+                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider w-[180px]">Date & Time</th>
+                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider w-[160px]">User</th>
+                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider w-[95px]">Role</th>
+                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider w-[150px]">Module</th>
+                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider w-[130px]">Action</th>
+                          <th className="p-4 text-xs font-extrabold uppercase text-gray-400 tracking-wider">Description</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {filteredLogs.map((log) => {
+                        {paginatedLogs.map((log) => {
                           const isTutor = log.userRole === 'tutor';
                           const moduleClasses: Record<string, string> = {
                             'Authentication': 'bg-gray-100 text-gray-800 border-gray-200',
@@ -1539,36 +1549,102 @@ export const Settings = () => {
                             <tr
                               key={log.id}
                               onClick={() => setSelectedLog(log)}
-                              className="hover:bg-green-50/20 cursor-pointer transition-colors group"
+                              className="hover:bg-green-50/20 cursor-pointer transition-colors group h-[68px]"
                             >
                               <td className="p-4 text-xs text-gray-500 font-semibold whitespace-nowrap">
                                 {new Date(log.timestamp).toLocaleString()}
                               </td>
-                              <td className="p-4 text-sm font-bold text-gray-900 group-hover:text-green-700 transition-colors">
+                              <td className="p-4 text-sm font-bold text-gray-900 group-hover:text-green-700 transition-colors whitespace-nowrap truncate" title={log.userName || 'System User'}>
                                 {log.userName || 'System User'}
                               </td>
-                              <td className="p-4">
-                                <span className={`text-[10px] px-2 py-0.5 font-bold uppercase rounded-full border tracking-wide ${isTutor ? 'bg-emerald-50 border-emerald-250 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-755'
+                              <td className="p-4 whitespace-nowrap">
+                                <span className={`inline-block text-[10px] px-2 py-0.5 font-bold uppercase rounded-full border tracking-wide ${isTutor ? 'bg-emerald-50 border-emerald-250 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-755'
                                   }`}>
                                   {log.userRole || 'User'}
                                 </span>
                               </td>
-                              <td className="p-4">
-                                <span className={`text-[10px] px-2 py-0.5 font-bold uppercase rounded-full border tracking-wide ${badgeClass}`}>
+                              <td className="p-4 whitespace-nowrap">
+                                <span className={`inline-block text-[10px] px-2 py-0.5 font-bold uppercase rounded-full border tracking-wide ${badgeClass}`}>
                                   {log.module}
                                 </span>
                               </td>
-                              <td className="p-4 text-sm font-semibold text-gray-800">
+                              <td className="p-4 text-xs font-semibold text-gray-800 leading-snug break-words" title={log.actionType}>
                                 {log.actionType}
                               </td>
-                              <td className="p-4 text-xs text-gray-600 max-w-xs truncate font-medium">
+                              <td className="p-4 text-xs text-gray-600 truncate font-medium" title={log.description}>
                                 {log.description}
                               </td>
                             </tr>
                           );
                         })}
+                        {/* Fill remaining empty rows on the last page so height stays identical to Page 1 */}
+                        {Array.from({ length: Math.max(0, LOGS_PER_PAGE - paginatedLogs.length) }).map((_, i) => (
+                          <tr key={`empty-${i}`} className="h-[68px] select-none pointer-events-none">
+                            <td colSpan={6} className="p-4">&nbsp;</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+
+                {/* Pagination Controls */}
+                {!loadingLogs && filteredLogs.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 bg-gray-50/75 border-t border-gray-200">
+                    <p className="text-xs font-semibold text-gray-500">
+                      Showing <span className="text-gray-900 font-bold">{(currentLogsPage - 1) * LOGS_PER_PAGE + 1}</span> to{' '}
+                      <span className="text-gray-900 font-bold">
+                        {Math.min(currentLogsPage * LOGS_PER_PAGE, filteredLogs.length)}
+                      </span>{' '}
+                      of <span className="text-gray-900 font-bold">{filteredLogs.length}</span> logs
+                    </p>
+
+                    {totalLogsPages > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setLogsPage(p => Math.max(1, p - 1))}
+                          disabled={currentLogsPage === 1}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-2xs"
+                        >
+                          <ChevronLeft size={14} />
+                          <span>Previous</span>
+                        </button>
+
+                        <div className="flex items-center gap-1 px-1">
+                          {Array.from({ length: totalLogsPages }, (_, i) => i + 1)
+                            .filter(page => page === 1 || page === totalLogsPages || Math.abs(page - currentLogsPage) <= 1)
+                            .map((page, idx, array) => {
+                              const prev = array[idx - 1];
+                              return (
+                                <span key={page} className="flex items-center">
+                                  {prev && page - prev > 1 && (
+                                    <span className="px-1 text-xs text-gray-400 font-semibold select-none">...</span>
+                                  )}
+                                  <button
+                                    onClick={() => setLogsPage(page)}
+                                    className={`min-w-[28px] h-7 px-2 text-xs font-bold rounded-lg transition-colors ${
+                                      currentLogsPage === page
+                                        ? 'bg-green-700 text-white shadow-2xs'
+                                        : 'text-gray-600 hover:bg-gray-200 bg-white border border-gray-200'
+                                    }`}
+                                  >
+                                    {page}
+                                  </button>
+                                </span>
+                              );
+                            })}
+                        </div>
+
+                        <button
+                          onClick={() => setLogsPage(p => Math.min(totalLogsPages, p + 1))}
+                          disabled={currentLogsPage === totalLogsPages}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-2xs"
+                        >
+                          <span>Next</span>
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

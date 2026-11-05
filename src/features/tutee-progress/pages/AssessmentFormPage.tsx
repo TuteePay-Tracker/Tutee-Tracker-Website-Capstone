@@ -91,6 +91,7 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
     remarks: editing?.remarks ?? 'Good',
   });
   const [saving, setSaving] = useState(false);
+  const [isCustomTopic, setIsCustomTopic] = useState(false);
 
   /** Returns an error string for a row, or null if valid. */
   const getRowError = (scoreItem: AssessmentScoreDraft): string | null => {
@@ -119,6 +120,7 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
   };
 
   const handleSubjectChange = (subject: string) => {
+    setIsCustomTopic(false);
     setForm((f) => {
       const tutee = tutees.find((t) => t.id === f.tuteeId);
       const stillEnrolled =
@@ -127,6 +129,7 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
       return {
         ...f,
         subject,
+        topic: '',
         ...(stillEnrolled ? {} : { tuteeId: '', tuteeName: '' }),
       };
     });
@@ -390,51 +393,72 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
           />
         </div>
 
-        <div className="sm:col-span-2 lg:col-span-1">
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-bold uppercase text-gray-500">
+        <div>
+          <div className="flex items-center justify-between mb-1.5 gap-1.5">
+            <label className="block text-xs font-bold uppercase text-gray-500 whitespace-nowrap">
               Lesson Topic *
             </label>
             {availableTopics.length > 0 && (
-              <span className="text-[10px] text-green-700 font-semibold">
+              <span className="text-[10px] text-green-700 font-semibold whitespace-nowrap">
                 {availableTopics.length} topic{availableTopics.length > 1 ? 's' : ''} available
               </span>
             )}
           </div>
-          <input
-            type="text"
-            list="tutor-configured-topics"
-            required
-            placeholder="e.g., Reading Comprehension"
-            value={form.topic}
-            onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
-            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
-          />
-          <datalist id="tutor-configured-topics">
-            {availableTopics.map((t) => (
-              <option key={t.id} value={t.name} />
-            ))}
-          </datalist>
-          {availableTopics.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {availableTopics.slice(0, 4).map((t) => {
-                const isSelected = form.topic.trim().toLowerCase() === t.name.toLowerCase();
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, topic: t.name }))}
-                    className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${
-                      isSelected
-                        ? 'bg-green-700 text-white border-green-700 font-semibold'
-                        : 'bg-white text-gray-700 border-gray-200 hover:border-green-300 hover:text-green-700'
-                    }`}
-                  >
-                    {t.name}
-                  </button>
-                );
-              })}
+          {isCustomTopic ? (
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                required
+                autoFocus
+                placeholder="Enter topic name…"
+                value={form.topic}
+                onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-medium"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomTopic(false);
+                  setForm((prev) => ({ ...prev, topic: '' }));
+                }}
+                className="px-2.5 py-1 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium shrink-0"
+                title="Back to dropdown"
+              >
+                List
+              </button>
             </div>
+          ) : (
+            <select
+              required
+              value={form.topic}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setIsCustomTopic(true);
+                  setForm((prev) => ({ ...prev, topic: '' }));
+                } else {
+                  setForm((prev) => ({ ...prev, topic: e.target.value }));
+                }
+              }}
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-medium"
+            >
+              <option value="">
+                {availableTopics.length === 0
+                  ? 'No topics available for this subject'
+                  : 'Select topic…'}
+              </option>
+              {availableTopics.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
+                </option>
+              ))}
+              {form.topic &&
+                !availableTopics.some(
+                  (t) => t.name.trim().toLowerCase() === form.topic.trim().toLowerCase()
+                ) && (
+                  <option value={form.topic}>{form.topic}</option>
+                )}
+              
+            </select>
           )}
         </div>
       </div>
@@ -667,7 +691,7 @@ export function AssessmentFormPage() {
 
   if (id && !editing) {
     return (
-      <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-16 text-center">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl border-2 border-dashed border-gray-200 p-16 text-center">
         <p className="text-gray-500 font-medium">Assessment not found.</p>
         <button
           onClick={goBack}
@@ -681,7 +705,7 @@ export function AssessmentFormPage() {
   }
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-4xl mx-auto">
       {/* Page Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-start gap-3">
