@@ -5,9 +5,10 @@ export interface Topic {
   subject: string;
   name: string;
   description?: string;
-  schoolYear?: string;
   createdAt: string;
   updatedAt?: string;
+  /** School year this topic belongs to (e.g. "2026-27"). Undefined for legacy records. */
+  schoolYear?: string;
 }
 
 export interface StudentTopicProgress {

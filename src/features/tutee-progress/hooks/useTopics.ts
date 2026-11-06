@@ -4,11 +4,10 @@ import { Topic } from '@/features/tutee-progress/types/topic';
 import { topicService } from '@/features/tutee-progress/services/topicService';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
-import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
 
 export function useTopics() {
   const { user } = useAuth();
-  const { selectedYear, startMonth } = useSchoolYear();
+  const { selectedYear } = useSchoolYear();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,15 +25,28 @@ export function useTopics() {
 
     setIsLoading(true);
     const unsubscribe = topicService.subscribeTopics(tutorId, (data) => {
-      const scoped = data.filter((topic) =>
-        belongsToSchoolYear(selectedYear, topic as any, startMonth)
-      );
-      setTopics(scoped);
+      setTopics(data);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [tutorId, selectedYear, startMonth]);
+  }, [tutorId]);
+
+  /**
+   * Returns topics filtered to the given school year.
+   * Legacy topics (no schoolYear field) are always included for backward compatibility.
+   */
+  const getTopicsForYear = useCallback(
+    (year: string) =>
+      topics.filter((t) => !t.schoolYear || t.schoolYear === year),
+    [topics]
+  );
+
+  /** All topics for the currently selected school year (legacy topics always included). */
+  const topicsForSelectedYear = useMemo(
+    () => topics.filter((t) => !t.schoolYear || t.schoolYear === selectedYear),
+    [topics, selectedYear]
+  );
 
   const addTopic = useCallback(
     async (subject: string, name: string, description?: string) => {
@@ -99,22 +111,24 @@ export function useTopics() {
   const getTopicsForSubject = useCallback(
     (subject: string) => {
       const lower = subject.trim().toLowerCase();
-      return topics.filter((t) => t.subject.trim().toLowerCase() === lower);
+      return topicsForSelectedYear.filter(
+        (t) => t.subject.trim().toLowerCase() === lower
+      );
     },
-    [topics]
+    [topicsForSelectedYear]
   );
 
   const topicsBySubject = useMemo(() => {
     const map: Record<string, Topic[]> = {};
-    topics.forEach((t) => {
+    topicsForSelectedYear.forEach((t) => {
       if (!map[t.subject]) map[t.subject] = [];
       map[t.subject].push(t);
     });
     return map;
-  }, [topics]);
+  }, [topicsForSelectedYear]);
 
   return {
-    topics,
+    topics: topicsForSelectedYear,
     topicsBySubject,
     isLoading,
     tutorId,
@@ -122,6 +136,7 @@ export function useTopics() {
     updateTopic,
     deleteTopic,
     getTopicsForSubject,
+    getTopicsForYear,
   };
 }
 
