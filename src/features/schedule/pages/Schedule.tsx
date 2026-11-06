@@ -1,23 +1,38 @@
 import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { Tutee, ScheduleItem, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { Tutee, NormalizedScheduleItem, getTuteeScheduleForYear, normalizeScheduleItems } from '@/features/tutees/types/tutee';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
+import { getSchoolYearRange, isInSchoolYear } from '@/shared/utils/schoolYear';
 import { formatTime12h } from '@/shared/utils/formatDate';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 
+const toMinutes = (time: string) => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return (hours || 0) * 60 + (minutes || 0);
+};
+
 export const Schedule = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
-  const { selectedYear } = useSchoolYear();
+  const { selectedYear, startMonth } = useSchoolYear();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
   const [chargedTuteeMonths, setChargedTuteeMonths] = useState<Set<string>>(new Set());
+
+  // Keep the timetable inside the selected school year. Switching years (or
+  // changing the start month) snaps back to the start of that school year.
+  useEffect(() => {
+    setCurrentDate((prev) => {
+      if (isInSchoolYear(prev, selectedYear, startMonth)) return prev;
+      return getSchoolYearRange(selectedYear, startMonth).start;
+    });
+  }, [selectedYear, startMonth]);
 
   // Listen to payment records to know which months each tutee has been charged for
   useEffect(() => {
@@ -43,20 +58,38 @@ export const Schedule = () => {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const timeSlots = Array.from({ length: 14 }, (_, i) => {
-    const hour = i + 7; // Start from 7 AM
-    return `${hour.toString().padStart(2, '0')}:00`;
-  });
 
   // Filter tutees based on selected student
   const filteredTutees = selectedStudent
     ? tutees.filter(t => t.id === selectedStudent)
     : tutees;
 
+  let earliestHour = 7;
+  let latestHour = 21;
+  tutees.forEach(tutee => {
+    normalizeScheduleItems(getTuteeScheduleForYear(tutee, selectedYear)).forEach(slot => {
+      const start = toMinutes(slot.startTime);
+      let end = toMinutes(slot.endTime);
+      if (end <= start) end += 24 * 60;
+      earliestHour = Math.min(earliestHour, Math.max(0, Math.floor(start / 60)));
+      latestHour = Math.max(latestHour, Math.min(24, Math.ceil(end / 60)));
+    });
+  });
+
+  const timeSlots = Array.from({ length: Math.max(1, latestHour - earliestHour) }, (_, i) => {
+    const hour = earliestHour + i;
+    return `${hour.toString().padStart(2, '0')}:00`;
+  });
+
   // Get schedule for a specific day and date (only include if charged for that month)
   const getScheduleForDay = (dayName: string, date: Date) => {
+    // Never paint a school year's timetable onto dates from another school year.
+    if (!isInSchoolYear(date, selectedYear, startMonth)) {
+      return [];
+    }
+
     const monthKey = format(date, 'yyyy-MM');
-    const schedules: Array<{ tutee: Tutee; schedule: ScheduleItem }> = [];
+    const schedules: Array<{ tutee: Tutee; schedule: NormalizedScheduleItem }> = [];
 
     filteredTutees.forEach(tutee => {
       // If tutee wasn't added to this month in payments, don't show on schedule
@@ -64,30 +97,34 @@ export const Schedule = () => {
         return;
       }
 
-      const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
-      if (Array.isArray(tuteeSchedule)) {
-        const daySchedule = tuteeSchedule.find(s => typeof s !== 'string' && s.day === dayName);
-        if (daySchedule && 'startTime' in daySchedule && 'endTime' in daySchedule) {
-          schedules.push({ tutee, schedule: daySchedule });
-        }
-      }
+      normalizeScheduleItems(getTuteeScheduleForYear(tutee, selectedYear))
+        .filter(slot => slot.day === dayName)
+        .forEach(schedule => schedules.push({ tutee, schedule }));
     });
 
     return schedules;
   };
 
-  // Navigate week
+  const canNavigateTo = (date: Date) => isInSchoolYear(date, selectedYear, startMonth);
+
+  // Navigate within the selected school year only
   const previousWeek = () => {
-    setCurrentDate(addDays(currentDate, -7));
+    const previous = addDays(currentDate, -7);
+    if (canNavigateTo(previous)) setCurrentDate(previous);
   };
 
   const nextWeek = () => {
-    setCurrentDate(addDays(currentDate, 7));
+    const next = addDays(currentDate, 7);
+    if (canNavigateTo(next)) setCurrentDate(next);
   };
 
   const today = () => {
-    setCurrentDate(new Date());
+    const now = new Date();
+    setCurrentDate(canNavigateTo(now) ? now : getSchoolYearRange(selectedYear, startMonth).start);
   };
+
+  const canGoPrevious = canNavigateTo(addDays(currentDate, -7));
+  const canGoNext = canNavigateTo(addDays(currentDate, 7));
 
   if (isLoading) {
     return <LoadingScreen message="Loading schedule..." />;
@@ -107,7 +144,8 @@ export const Schedule = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={previousWeek}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={!canGoPrevious}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
               <ChevronLeft size={20} />
             </button>
@@ -119,7 +157,8 @@ export const Schedule = () => {
             </button>
             <button
               onClick={nextWeek}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={!canGoNext}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
               <ChevronRight size={20} />
             </button>
@@ -222,8 +261,9 @@ export const Schedule = () => {
                       const schedules = getScheduleForDay(day, date);
                       const sessionsInSlot = schedules.filter(({ schedule }) => {
                         const slotHour = parseInt(time.split(':')[0]);
-                        const startHour = parseInt(schedule.startTime.split(':')[0]);
-                        const endHour = parseInt(schedule.endTime.split(':')[0]);
+                        const startHour = Math.floor(toMinutes(schedule.startTime) / 60);
+                        let endHour = Math.ceil(toMinutes(schedule.endTime) / 60);
+                        if (endHour <= startHour) endHour += 24;
                         return slotHour >= startHour && slotHour < endHour;
                       });
 
@@ -238,9 +278,9 @@ export const Schedule = () => {
                                 : ''
                           }`}
                         >
-                          {sessionsInSlot.map(({ tutee, schedule }) => (
+                          {sessionsInSlot.map(({ tutee, schedule }, index) => (
                             <div
-                              key={tutee.id}
+                              key={`${tutee.id}-${schedule.startTime}-${schedule.endTime}-${index}`}
                               className={`border rounded px-2 py-1 mb-1 text-xs ${
                                 isWeekend
                                   ? 'bg-red-50 border-red-200 text-red-950 shadow-sm'
@@ -290,9 +330,9 @@ export const Schedule = () => {
                   <div className="space-y-3">
                     {schedules
                       .sort((a, b) => a.schedule.startTime.localeCompare(b.schedule.startTime))
-                      .map(({ tutee, schedule }) => (
+                      .map(({ tutee, schedule }, index) => (
                         <div
-                          key={tutee.id}
+                          key={`${tutee.id}-${schedule.startTime}-${schedule.endTime}-${index}`}
                           className={`flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50/80 transition-colors ${
                             isWeekend ? 'border-red-150 bg-red-50/10' : ''
                           }`}

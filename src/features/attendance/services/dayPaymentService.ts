@@ -16,7 +16,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
-import { getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { getTuteeScheduleForYear, normalizeScheduleItems } from '@/features/tutees/types/tutee';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
 import { sendPaymentStatusNotification } from '@/shared/lib/notifications/sendPush';
@@ -112,12 +112,9 @@ class DayPaymentService {
       const schoolYear = getSchoolYearFromMonth(month) || '';
 
       // Get tutee's schedule days for this school year
-      const tuteeSchedule = getTuteeScheduleForYear(tutee, schoolYear);
-      const scheduleDays: string[] = Array.isArray(tuteeSchedule)
-        ? tuteeSchedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
-        : typeof tuteeSchedule === 'string'
-          ? tuteeSchedule.split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
-          : [];
+      const scheduleDays = Array.from(
+        new Set(normalizeScheduleItems(getTuteeScheduleForYear(tutee, schoolYear)).map((slot) => slot.day))
+      );
 
       // Create day payments only for scheduled days
       const dayPayments: DayPayment[] = allDays
@@ -368,11 +365,9 @@ class DayPaymentService {
       const q = query(recordsRef, where('tuteeId', '==', tuteeId));
       const snap = await getDocs(q);
 
-      const scheduleDays: string[] = Array.isArray(schedule)
-        ? schedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
-        : typeof schedule === 'string'
-          ? (schedule as string).split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
-          : [];
+      const scheduleDays = Array.from(
+        new Set(normalizeScheduleItems(schedule).map((slot) => slot.day))
+      );
 
       for (const docSnap of snap.docs) {
         const recordData = docSnap.data();

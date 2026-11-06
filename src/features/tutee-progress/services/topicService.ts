@@ -36,6 +36,7 @@ class TopicService {
               subject: data.subject || '',
               name: data.name || '',
               description: data.description || '',
+              schoolYear: data.schoolYear || undefined,
               createdAt:
                 typeof data.createdAt === 'string'
                   ? data.createdAt
@@ -63,7 +64,7 @@ class TopicService {
   /** Add a new tutor-defined topic for a subject */
   async addTopic(
     tutorId: string,
-    data: { subject: string; name: string; description?: string }
+    data: { subject: string; name: string; description?: string; schoolYear: string }
   ): Promise<string> {
     const colRef = collection(db, 'users', tutorId, 'topics');
     const now = new Date().toISOString();
@@ -71,6 +72,7 @@ class TopicService {
       subject: data.subject.trim(),
       name: data.name.trim(),
       description: data.description?.trim() || '',
+      schoolYear: data.schoolYear,
       createdAt: now,
       updatedAt: now,
     });

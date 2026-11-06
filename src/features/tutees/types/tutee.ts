@@ -100,6 +100,176 @@ export function getTuteeScheduleForYear(
   return tutee.schedule ?? [];
 }
 
+export interface NormalizedScheduleItem {
+  day: string;
+  startTime: string;
+  endTime: string;
+}
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const TIME_TOKEN = '(\\d{1,2}(?::\\d{1,2})?\\s*(?:AM|PM)?)';
+const TIME_RANGE_REGEX = new RegExp(`${TIME_TOKEN}\\s*(?:-|–|—|to)\\s*${TIME_TOKEN}`, 'i');
+const SINGLE_TIME_REGEX = new RegExp(TIME_TOKEN, 'i');
+
+function findScheduleDays(value: string): string[] {
+  const lower = value.toLowerCase();
+  return WEEKDAYS.filter((day) => {
+    const full = day.toLowerCase();
+    const abbr = full.slice(0, 3);
+    return (
+      new RegExp(`\\b${full}\\b`, 'i').test(lower) ||
+      new RegExp(`(^|[^a-z])${abbr}([^a-z]|$)`, 'i').test(lower)
+    );
+  });
+}
+
+function parseTimeToken(value: string): string | undefined {
+  const cleaned = value.trim().toUpperCase().replace(/\./g, '');
+  const match = cleaned.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(AM|PM)?$/);
+  if (!match) return undefined;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const meridian = match[3];
+
+  if (isNaN(hours) || isNaN(minutes) || minutes > 59) return undefined;
+
+  if (meridian) {
+    if (hours < 1 || hours > 12) return undefined;
+    if (meridian === 'PM' && hours < 12) hours += 12;
+    if (meridian === 'AM' && hours === 12) hours = 0;
+  }
+
+  if (hours > 23) return undefined;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function addHour(time: string): string {
+  const [hours, minutes] = time.split(':').map(Number);
+  const total = (hours * 60 + minutes + 60) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function getMeridian(value: string): 'AM' | 'PM' | undefined {
+  const match = value.toUpperCase().replace(/\./g, '').match(/(AM|PM)/);
+  return match ? (match[1] as 'AM' | 'PM') : undefined;
+}
+
+function adjustRangeMeridians(
+  startRaw: string,
+  endRaw: string,
+  startTime: string,
+  endTime: string
+): { startTime: string; endTime: string } {
+  let [startHours, startMinutes] = startTime.split(':').map(Number);
+  let [endHours, endMinutes] = endTime.split(':').map(Number);
+  const startMeridian = getMeridian(startRaw);
+  const endMeridian = getMeridian(endRaw);
+
+  if (!startMeridian && endMeridian && startHours <= 12) {
+    if (endMeridian === 'PM' && startHours + 12 <= endHours) {
+      startHours += 12;
+    } else if (endMeridian === 'AM' && startHours > endHours) {
+      startHours = startHours === 12 ? 0 : startHours + 12;
+    }
+  } else if (startMeridian && !endMeridian && endHours < 12) {
+    const candidate = endHours + 12;
+    if (startMeridian === 'PM' ? candidate > startHours : endHours < startHours) {
+      endHours = candidate;
+    }
+  }
+
+  return {
+    startTime: `${String(startHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`,
+    endTime: `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`,
+  };
+}
+
+function extractTimeRange(value: string): { startTime: string; endTime: string } | undefined {
+  const rangeMatch = value.match(TIME_RANGE_REGEX);
+  if (rangeMatch) {
+    const startTime = parseTimeToken(rangeMatch[1]);
+    const endTime = parseTimeToken(rangeMatch[2]);
+    if (startTime && endTime) {
+      return adjustRangeMeridians(rangeMatch[1], rangeMatch[2], startTime, endTime);
+    }
+    if (startTime) return { startTime, endTime: addHour(startTime) };
+  }
+
+  const singleMatch = value.match(SINGLE_TIME_REGEX);
+  if (singleMatch) {
+    const startTime = parseTimeToken(singleMatch[1]);
+    if (startTime) return { startTime, endTime: addHour(startTime) };
+  }
+
+  return undefined;
+}
+
+function parseScheduleText(text: string): NormalizedScheduleItem[] {
+  const items: NormalizedScheduleItem[] = [];
+
+  for (const line of text.split(/\r?\n|;+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const commaParts = trimmed.split(',').map((part) => part.trim()).filter(Boolean);
+    const parts = commaParts.length > 1 && commaParts.every((part) => extractTimeRange(part))
+      ? commaParts
+      : [trimmed];
+
+    for (const part of parts) {
+      const days = findScheduleDays(part);
+      if (days.length === 0) continue;
+      const range = extractTimeRange(part) ?? { startTime: '09:00', endTime: '10:00' };
+      days.forEach((day) => items.push({ day, ...range }));
+    }
+  }
+
+  return items;
+}
+
+export function normalizeScheduleItems(
+  schedule: ScheduleItem[] | string | null | undefined
+): NormalizedScheduleItem[] {
+  if (!schedule) return [];
+
+  const items: NormalizedScheduleItem[] = [];
+
+  const pushObject = (entry: any) => {
+    if (!entry || typeof entry !== 'object') return;
+
+    const days = findScheduleDays(String(entry.day ?? ''));
+    if (days.length === 0) return;
+
+    let range: { startTime: string; endTime: string } | undefined;
+    const startTime = entry.startTime ? parseTimeToken(String(entry.startTime)) : undefined;
+    const endTime = entry.endTime ? parseTimeToken(String(entry.endTime)) : undefined;
+
+    if (startTime) {
+      range = { startTime, endTime: endTime ?? addHour(startTime) };
+    } else if (entry.startTime || entry.endTime || entry.time) {
+      range = extractTimeRange(
+        [entry.startTime, entry.endTime, entry.time].filter(Boolean).join(' ')
+      );
+    }
+
+    const resolved = range ?? { startTime: '09:00', endTime: '10:00' };
+    days.forEach((day) => items.push({ day, ...resolved }));
+  };
+
+  const entries = Array.isArray(schedule) ? schedule : [schedule];
+  for (const entry of entries) {
+    if (typeof entry === 'string') {
+      items.push(...parseScheduleText(entry));
+    } else {
+      pushObject(entry);
+    }
+  }
+
+  return items;
+}
+
 /**
  * Returns a student's financial state for a given school year.
  * Uses the per-year rollup when available, falling back to the flat (all-years)

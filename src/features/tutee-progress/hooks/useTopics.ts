@@ -3,9 +3,12 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Topic } from '@/features/tutee-progress/types/topic';
 import { topicService } from '@/features/tutee-progress/services/topicService';
 import { logActivity } from '@/shared/utils/auditLogger';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
+import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
 
 export function useTopics() {
   const { user } = useAuth();
+  const { selectedYear, startMonth } = useSchoolYear();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,17 +26,25 @@ export function useTopics() {
 
     setIsLoading(true);
     const unsubscribe = topicService.subscribeTopics(tutorId, (data) => {
-      setTopics(data);
+      const scoped = data.filter((topic) =>
+        belongsToSchoolYear(selectedYear, topic as any, startMonth)
+      );
+      setTopics(scoped);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [tutorId]);
+  }, [tutorId, selectedYear, startMonth]);
 
   const addTopic = useCallback(
     async (subject: string, name: string, description?: string) => {
       if (!tutorId) throw new Error('Not authenticated');
-      const id = await topicService.addTopic(tutorId, { subject, name, description });
+      const id = await topicService.addTopic(tutorId, {
+        subject,
+        name,
+        description,
+        schoolYear: selectedYear,
+      });
       if (user) {
         await logActivity(
           user.id,
@@ -46,7 +57,7 @@ export function useTopics() {
       }
       return id;
     },
-    [tutorId, user]
+    [tutorId, user, selectedYear]
   );
 
   const updateTopic = useCallback(

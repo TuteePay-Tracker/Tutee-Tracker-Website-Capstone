@@ -5,6 +5,7 @@ export interface Topic {
   subject: string;
   name: string;
   description?: string;
+  schoolYear?: string;
   createdAt: string;
   updatedAt?: string;
 }

@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { PaymentRecord, AttendanceMark, AttendanceStatus, getDayAttendance } from '@/features/attendance/types/dayPayment';
-import { Tutee, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { Tutee, getTuteeScheduleForYear, normalizeScheduleItems } from '@/features/tutees/types/tutee';
 import {
   CheckCircle2,
   XCircle,
@@ -120,11 +120,9 @@ export const Attendance = () => {
     }
 
     const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
-    const scheduleDays: string[] = Array.isArray(tuteeSchedule)
-      ? tuteeSchedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
-      : typeof tuteeSchedule === 'string'
-        ? tuteeSchedule.split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
-        : [];
+    const scheduleDays = Array.from(
+      new Set(normalizeScheduleItems(tuteeSchedule).map((slot) => slot.day))
+    );
 
     if (scheduleDays.length === 0) {
       return (record.dayPayments || []).map(dp => ({
@@ -370,9 +368,15 @@ export const Attendance = () => {
                         {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).join(', ')}
                         {' · '}
                         {(() => {
-                          const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
-                          return Array.isArray(tuteeSchedule) && tuteeSchedule.length > 0
-                            ? tuteeSchedule.map(s => s.day.slice(0, 3)).join(', ')
+                          const days = Array.from(
+                            new Set(
+                              normalizeScheduleItems(getTuteeScheduleForYear(tutee, selectedYear)).map(
+                                (slot) => slot.day
+                              )
+                            )
+                          );
+                          return days.length > 0
+                            ? days.map((day) => day.slice(0, 3)).join(', ')
                             : 'No schedule';
                         })()}
                       </p>
