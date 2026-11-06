@@ -675,8 +675,8 @@ interface SubjectSectionProps {
   tutees: Tutee[];
   topics: Topic[];
   progressMap: Map<string, StudentTopicProgress>;
-  onAddTopic: (subject: string, name: string, description?: string) => Promise<string>;
-  onUpdateTopic: (topicId: string, name: string, description?: string, subject?: string) => Promise<void>;
+  onAddTopic: (subject: string, name: string, description?: string, gradeLevel?: string) => Promise<string>;
+  onUpdateTopic: (topicId: string, name: string, description?: string, subject?: string, gradeLevel?: string) => Promise<void>;
   onDeleteTopic: (topicId: string, topicName: string, subject?: string) => Promise<void>;
   onSaveTopicProgress: (data: TopicProgressFormData) => Promise<void>;
   computeStudentSummary: (studentId: string, subject: string, topicIds: string[]) => any;
@@ -720,16 +720,17 @@ function SubjectSection({
     setTopicFormModalState({ isOpen: true, editingTopic: topic });
   };
 
-  const handleSaveTopic = async (name: string, description?: string) => {
+  const handleSaveTopic = async (name: string, description?: string, gradeLevel?: string) => {
     if (topicFormModalState.editingTopic) {
       await onUpdateTopic(
         topicFormModalState.editingTopic.id,
         name,
         description,
-        activeSubject
+        activeSubject,
+        gradeLevel
       );
     } else {
-      await onAddTopic(activeSubject, name, description);
+      await onAddTopic(activeSubject, name, description, gradeLevel);
     }
   };
 
@@ -990,6 +991,11 @@ function SubjectSection({
                   {idx + 1}
                 </span>
                 <span className="font-semibold text-gray-800">{topic.name}</span>
+                {topic.gradeLevel && (
+                  <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    {topic.gradeLevel}
+                  </span>
+                )}
               </div>
             ))}
           </div>

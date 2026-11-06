@@ -285,7 +285,7 @@ export const TuteeDetails = () => {
   };
 
   const { assessments } = useAssessments();
-  const { getTopicsForSubject } = useTopics();
+  const { getTopicsForSubject, getTopicsForSubjectAndGrade } = useTopics();
   const { progressMap, computeStudentSummary } = useTopicProgress();
 
   // Topic progress tab state
@@ -1315,6 +1315,7 @@ export const TuteeDetails = () => {
           activeTopicSubject={activeTopicSubject}
           setActiveTopicSubject={setActiveTopicSubject}
           getTopicsForSubject={getTopicsForSubject}
+          getTopicsForSubjectAndGrade={getTopicsForSubjectAndGrade}
           progressMap={progressMap}
           computeStudentSummary={computeStudentSummary}
           assessments={assessments}
@@ -1894,6 +1895,7 @@ interface TopicProgressTabProps {
   activeTopicSubject: string;
   setActiveTopicSubject: (s: string) => void;
   getTopicsForSubject: (s: string) => import('@/features/tutee-progress/types/topic').Topic[];
+  getTopicsForSubjectAndGrade: (s: string, gradeLevel?: string) => import('@/features/tutee-progress/types/topic').Topic[];
   progressMap: Map<string, import('@/features/tutee-progress/types/topic').StudentTopicProgress>;
   computeStudentSummary: (studentId: string, subject: string, topicIds: string[]) => import('@/features/tutee-progress/types/topic').TopicProgressSummary;
   assessments: import('@/features/tutee-progress/types/assessment').Assessment[];
@@ -1907,6 +1909,7 @@ const TopicProgressTabContent = ({
   activeTopicSubject,
   setActiveTopicSubject,
   getTopicsForSubject,
+  getTopicsForSubjectAndGrade,
   progressMap,
   computeStudentSummary,
   assessments,
@@ -1916,7 +1919,8 @@ const TopicProgressTabContent = ({
 }: TopicProgressTabProps) => {
   const tuteeSubjects = tutee.subjects?.length ? tutee.subjects : (tutee.subject ? [tutee.subject] : []);
   const currentSubject = activeTopicSubject || tuteeSubjects[0] || '';
-  const subjectTopics = getTopicsForSubject(currentSubject);
+  // Filter topics by the student's grade level (topics with no grade are always included)
+  const subjectTopics = getTopicsForSubjectAndGrade(currentSubject, tutee.gradeLevel);
   const summary = computeStudentSummary(tutee.id, currentSubject, subjectTopics.map((t) => t.id));
 
   return (
@@ -1985,7 +1989,9 @@ const TopicProgressTabContent = ({
           <BookOpen className="mx-auto text-gray-300 mb-4" size={48} />
           <p className="text-gray-500 text-lg">No topics added yet</p>
           <p className="text-gray-400 text-sm mt-1">
-            Your tutor has not set up topics for {currentSubject || 'this subject'} yet.
+            {tutee.gradeLevel
+              ? `Your tutor has not set up topics for ${currentSubject || 'this subject'} at ${tutee.gradeLevel} yet.`
+              : `Your tutor has not set up topics for ${currentSubject || 'this subject'} yet.`}
           </p>
         </div>
       ) : (

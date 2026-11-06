@@ -49,13 +49,14 @@ export function useTopics() {
   );
 
   const addTopic = useCallback(
-    async (subject: string, name: string, description?: string) => {
+    async (subject: string, name: string, description?: string, gradeLevel?: string) => {
       if (!tutorId) throw new Error('Not authenticated');
       const id = await topicService.addTopic(tutorId, {
         subject,
         name,
         description,
         schoolYear: selectedYear,
+        gradeLevel,
       });
       if (user) {
         await logActivity(
@@ -64,7 +65,7 @@ export function useTopics() {
           user.role,
           'Topic Created',
           'Tutee Progress',
-          `Created topic "${name}" for subject ${subject}`
+          `Created topic "${name}" for subject ${subject}${gradeLevel ? ` (${gradeLevel})` : ''}`
         );
       }
       return id;
@@ -73,9 +74,9 @@ export function useTopics() {
   );
 
   const updateTopic = useCallback(
-    async (topicId: string, name: string, description?: string, subject?: string) => {
+    async (topicId: string, name: string, description?: string, subject?: string, gradeLevel?: string) => {
       if (!tutorId) throw new Error('Not authenticated');
-      await topicService.updateTopic(tutorId, topicId, { name, description });
+      await topicService.updateTopic(tutorId, topicId, { name, description, gradeLevel });
       if (user) {
         await logActivity(
           user.id,
@@ -118,6 +119,22 @@ export function useTopics() {
     [topicsForSelectedYear]
   );
 
+  /**
+   * Returns topics for a given subject filtered by grade level.
+   * Topics with no gradeLevel set are always included (backward-compatible).
+   */
+  const getTopicsForSubjectAndGrade = useCallback(
+    (subject: string, gradeLevel?: string) => {
+      const lower = subject.trim().toLowerCase();
+      return topicsForSelectedYear.filter((t) => {
+        if (t.subject.trim().toLowerCase() !== lower) return false;
+        if (!gradeLevel || !t.gradeLevel) return true;
+        return t.gradeLevel === gradeLevel;
+      });
+    },
+    [topicsForSelectedYear]
+  );
+
   const topicsBySubject = useMemo(() => {
     const map: Record<string, Topic[]> = {};
     topicsForSelectedYear.forEach((t) => {
@@ -136,6 +153,7 @@ export function useTopics() {
     updateTopic,
     deleteTopic,
     getTopicsForSubject,
+    getTopicsForSubjectAndGrade,
     getTopicsForYear,
   };
 }

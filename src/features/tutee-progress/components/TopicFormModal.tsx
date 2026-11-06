@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Check, BookOpen, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Topic } from '@/features/tutee-progress/types/topic';
+import { GRADE_LEVELS } from '@/features/tutees/types/tutee';
 
 interface TopicFormModalProps {
   isOpen: boolean;
@@ -9,7 +10,7 @@ interface TopicFormModalProps {
   subject: string;
   editingTopic?: Topic | null;
   existingTopics: Topic[];
-  onSave: (name: string, description?: string) => Promise<void>;
+  onSave: (name: string, description?: string, gradeLevel?: string) => Promise<void>;
 }
 
 export function TopicFormModal({
@@ -22,6 +23,7 @@ export function TopicFormModal({
 }: TopicFormModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [gradeLevel, setGradeLevel] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isEditing = Boolean(editingTopic);
@@ -30,6 +32,7 @@ export function TopicFormModal({
     if (isOpen) {
       setName(editingTopic?.name ?? '');
       setDescription(editingTopic?.description ?? '');
+      setGradeLevel(editingTopic?.gradeLevel ?? '');
     }
   }, [isOpen, editingTopic]);
 
@@ -56,7 +59,7 @@ export function TopicFormModal({
 
     setIsSubmitting(true);
     try {
-      await onSave(trimmedName, description.trim() || undefined);
+      await onSave(trimmedName, description.trim() || undefined, gradeLevel || undefined);
       toast.success(isEditing ? 'Topic updated' : `Topic "${trimmedName}" added to ${subject}`);
       onClose();
     } catch (err: any) {
@@ -127,6 +130,25 @@ export function TopicFormModal({
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+              Grade Level (Optional)
+            </label>
+            <select
+              value={gradeLevel}
+              onChange={(e) => setGradeLevel(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:bg-white focus:border-transparent outline-none font-medium text-gray-900"
+            >
+              <option value="">All Grade Levels</option>
+              {GRADE_LEVELS.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Restrict this topic to a specific grade level, or leave blank to show for all grades.
+            </p>
+          </div>
+
           {/* Action buttons */}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
             <button
@@ -150,4 +172,3 @@ export function TopicFormModal({
     </div>
   );
 }
-

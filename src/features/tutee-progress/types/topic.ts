@@ -9,6 +9,8 @@ export interface Topic {
   updatedAt?: string;
   /** School year this topic belongs to (e.g. "2026-27"). Undefined for legacy records. */
   schoolYear?: string;
+  /** Grade level this topic is intended for (e.g. "Grade 1"). Undefined means applies to all grades. */
+  gradeLevel?: string;
 }
 
 export interface StudentTopicProgress {

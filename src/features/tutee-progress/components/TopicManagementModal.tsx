@@ -134,7 +134,14 @@ export function TopicManagementModal({
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{t.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-gray-900 truncate">{t.name}</p>
+                      {t.gradeLevel && (
+                        <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                          {t.gradeLevel}
+                        </span>
+                      )}
+                    </div>
                     {t.description ? (
                       <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-relaxed">
                         {t.description}
