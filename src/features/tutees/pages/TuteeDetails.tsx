@@ -19,7 +19,8 @@ import { useTopics } from '@/features/tutee-progress/hooks/useTopics';
 import { useTopicProgress } from '@/features/tutee-progress/hooks/useTopicProgress';
 import { getPerformanceLevelConfig } from '@/features/tutee-progress/types/topic';
 import { ProgressReportModal } from '@/features/tutee-progress/components/ProgressReportModal';
-import { Tutee, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals } from '@/features/tutees/types/tutee';
+import { Tutee, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
@@ -63,9 +64,10 @@ export const TuteeDetails = () => {
   const [scheduleTime, setScheduleTime] = useState({ startTime: '09:00', endTime: '10:00' });
 
   const getInitialScheduleFromTutee = (currentTutee?: Tutee): ScheduleItem[] => {
-    if (!currentTutee?.schedule) return [];
-    if (Array.isArray(currentTutee.schedule)) {
-      return currentTutee.schedule.map((item: any) => {
+    if (!currentTutee) return [];
+    const schedule = getTuteeScheduleForYear(currentTutee, selectedYear);
+    if (Array.isArray(schedule)) {
+      return schedule.map((item: any) => {
         if (typeof item === 'object' && item !== null && 'startTime' in item && 'endTime' in item) {
           return item;
         } else if (typeof item === 'object' && item !== null && 'time' in item) {
@@ -73,8 +75,8 @@ export const TuteeDetails = () => {
         }
         return { day: String(item), startTime: '09:00', endTime: '10:00' };
       });
-    } else if (typeof currentTutee.schedule === 'string') {
-      const parts = (currentTutee.schedule as string).split(/\r?\n|,/);
+    } else if (typeof schedule === 'string') {
+      const parts = schedule.split(/\r?\n|,/);
       return parts.map(p => p.trim()).filter(Boolean).map(day => ({
         day,
         startTime: '09:00',
@@ -85,8 +87,10 @@ export const TuteeDetails = () => {
   };
 
   const getInitialTimeFromTutee = (currentTutee?: Tutee) => {
-    if (currentTutee && Array.isArray(currentTutee.schedule) && currentTutee.schedule.length > 0) {
-      const first = currentTutee.schedule[0];
+    if (!currentTutee) return { startTime: '09:00', endTime: '10:00' };
+    const schedule = getTuteeScheduleForYear(currentTutee, selectedYear);
+    if (Array.isArray(schedule) && schedule.length > 0) {
+      const first = schedule[0];
       if (typeof first === 'object' && first !== null && 'startTime' in first && 'endTime' in first) {
         return { startTime: first.startTime, endTime: first.endTime };
       }
@@ -181,10 +185,10 @@ export const TuteeDetails = () => {
         ratePerSession: Number(editForm.ratePerSession),
         subjects: editForm.subjects,
         subject: editForm.subjects[0] || '', // primary subject
-        schedule: editForm.schedule,
       };
       await updateTutee(tutee.id, updates);
-      await dayPaymentService.syncTuteeScheduleRecords(tutee.id, updates.schedule);
+      await tuteeService.setScheduleForYear(tutee.id, selectedYear, editForm.schedule);
+      await dayPaymentService.syncTuteeScheduleRecords(tutee.id, editForm.schedule, selectedYear);
       setIsEditingInfo(false);
       toast.success('Personal information updated successfully');
 
@@ -782,7 +786,7 @@ export const TuteeDetails = () => {
                     <Calendar size={18} className="text-gray-400 mt-1 shrink-0" />
                     <div>
                       <div className="text-xs text-gray-400 font-medium mb-1">Schedule</div>
-                      <div className="space-y-1 font-medium">{renderSchedule(tutee.schedule)}</div>
+                      <div className="space-y-1 font-medium">{renderSchedule(getTuteeScheduleForYear(tutee, selectedYear))}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-gray-700">

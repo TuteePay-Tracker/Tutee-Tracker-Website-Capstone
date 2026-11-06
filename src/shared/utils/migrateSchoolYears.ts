@@ -194,7 +194,80 @@ export async function migrateSchoolYears(uid?: string, force = false): Promise<n
   }
 }
 
+/**
+ * One-time backfill of per-school-year schedules.
+ *
+ * The legacy `schedule` field was shared across every school year, which made
+ * a newly opened school year show the previous year's timetable. This copies
+ * each legacy schedule into the tutor's active school year (or the student's
+ * latest enrolled year) so other years start blank.
+ */
+export async function migrateTuteeSchedules(uid?: string, force = false): Promise<number> {
+  if (!uid) uid = auth.currentUser?.uid;
+  if (!uid) return 0;
+
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (!userSnap.exists()) return 0;
+    if (!force && userSnap.data().scheduleByYearMigratedAt) return 0;
+
+    const tutorData = userSnap.data();
+    const startMonth =
+      typeof tutorData.schoolYearStartMonth === 'number'
+        ? tutorData.schoolYearStartMonth
+        : undefined;
+    // Use the real current school year (not the tutor's selected year) so a
+    // legacy schedule is not migrated into a future year the tutor was only
+    // previewing.
+    const currentYear = getCurrentSchoolYear(startMonth);
+
+    const snap = await getDocs(collection(db, 'users', uid, 'tutees'));
+    let updated = 0;
+
+    for (const docSnap of snap.docs) {
+      const tutee = docSnap.data();
+
+      // Already has per-year schedules — don't touch.
+      if (
+        tutee.scheduleByYear &&
+        typeof tutee.scheduleByYear === 'object' &&
+        Object.keys(tutee.scheduleByYear).length > 0
+      ) {
+        continue;
+      }
+      if (tutee.schedule === undefined) continue;
+
+      const years: string[] = Array.isArray(tutee.schoolYears) ? tutee.schoolYears : [];
+      const latestPastOrCurrent = years
+        .filter((y) => y <= currentYear)
+        .sort((a, b) => b.localeCompare(a))[0];
+      const targetYear =
+        latestPastOrCurrent || years.slice().sort((a, b) => b.localeCompare(a))[0] || currentYear;
+
+      try {
+        await updateDoc(doc(db, 'users', uid, 'tutees', docSnap.id), {
+          scheduleByYear: { [targetYear]: tutee.schedule },
+        });
+        updated++;
+      } catch (error) {
+        console.error(`Failed to migrate schedule for tutee ${docSnap.id}:`, error);
+      }
+    }
+
+    await updateDoc(doc(db, 'users', uid), {
+      scheduleByYearMigratedAt: new Date().toISOString(),
+    });
+
+    console.log(`Per-year schedule backfill complete: ${updated} tutees updated`);
+    return updated;
+  } catch (error) {
+    console.error('Per-year schedule backfill failed:', error);
+    return 0;
+  }
+}
+
 // For manual re-runs via browser console
 if (typeof window !== 'undefined') {
   (window as any).migrateSchoolYears = migrateSchoolYears;
+  (window as any).migrateTuteeSchedules = migrateTuteeSchedules;
 }

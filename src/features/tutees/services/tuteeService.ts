@@ -13,8 +13,7 @@ import {
   orderBy,
   Timestamp,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
+  FieldValue,
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
@@ -27,6 +26,9 @@ function sanitizeForFirestore(obj: any): any {
   if (obj === undefined) return null;
   if (obj === null || typeof obj !== 'object') return obj;
   if (obj instanceof Date || obj instanceof Timestamp) return obj;
+  // Preserve Firestore sentinels (arrayUnion, serverTimestamp, increment, ...).
+  // Deep-copying them would turn them into plain objects and break the write.
+  if (obj instanceof FieldValue) return obj;
   if (Array.isArray(obj)) {
     return obj.map(sanitizeForFirestore).filter(v => v !== undefined);
   }
@@ -199,6 +201,10 @@ class TuteeService {
             ? cleanedTutee.schoolYears
             : [schoolYear],
         archivedForYears: cleanedTutee.archivedForYears || [],
+        scheduleByYear:
+          cleanedTutee.scheduleByYear && typeof cleanedTutee.scheduleByYear === 'object'
+            ? cleanedTutee.scheduleByYear
+            : { [schoolYear]: cleanedTutee.schedule ?? [] },
         totalsByYear: cleanedTutee.totalsByYear || initTotalsByYear(schoolYear),
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
@@ -215,6 +221,7 @@ class TuteeService {
         ...tutee,
         schoolYears: tuteeData.schoolYears as string[],
         archivedForYears: tuteeData.archivedForYears as string[],
+        scheduleByYear: tuteeData.scheduleByYear as NonNullable<Tutee['scheduleByYear']>,
         totalsByYear: tuteeData.totalsByYear as NonNullable<Tutee['totalsByYear']>,
         totalSessions: tutee.totalSessions || 0,
         totalPaid: tutee.totalPaid || 0,
@@ -294,20 +301,47 @@ class TuteeService {
     }
   }
 
+  async setScheduleForYear(
+    id: string,
+    schoolYear: string,
+    schedule: Tutee['schedule']
+  ): Promise<Tutee> {
+    const current = await this.getById(id);
+    const byYear =
+      current?.scheduleByYear && typeof current.scheduleByYear === 'object'
+        ? current.scheduleByYear
+        : {};
+    return this.update(id, {
+      schedule,
+      scheduleByYear: { ...byYear, [schoolYear]: schedule },
+    });
+  }
+
+  private getArchivedYears(tutee: Tutee | undefined): string[] {
+    // Older buggy writes could leave a non-array value here; treat it as empty
+    // so the next archive/unarchive heals the field with a proper array.
+    return Array.isArray(tutee?.archivedForYears) ? tutee!.archivedForYears : [];
+  }
+
   async archive(id: string, schoolYear?: string): Promise<Tutee> {
-    if (schoolYear) {
-      // Per-school-year archive — only affects the given school year.
-      return this.update(id, { archivedForYears: arrayUnion(schoolYear) as unknown as string[] });
+    if (!schoolYear) {
+      // Legacy archive (no school year resolves) — keep the global flag.
+      return this.update(id, { archived: true });
     }
-    // Legacy archive (no school year resolves) — keep the global flag.
-    return this.update(id, { archived: true });
+    // Per-school-year archive — only affects the given school year.
+    const existing = this.getArchivedYears(await this.getById(id));
+    if (existing.includes(schoolYear)) return this.update(id, { archivedForYears: existing });
+    return this.update(id, { archivedForYears: [...existing, schoolYear] });
   }
 
   async unarchive(id: string, schoolYear?: string): Promise<Tutee> {
-    if (schoolYear) {
-      return this.update(id, { archivedForYears: arrayRemove(schoolYear) as unknown as string[] });
+    if (!schoolYear) {
+      return this.update(id, { archived: false });
     }
-    return this.update(id, { archived: false });
+    const existing = this.getArchivedYears(await this.getById(id));
+    return this.update(id, {
+      archivedForYears: existing.filter((year) => year !== schoolYear),
+    });
   }
 }
 

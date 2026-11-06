@@ -16,6 +16,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
+import { getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { paymentService } from '@/features/payments/services/paymentService';
 import { sendPaymentStatusNotification } from '@/shared/lib/notifications/sendPush';
@@ -108,11 +109,14 @@ class DayPaymentService {
       const monthEnd = endOfMonth(monthDate);
       const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-      // Get tutee's schedule days
-      const scheduleDays: string[] = Array.isArray(tutee.schedule)
-        ? tutee.schedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
-        : typeof tutee.schedule === 'string'
-          ? (tutee.schedule as string).split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
+      const schoolYear = getSchoolYearFromMonth(month) || '';
+
+      // Get tutee's schedule days for this school year
+      const tuteeSchedule = getTuteeScheduleForYear(tutee, schoolYear);
+      const scheduleDays: string[] = Array.isArray(tuteeSchedule)
+        ? tuteeSchedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
+        : typeof tuteeSchedule === 'string'
+          ? tuteeSchedule.split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
           : [];
 
       // Create day payments only for scheduled days
@@ -131,7 +135,6 @@ class DayPaymentService {
         }));
 
       const totalDue = tutee.ratePerSession;
-      const schoolYear = getSchoolYearFromMonth(month) || '';
 
       const record: Omit<PaymentRecord, 'id'> = {
         tuteeId,
@@ -355,8 +358,10 @@ class DayPaymentService {
     }
   }
 
-  // Synchronize all existing payment records for a tutee with a new schedule
-  async syncTuteeScheduleRecords(tuteeId: string, schedule: any): Promise<void> {
+  // Synchronize existing payment records for a tutee with a new schedule.
+  // When a school year is provided, only records belonging to that year are
+  // updated so other years keep their own timetable.
+  async syncTuteeScheduleRecords(tuteeId: string, schedule: any, schoolYear?: string): Promise<void> {
     try {
       const userId = this.getUserId();
       const recordsRef = collection(db, 'users', userId, 'paymentRecords');
@@ -373,6 +378,11 @@ class DayPaymentService {
         const recordData = docSnap.data();
         const month = recordData.month;
         if (!month) continue;
+        if (schoolYear) {
+          const recordYear =
+            recordData.schoolYear || getSchoolYearFromMonth(month) || undefined;
+          if (recordYear !== schoolYear) continue;
+        }
 
         const monthDate = parseISO(month + '-01');
         const monthStart = startOfMonth(monthDate);

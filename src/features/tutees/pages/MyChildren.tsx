@@ -7,7 +7,7 @@ import { GraduationCap, Calendar, TrendingUp, CheckSquare } from 'lucide-react';
 import { Link } from 'react-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
-import { ScheduleItem, getTuteeYearTotals } from '@/features/tutees/types/tutee';
+import { ScheduleItem, getTuteeYearTotals, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
 import { formatTime12h } from '@/shared/utils/formatDate';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
@@ -273,7 +273,7 @@ export const MyChildren = () => {
                     <div className="text-xs text-gray-650 min-w-0">
                       <span className="block font-bold uppercase tracking-wider text-[9px] text-gray-400">Tutoring Schedule</span>
                       <div className="font-semibold text-gray-700 mt-0.5 space-y-0.5 leading-relaxed">
-                        {renderSchedule(tutee.schedule)}
+                        {renderSchedule(getTuteeScheduleForYear(tutee, selectedYear))}
                       </div>
                     </div>
                   </div>

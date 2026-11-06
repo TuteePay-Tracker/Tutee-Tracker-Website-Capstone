@@ -9,13 +9,14 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User, CalendarRange } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals } from '@/features/tutees/types/tutee';
+import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { formatSchoolYear } from '@/shared/utils/schoolYear';
 import { formatTime12h } from '@/shared/utils/formatDate';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
+import { Checkbox } from '@/shared/components/ui/checkbox';
 import { toast } from 'sonner';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, firebaseConfig } from '@/shared/lib/firebase/config';
@@ -52,6 +53,7 @@ export const Tutees = () => {
   const [showArchived, setShowArchived] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [allTutees, setAllTutees] = useState<Tutee[]>([]);
+  const [selectedCarryOverIds, setSelectedCarryOverIds] = useState<string[]>([]);
 
   // A student is "archived" per school year. Legacy records without
   // archivedForYears fall back to the old flat `archived` flag.
@@ -82,17 +84,87 @@ export const Tutees = () => {
     return !years.includes(selectedYear);
   });
 
-  const handleCarryOver = async (t: Tutee) => {
-    try {
-      const yearTotals = { ...(t.totalsByYear || {}), [selectedYear]: { totalSessions: 0, totalPaid: 0, balance: 0 } };
-      await updateTutee(t.id, {
-        schoolYears: [...(t.schoolYears || []), selectedYear],
-        archivedForYears: (t.archivedForYears || []).filter((y) => y !== selectedYear),
-        totalsByYear: yearTotals,
-      });
-      toast.success(`${t.firstName} ${t.surname} enrolled in ${formatSchoolYear(selectedYear)}`);
-    } catch (error) {
-      toast.error('Failed to enroll student in this school year');
+  // Clear the selection whenever the active school year changes.
+  useEffect(() => {
+    setSelectedCarryOverIds([]);
+  }, [selectedYear]);
+
+  const toggleCarryOver = (id: string) => {
+    setSelectedCarryOverIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const allCarryOverSelected =
+    carryOverCandidates.length > 0 &&
+    carryOverCandidates.every((t) => selectedCarryOverIds.includes(t.id));
+  const someCarryOverSelected =
+    selectedCarryOverIds.length > 0 && !allCarryOverSelected;
+
+  const toggleAllCarryOver = () => {
+    setSelectedCarryOverIds(
+      allCarryOverSelected ? [] : carryOverCandidates.map((t) => t.id)
+    );
+  };
+
+  const enrollInYear = async (t: Tutee) => {
+    const yearTotals = {
+      ...(t.totalsByYear || {}),
+      [selectedYear]: { totalSessions: 0, totalPaid: 0, balance: 0 },
+    };
+    await updateTutee(t.id, {
+      schoolYears: [...(t.schoolYears || []), selectedYear],
+      archivedForYears: (t.archivedForYears || []).filter((y) => y !== selectedYear),
+      totalsByYear: yearTotals,
+    });
+    // Optimistically update the unfiltered list so the student disappears
+    // from the carry-over panel immediately.
+    setAllTutees((prev) =>
+      prev.map((item) =>
+        item.id === t.id
+          ? {
+              ...item,
+              schoolYears: item.schoolYears?.includes(selectedYear)
+                ? item.schoolYears
+                : [...(item.schoolYears || []), selectedYear],
+              archivedForYears: (item.archivedForYears || []).filter(
+                (y) => y !== selectedYear
+              ),
+              totalsByYear: yearTotals,
+            }
+          : item
+      )
+    );
+  };
+
+  const handleEnrollSelected = async () => {
+    const targets = carryOverCandidates.filter((t) =>
+      selectedCarryOverIds.includes(t.id)
+    );
+    if (targets.length === 0) return;
+
+    let enrolled = 0;
+    const failed: string[] = [];
+
+    for (const t of targets) {
+      try {
+        await enrollInYear(t);
+        enrolled++;
+      } catch {
+        failed.push(t.id);
+      }
+    }
+
+    // Keep only the failures selected so they can be retried.
+    setSelectedCarryOverIds(failed);
+
+    if (enrolled > 0) {
+      toast.success(
+        `${enrolled} student${enrolled === 1 ? '' : 's'} enrolled in ${formatSchoolYear(selectedYear)}`
+      );
+    }
+    if (enrolled === 0 && failed.length > 0) {
+      toast.error('Failed to enroll students in this school year');
     }
   };
 
@@ -241,6 +313,9 @@ export const Tutees = () => {
   const handleUnarchive = async (id: string, name: string) => {
     try {
       await unarchiveTutee(id);
+      // Switch back to the active view so the restored student is visible
+      // immediately instead of staying hidden behind the archived filter.
+      setShowArchived(false);
       toast.success(`${name} restored for ${formatSchoolYear(selectedYear)}`);
       if (user) {
         await logActivity(
@@ -346,6 +421,7 @@ export const Tutees = () => {
         <TuteeForm
           tutee={editingTutee}
           subjects={subjects}
+          schoolYear={selectedYear}
           onSubmit={async (data, parentData) => {
             try {
               if (!user) {
@@ -376,12 +452,14 @@ export const Tutees = () => {
               // Create student first
               let studentId: string;
               if (editingTutee) {
-                const scheduleChanged = JSON.stringify(editingTutee.schedule) !== JSON.stringify(data.schedule);
+                const { schedule, ...rest } = data;
+                const scheduleChanged = JSON.stringify(getTuteeScheduleForYear(editingTutee, selectedYear)) !== JSON.stringify(schedule);
                 const parentChanged = editingTutee.parentId !== data.parentId;
 
-                await updateTutee(editingTutee.id, data);
+                await updateTutee(editingTutee.id, rest);
                 if (scheduleChanged) {
-                  await dayPaymentService.syncTuteeScheduleRecords(editingTutee.id, data.schedule);
+                  await tuteeService.setScheduleForYear(editingTutee.id, selectedYear, schedule);
+                  await dayPaymentService.syncTuteeScheduleRecords(editingTutee.id, schedule, selectedYear);
                 }
                 studentId = editingTutee.id;
                 toast.success('Tutee updated successfully');
@@ -569,21 +647,54 @@ export const Tutees = () => {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {carryOverCandidates.map((t) => (
-              <div key={t.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
-                <span className="text-sm font-semibold text-gray-800">{t.firstName} {t.surname}</span>
-                <span className="text-[10px] font-bold text-gray-400 uppercase">
-                  {t.schoolYears?.map(formatSchoolYear).join(', ')}
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <Checkbox
+                  checked={allCarryOverSelected ? true : someCarryOverSelected ? 'indeterminate' : false}
+                  onCheckedChange={toggleAllCarryOver}
+                  aria-label="Select all students to enroll"
+                />
+                <span className="text-sm font-semibold text-gray-700">
+                  {selectedCarryOverIds.length > 0
+                    ? `${selectedCarryOverIds.length} selected`
+                    : 'Select all'}
                 </span>
-                <button
-                  onClick={() => handleCarryOver(t)}
-                  className="text-xs font-bold text-green-700 hover:bg-green-100 px-2.5 py-1 rounded-lg transition-colors"
-                >
-                  Enroll
-                </button>
-              </div>
-            ))}
+              </label>
+              <button
+                type="button"
+                onClick={handleEnrollSelected}
+                disabled={selectedCarryOverIds.length === 0}
+                className="text-xs font-bold text-white bg-green-700 hover:bg-green-800 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Enroll selected
+              </button>
+            </div>
+            <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+              {carryOverCandidates.map((t) => {
+                const checked = selectedCarryOverIds.includes(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${checked ? 'bg-green-50/60' : 'hover:bg-gray-50'}`}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleCarryOver(t.id)}
+                      aria-label={`Select ${t.firstName} ${t.surname}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-800 truncate">
+                        {t.firstName} {t.surname}
+                      </div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase truncate">
+                        {t.schoolYears?.map(formatSchoolYear).join(', ')}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -707,7 +818,7 @@ export const Tutees = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-slate-400 font-medium">Schedule:</span>
-                    <span className="text-right font-medium text-gray-750 dark:text-slate-300 max-w-[180px] truncate">{formatSchedule(tutee.schedule)}</span>
+                    <span className="text-right font-medium text-gray-750 dark:text-slate-300 max-w-[180px] truncate">{formatSchedule(getTuteeScheduleForYear(tutee, selectedYear))}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-slate-400 font-medium">Sessions:</span>
@@ -745,11 +856,12 @@ export const Tutees = () => {
 interface TuteeFormProps {
   tutee: Tutee | null;
   subjects: { id: string; name: string }[];
+  schoolYear: string;
   onSubmit: (data: TuteeFormData, parentData?: { name: string; contactNumber: string }) => Promise<void> | void;
   onCancel: () => void;
 }
 
-const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
+const TuteeForm = ({ tutee, subjects, schoolYear, onSubmit, onCancel }: TuteeFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Ref guard prevents double-submit even before React state re-renders
   const submittingRef = useRef(false);
@@ -814,10 +926,11 @@ const TuteeForm = ({ tutee, subjects, onSubmit, onCancel }: TuteeFormProps) => {
 
   // Convert old string schedule to array format
   const getInitialSchedule = () => {
-    if (!tutee?.schedule) return [];
-    if (Array.isArray(tutee.schedule)) {
+    if (!tutee) return [];
+    const yearSchedule = getTuteeScheduleForYear(tutee, schoolYear);
+    if (Array.isArray(yearSchedule)) {
       // Ensure all items have startTime and endTime
-      return tutee.schedule.map(item => {
+      return yearSchedule.map(item => {
         if (typeof item === 'object' && item !== null && 'startTime' in item && 'endTime' in item) {
           return item;
         }

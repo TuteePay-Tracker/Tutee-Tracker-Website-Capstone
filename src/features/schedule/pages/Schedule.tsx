@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { Tutee, ScheduleItem } from '@/features/tutees/types/tutee';
+import { Tutee, ScheduleItem, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { Calendar, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { formatTime12h } from '@/shared/utils/formatDate';
@@ -12,6 +13,7 @@ import { db } from '@/shared/lib/firebase/config';
 export const Schedule = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
+  const { selectedYear } = useSchoolYear();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
@@ -62,8 +64,9 @@ export const Schedule = () => {
         return;
       }
 
-      if (Array.isArray(tutee.schedule)) {
-        const daySchedule = tutee.schedule.find(s => s.day === dayName);
+      const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
+      if (Array.isArray(tuteeSchedule)) {
+        const daySchedule = tuteeSchedule.find(s => typeof s !== 'string' && s.day === dayName);
         if (daySchedule && 'startTime' in daySchedule && 'endTime' in daySchedule) {
           schedules.push({ tutee, schedule: daySchedule });
         }

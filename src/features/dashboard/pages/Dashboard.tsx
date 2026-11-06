@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { usePayments } from '@/features/payments/hooks/usePayments';
 import { useReports } from '@/features/reports/hooks/useReports';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
-import { getTuteeYearTotals } from '@/features/tutees/types/tutee';
+import { getTuteeYearTotals, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
@@ -274,9 +274,10 @@ const ParentDashboard = () => {
 
     const childName = `${tutee.firstName} ${tutee.surname}`;
     const firstSubject = tutee.subjects?.[0] || tutee.subject || 'Tutoring';
+    const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
 
-    if (Array.isArray(tutee.schedule)) {
-      tutee.schedule.forEach((slot, index) => {
+    if (Array.isArray(tuteeSchedule)) {
+      tuteeSchedule.forEach((slot, index) => {
         if (typeof slot === 'object' && slot !== null) {
           if ('startTime' in slot && 'endTime' in slot) {
             combinedSchedule.push({
@@ -327,8 +328,8 @@ const ParentDashboard = () => {
           }
         }
       });
-    } else if (typeof tutee.schedule === 'string') {
-      const lines = tutee.schedule.split(/\r?\n|,/);
+    } else if (typeof tuteeSchedule === 'string') {
+      const lines = tuteeSchedule.split(/\r?\n|,/);
       lines.forEach((line, index) => {
         const trimmed = line.trim();
         if (!trimmed) return;

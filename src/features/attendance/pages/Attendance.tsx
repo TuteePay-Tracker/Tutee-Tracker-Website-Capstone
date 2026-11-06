@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
 import { PaymentRecord, AttendanceMark, AttendanceStatus, getDayAttendance } from '@/features/attendance/types/dayPayment';
-import { Tutee } from '@/features/tutees/types/tutee';
+import { Tutee, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
 import {
   CheckCircle2,
   XCircle,
@@ -119,10 +119,11 @@ export const Attendance = () => {
       return [];
     }
 
-    const scheduleDays: string[] = Array.isArray(tutee.schedule)
-      ? tutee.schedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
-      : typeof tutee.schedule === 'string'
-        ? (tutee.schedule as string).split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
+    const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
+    const scheduleDays: string[] = Array.isArray(tuteeSchedule)
+      ? tuteeSchedule.map((s: any) => typeof s === 'string' ? s : s?.day).filter(Boolean)
+      : typeof tuteeSchedule === 'string'
+        ? tuteeSchedule.split(/,|\r?\n/).map(s => s.trim()).filter(Boolean)
         : [];
 
     if (scheduleDays.length === 0) {
@@ -368,9 +369,12 @@ export const Attendance = () => {
                       <p className="text-xs text-gray-500">
                         {(tutee.subjects?.length ? tutee.subjects : [tutee.subject]).join(', ')}
                         {' · '}
-                        {Array.isArray(tutee.schedule) && tutee.schedule.length > 0
-                          ? tutee.schedule.map(s => s.day.slice(0, 3)).join(', ')
-                          : 'No schedule'}
+                        {(() => {
+                          const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
+                          return Array.isArray(tuteeSchedule) && tuteeSchedule.length > 0
+                            ? tuteeSchedule.map(s => s.day.slice(0, 3)).join(', ')
+                            : 'No schedule';
+                        })()}
                       </p>
                     </div>
                   </div>

@@ -126,7 +126,10 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
         if (user.role === 'tutor' && !migrationTriggered.current) {
           migrationTriggered.current = true;
           import('@/shared/utils/migrateSchoolYears')
-            .then((mod) => mod.migrateSchoolYears(resolvedUid))
+            .then(async (mod) => {
+              await mod.migrateSchoolYears(resolvedUid);
+              await mod.migrateTuteeSchedules(resolvedUid);
+            })
             .catch((error) => console.error('School year backfill error:', error));
         }
       } catch (error) {

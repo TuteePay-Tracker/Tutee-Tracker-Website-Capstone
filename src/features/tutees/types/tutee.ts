@@ -13,6 +13,8 @@ export interface Tutee {
   gradeLevel?: string;
   ratePerSession: number;
   schedule: ScheduleItem[] | string; // Support both new array and old string format
+  /** Per-school-year schedules, e.g. { "2026-27": ScheduleItem[] }. */
+  scheduleByYear?: Record<string, ScheduleItem[] | string>;
   email?: string;
   guardianNumber?: string;
   guardianEmail?: string;
@@ -75,6 +77,27 @@ export function isTuteeInSchoolYear(
   const years = tutee.schoolYears;
   if (!Array.isArray(years) || years.length === 0) return true;
   return years.includes(year);
+}
+
+/**
+ * Returns a student's schedule for a given school year.
+ *
+ * Schedules are stored per school year. When a year has no entry but the
+ * student already has per-year schedules, the year is intentionally blank
+ * (e.g. a newly carried-over school year should not inherit last year's
+ * timetable). Only legacy records with no `scheduleByYear` fall back to the
+ * flat `schedule` field.
+ */
+export function getTuteeScheduleForYear(
+  tutee: Pick<Tutee, 'schedule' | 'scheduleByYear'>,
+  year: string
+): ScheduleItem[] | string {
+  const byYear = tutee.scheduleByYear;
+  if (byYear && typeof byYear === 'object') {
+    if (year in byYear) return byYear[year];
+    if (Object.keys(byYear).length > 0) return [];
+  }
+  return tutee.schedule ?? [];
 }
 
 /**
