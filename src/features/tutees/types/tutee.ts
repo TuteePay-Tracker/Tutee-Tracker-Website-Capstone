@@ -80,6 +80,21 @@ export function isTuteeInSchoolYear(
 }
 
 /**
+ * True if the student is archived for the given school year.
+ * Legacy records without `archivedForYears` fall back to the flat `archived`
+ * flag.
+ */
+export function isTuteeArchivedForYear(
+  tutee: Pick<Tutee, 'archived' | 'archivedForYears'>,
+  year: string
+): boolean {
+  if (Array.isArray(tutee.archivedForYears)) {
+    return tutee.archivedForYears.includes(year);
+  }
+  return !!tutee.archived;
+}
+
+/**
  * Returns a student's schedule for a given school year.
  *
  * Schedules are stored per school year. When a year has no entry but the
