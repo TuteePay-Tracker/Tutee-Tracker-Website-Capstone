@@ -37,6 +37,9 @@ import { logActivity } from '@/shared/utils/auditLogger';
 import { removeParentAccount, updateParentTempPassword, CreatedParentCredentials } from '@/features/tutees/services/parentManagementService';
 import { CreateOrLinkParentModal } from '@/features/tutees/components/CreateOrLinkParentModal';
 import { ParentCredentialsModal } from '@/features/tutees/components/ParentCredentialsModal';
+import { findScheduleConflicts, hasBlockingConflicts, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
+import { ScheduleConflictAlert } from '@/features/schedule/components/ScheduleConflictAlert';
+import { ScheduleConflictOverrideDialog } from '@/features/schedule/components/ScheduleConflictOverrideDialog';
 
 export const TuteeDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -139,6 +142,24 @@ export const TuteeDetails = () => {
   const tutee = id ? getTuteeById(id) : undefined;
   const payments = id ? getPaymentsByTuteeId(id) : [];
 
+  const [pendingConflictOverride, setPendingConflictOverride] = useState<ScheduleConflict[] | null>(null);
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+
+  const editConflicts = useMemo(
+    () =>
+      findScheduleConflicts({
+        candidateSchedule: editForm.schedule,
+        candidateGradeLevel: editForm.gradeLevel,
+        candidateSubject: editForm.subjects[0],
+        candidateName: `${editForm.firstName} ${editForm.surname}`.trim() || 'This tutee',
+        candidateTuteeId: tutee?.id ?? 'candidate',
+        tutees,
+        schoolYear: selectedYear,
+        excludeTuteeId: tutee?.id,
+      }),
+    [editForm, tutees, selectedYear, tutee?.id]
+  );
+
   const handleStartEdit = () => {
     if (!tutee) return;
     const initialSchedule = getInitialScheduleFromTutee(tutee);
@@ -159,21 +180,10 @@ export const TuteeDetails = () => {
     setIsEditingInfo(true);
   };
 
-  const handleSaveInfo = async () => {
-    if (!tutee || !updateTutee) return;
+  const persistInfo = async (): Promise<boolean> => {
+    if (!tutee || !updateTutee) return false;
+    setIsSavingInfo(true);
     try {
-      if (!editForm.firstName.trim() || !editForm.surname.trim()) {
-        toast.error('First name and surname are required');
-        return;
-      }
-      if (editForm.subjects.length === 0) {
-        toast.error('Please select at least one subject');
-        return;
-      }
-      if (editForm.schedule.length === 0) {
-        toast.error('Please select at least one scheduled day');
-        return;
-      }
       const updates = {
         firstName: editForm.firstName.trim(),
         surname: editForm.surname.trim(),
@@ -202,10 +212,67 @@ export const TuteeDetails = () => {
           `Updated personal information and schedule for student ${updates.firstName} ${updates.surname}`
         );
       }
+      return true;
     } catch (error) {
       console.error('Failed to update tutee details:', error);
       toast.error('Failed to update personal information');
+      return false;
+    } finally {
+      setIsSavingInfo(false);
     }
+  };
+
+  const handleSaveInfo = async () => {
+    if (!tutee || !updateTutee) return;
+    if (!editForm.firstName.trim() || !editForm.surname.trim()) {
+      toast.error('First name and surname are required');
+      return;
+    }
+    if (editForm.subjects.length === 0) {
+      toast.error('Please select at least one subject');
+      return;
+    }
+    if (editForm.schedule.length === 0) {
+      toast.error('Please select at least one scheduled day');
+      return;
+    }
+
+    if (hasBlockingConflicts(editConflicts)) {
+      setPendingConflictOverride(
+        editConflicts.filter((conflict) => conflict.severity === 'blocking')
+      );
+      return;
+    }
+
+    await persistInfo();
+  };
+
+  const handleConfirmConflictOverride = async () => {
+    const conflicts = pendingConflictOverride ?? [];
+    const saved = await persistInfo();
+    if (!saved) return;
+
+    setPendingConflictOverride(null);
+
+    if (user && conflicts.length > 0) {
+      const details = conflicts
+        .map((conflict) =>
+          `${conflict.day} ${formatTime12h(conflict.firstStartTime)}-${formatTime12h(conflict.firstEndTime)} overlaps ${conflict.secondTuteeName}${conflict.secondGradeLevel ? ` (${conflict.secondGradeLevel})` : ''}`
+        )
+        .join('; ');
+      await logActivity(
+        user.id,
+        user.name,
+        user.role,
+        'Schedule Conflict Overridden',
+        'Students',
+        `Scheduled ${editForm.firstName} ${editForm.surname} in ${selectedYear} despite ${conflicts.length} cross-grade conflict${conflicts.length === 1 ? '' : 's'}: ${details}`
+      );
+    }
+  };
+
+  const handleCancelConflictOverride = () => {
+    setPendingConflictOverride(null);
   };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'reports' | 'topic-progress'>('overview');
@@ -709,7 +776,17 @@ export const TuteeDetails = () => {
                         <strong>Selected:</strong> {editForm.schedule.map(s => s.day).join(', ')} ({formatTime12h(scheduleTime.startTime)} - {formatTime12h(scheduleTime.endTime)})
                       </div>
                     )}
+
+                    <ScheduleConflictAlert conflicts={editConflicts} />
                   </div>
+
+                  <ScheduleConflictOverrideDialog
+                    open={pendingConflictOverride !== null}
+                    conflicts={pendingConflictOverride ?? []}
+                    onConfirm={handleConfirmConflictOverride}
+                    onCancel={handleCancelConflictOverride}
+                    confirming={isSavingInfo}
+                  />
                   <div className="flex gap-2.5 pt-3">
                     <button
                       onClick={handleSaveInfo}

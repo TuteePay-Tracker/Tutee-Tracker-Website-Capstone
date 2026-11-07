@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { logActivity } from '@/shared/utils/auditLogger';
@@ -9,7 +9,10 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User, CalendarRange } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear, isTuteeArchivedForYear } from '@/features/tutees/types/tutee';
+import { findScheduleConflicts, hasBlockingConflicts, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
+import { ScheduleConflictAlert } from '@/features/schedule/components/ScheduleConflictAlert';
+import { ScheduleConflictOverrideDialog } from '@/features/schedule/components/ScheduleConflictOverrideDialog';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { formatSchoolYear } from '@/shared/utils/schoolYear';
@@ -57,10 +60,7 @@ export const Tutees = () => {
 
   // A student is "archived" per school year. Legacy records without
   // archivedForYears fall back to the old flat `archived` flag.
-  const isArchivedThisYear = (t: Tutee): boolean => {
-    if (Array.isArray(t.archivedForYears)) return t.archivedForYears.includes(selectedYear);
-    return !!t.archived;
-  };
+  const isArchivedThisYear = (t: Tutee): boolean => isTuteeArchivedForYear(t, selectedYear);
 
   // Load the unfiltered list once to power the carry-over (enroll) panel and auto-sync totals.
   useEffect(() => {
@@ -422,6 +422,7 @@ export const Tutees = () => {
           tutee={editingTutee}
           subjects={subjects}
           schoolYear={selectedYear}
+          existingTutees={tutees}
           onSubmit={async (data, parentData) => {
             try {
               if (!user) {
@@ -857,14 +858,21 @@ interface TuteeFormProps {
   tutee: Tutee | null;
   subjects: { id: string; name: string }[];
   schoolYear: string;
+  existingTutees?: Tutee[];
   onSubmit: (data: TuteeFormData, parentData?: { name: string; contactNumber: string }) => Promise<void> | void;
   onCancel: () => void;
 }
 
-const TuteeForm = ({ tutee, subjects, schoolYear, onSubmit, onCancel }: TuteeFormProps) => {
+const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit, onCancel }: TuteeFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Ref guard prevents double-submit even before React state re-renders
   const submittingRef = useRef(false);
+  const [pendingOverride, setPendingOverride] = useState<ScheduleConflict[] | null>(null);
+  const pendingSubmitRef = useRef<{
+    submitData: TuteeFormData;
+    parentData?: { name: string; contactNumber: string };
+    conflicts: ScheduleConflict[];
+  } | null>(null);
   const [parentName, setParentName] = useState('');
   const [parentContact, setParentContact] = useState('');
   const [linkedParentId, setLinkedParentId] = useState<string | null>(tutee?.parentId || null);
@@ -1043,6 +1051,80 @@ const TuteeForm = ({ tutee, subjects, schoolYear, onSubmit, onCancel }: TuteeFor
     });
   };
 
+  const conflictCandidate = useMemo(
+    () =>
+      findScheduleConflicts({
+        candidateSchedule: formData.schedule,
+        candidateGradeLevel: formData.gradeLevel,
+        candidateSubject: formData.subjects[0],
+        candidateName: `${formData.firstName} ${formData.surname}`.trim() || 'This tutee',
+        candidateTuteeId: tutee?.id ?? 'candidate',
+        tutees: existingTutees,
+        schoolYear,
+        excludeTuteeId: tutee?.id,
+      }),
+    [
+      formData.schedule,
+      formData.gradeLevel,
+      formData.subjects,
+      formData.firstName,
+      formData.surname,
+      existingTutees,
+      schoolYear,
+      tutee?.id,
+    ]
+  );
+
+  const runSubmit = async (
+    submitData: TuteeFormData,
+    parentData?: { name: string; contactNumber: string }
+  ) => {
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await onSubmit(submitData, parentData);
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const logConflictOverride = async (conflicts: ScheduleConflict[], submitData: TuteeFormData) => {
+    if (!currentUser) return;
+    const details = conflicts
+      .map((conflict) =>
+        `${conflict.day} ${formatTime12h(conflict.firstStartTime)}-${formatTime12h(conflict.firstEndTime)} overlaps ${conflict.secondTuteeName}${conflict.secondGradeLevel ? ` (${conflict.secondGradeLevel})` : ''}`
+      )
+      .join('; ');
+    try {
+      await logActivity(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        'Schedule Conflict Overridden',
+        'Students',
+        `Scheduled ${submitData.firstName} ${submitData.surname} in ${schoolYear} despite ${conflicts.length} cross-grade conflict${conflicts.length === 1 ? '' : 's'}: ${details}`
+      );
+    } catch (error) {
+      console.error('Failed to log schedule conflict override:', error);
+    }
+  };
+
+  const handleConfirmOverride = async () => {
+    const pending = pendingSubmitRef.current;
+    if (!pending) return;
+    const { submitData, parentData, conflicts } = pending;
+    await runSubmit(submitData, parentData);
+    await logConflictOverride(conflicts, submitData);
+    pendingSubmitRef.current = null;
+    setPendingOverride(null);
+  };
+
+  const handleCancelOverride = () => {
+    pendingSubmitRef.current = null;
+    setPendingOverride(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Synchronous guard against double-submit
@@ -1093,14 +1175,14 @@ const TuteeForm = ({ tutee, subjects, schoolYear, onSubmit, onCancel }: TuteeFor
       contactNumber: newParentContactNumber.trim(),
     } : undefined;
 
-    submittingRef.current = true;
-    setIsSubmitting(true);
-    try {
-      await onSubmit(submitData, parentData);
-    } finally {
-      submittingRef.current = false;
-      setIsSubmitting(false);
+    if (hasBlockingConflicts(conflictCandidate)) {
+      const blocking = conflictCandidate.filter((conflict) => conflict.severity === 'blocking');
+      pendingSubmitRef.current = { submitData, parentData, conflicts: blocking };
+      setPendingOverride(blocking);
+      return;
     }
+
+    await runSubmit(submitData, parentData);
   };
 
   return (
@@ -1589,6 +1671,8 @@ const TuteeForm = ({ tutee, subjects, schoolYear, onSubmit, onCancel }: TuteeFor
                 <strong>Selected Schedule:</strong> {formData.schedule.map(s => s.day).join(', ')} at {formatTime12h(scheduleTime.startTime)} - {formatTime12h(scheduleTime.endTime)}
               </div>
             )}
+
+            <ScheduleConflictAlert conflicts={conflictCandidate} />
           </div>
         </div>
 
@@ -1620,6 +1704,14 @@ const TuteeForm = ({ tutee, subjects, schoolYear, onSubmit, onCancel }: TuteeFor
           </button>
         </div>
       </form>
+
+      <ScheduleConflictOverrideDialog
+        open={pendingOverride !== null}
+        conflicts={pendingOverride ?? []}
+        onConfirm={handleConfirmOverride}
+        onCancel={handleCancelOverride}
+        confirming={isSubmitting}
+      />
     </div>
   );
 };
