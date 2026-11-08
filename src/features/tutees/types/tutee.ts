@@ -11,6 +11,8 @@ export interface Tutee {
   subject: string;
   subjects?: string[];
   gradeLevel?: string;
+  /** Per-school-year grade levels, e.g. { "2026-27": "Grade 3", "2027-28": "Grade 4" }. */
+  gradeLevelByYear?: Record<string, string>;
   ratePerSession: number;
   schedule: ScheduleItem[] | string; // Support both new array and old string format
   /** Per-school-year schedules, e.g. { "2026-27": ScheduleItem[] }. */
@@ -346,4 +348,69 @@ export function initTotalsByYear(year: string): Record<string, TuteeTotalsByYear
   return {
     [year]: { totalSessions: 0, totalPaid: 0, balance: 0 },
   };
+}
+
+/**
+ * Returns the tutee's grade level for a specific school year.
+ * First checks the per-year map; falls back to the flat `gradeLevel`.
+ */
+export function getTuteeGradeLevelForYear(
+  tutee: Pick<Tutee, 'gradeLevel' | 'gradeLevelByYear'>,
+  year: string
+): string | undefined {
+  if (tutee.gradeLevelByYear && year in tutee.gradeLevelByYear) {
+    return tutee.gradeLevelByYear[year];
+  }
+  return tutee.gradeLevel;
+}
+
+/**
+ * Returns the next grade level string.
+ * "Grade 1" → "Grade 2", ..., "Grade 6" → "Grade 7".
+ * Returns the original grade for unrecognised formats.
+ */
+export function getNextGradeLevel(currentGrade?: string): string | undefined {
+  if (!currentGrade) return undefined;
+  const match = currentGrade.trim().match(/^Grade\s+(\d+)$/i);
+  if (match) {
+    return `Grade ${parseInt(match[1], 10) + 1}`;
+  }
+  return currentGrade; // non-standard grade — return as-is
+}
+
+/**
+ * Calculates the auto-promoted grade level when enrolling a tutee into a new
+ * school year. It finds the most recent prior school year the tutee was in,
+ * reads that year's grade level, and advances it by one.
+ *
+ * Returns undefined when no prior enrollment is found (first-time enrolment).
+ */
+export function getPromotedGradeLevelForNewYear(
+  tutee: Pick<Tutee, 'gradeLevel' | 'gradeLevelByYear' | 'schoolYears'>,
+  newYear: string
+): string | undefined {
+  const enrolledYears = tutee.schoolYears;
+  if (!Array.isArray(enrolledYears) || enrolledYears.length === 0) return undefined;
+
+  // Parse the start year of newYear (e.g. "2027-28" → 2027)
+  const newStartYear = parseInt(newYear.slice(0, 4), 10);
+  if (isNaN(newStartYear)) return undefined;
+
+  // Find the most recent school year strictly before newYear
+  let priorYear: string | undefined;
+  let priorStartYear = -1;
+
+  for (const sy of enrolledYears) {
+    if (sy === newYear) continue; // skip if already enrolled
+    const syStart = parseInt(sy.slice(0, 4), 10);
+    if (!isNaN(syStart) && syStart < newStartYear && syStart > priorStartYear) {
+      priorStartYear = syStart;
+      priorYear = sy;
+    }
+  }
+
+  if (!priorYear) return undefined;
+
+  const priorGrade = getTuteeGradeLevelForYear(tutee, priorYear);
+  return getNextGradeLevel(priorGrade);
 }

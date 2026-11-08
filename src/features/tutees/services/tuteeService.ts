@@ -201,6 +201,10 @@ class TuteeService {
             ? cleanedTutee.schoolYears
             : [schoolYear],
         archivedForYears: cleanedTutee.archivedForYears || [],
+        gradeLevelByYear:
+          cleanedTutee.gradeLevelByYear && typeof cleanedTutee.gradeLevelByYear === 'object'
+            ? cleanedTutee.gradeLevelByYear
+            : (cleanedTutee.gradeLevel ? { [schoolYear]: cleanedTutee.gradeLevel } : {}),
         scheduleByYear:
           cleanedTutee.scheduleByYear && typeof cleanedTutee.scheduleByYear === 'object'
             ? cleanedTutee.scheduleByYear

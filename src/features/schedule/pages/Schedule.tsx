@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { Tutee, NormalizedScheduleItem, getTuteeScheduleForYear, normalizeScheduleItems, isTuteeArchivedForYear } from '@/features/tutees/types/tutee';
+import { Tutee, NormalizedScheduleItem, getTuteeScheduleForYear, normalizeScheduleItems, isTuteeArchivedForYear, getTuteeGradeLevelForYear } from '@/features/tutees/types/tutee';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { Calendar, ChevronLeft, ChevronRight, Filter, AlertTriangle, Users } from 'lucide-react';
 import {
@@ -576,8 +576,8 @@ export const Schedule = () => {
                               <p className={`text-sm ${isMakeUp ? 'text-amber-700 font-medium' : 'text-gray-600'}`}>
                                 {isMakeUp ? 'Make-up class' : tutee.subject}
                               </p>
-                              {tutee.gradeLevel && (
-                                <p className="text-xs text-gray-500">{tutee.gradeLevel}</p>
+                              {getTuteeGradeLevelForYear(tutee, selectedYear) && (
+                                <p className="text-xs text-gray-500">{getTuteeGradeLevelForYear(tutee, selectedYear)}</p>
                               )}
                             </div>
                             <div className="text-right">

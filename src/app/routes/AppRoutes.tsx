@@ -43,8 +43,8 @@ const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; 
     return <Navigate to="/super-admin" replace />;
   }
 
-  // Parent must change password before accessing the app
-  if (user.mustChangePassword && user.role === 'parent') {
+  // Users (parents or tutors) who must change password before accessing the app
+  if (user.mustChangePassword) {
     return <Navigate to="/change-password" replace />;
   }
 
@@ -67,8 +67,8 @@ const PublicRoute = ({ children }: { children: ReactNode }) => {
     if (user.role === 'super_admin') {
       return <Navigate to="/super-admin" replace />;
     }
-    // Parent who must change password goes to change-password, not home
-    if (user.mustChangePassword && user.role === 'parent') {
+    // Users who must change password go to change-password, not home
+    if (user.mustChangePassword) {
       return <Navigate to="/change-password" replace />;
     }
     return <Navigate to="/" replace />;
@@ -77,7 +77,7 @@ const PublicRoute = ({ children }: { children: ReactNode }) => {
   return <>{children}</>;
 };
 
-// Special route: only accessible to parents who need to change password
+// Special route: only accessible to users (parents or tutors) who need to change password
 const ChangePasswordRoute = ({ children }: { children: ReactNode }) => {
   const { user, isLoading } = useAuth();
 
@@ -107,7 +107,7 @@ const SuperAdminRoute = ({ children }: { children: ReactNode }) => {
   if (!user) return <Navigate to="/login" replace />;
 
   if (user.role !== 'super_admin') {
-    if (user.mustChangePassword && user.role === 'parent') {
+    if (user.mustChangePassword) {
       return <Navigate to="/change-password" replace />;
     }
     return <Navigate to="/" replace />;

@@ -1,5 +1,6 @@
 import {
   getTuteeScheduleForYear,
+  getTuteeGradeLevelForYear,
   isTuteeArchivedForYear,
   isTuteeInSchoolYear,
   normalizeScheduleItems,
@@ -207,12 +208,12 @@ export function areSubjectsExactMatch(
  * This mirrors the group-session rule used by `buildConflict`.
  */
 export function areTuteesInSameRegularGroup(
-  first: Pick<Tutee, 'gradeLevel' | 'subject' | 'subjects' | 'schedule' | 'scheduleByYear'>,
-  second: Pick<Tutee, 'gradeLevel' | 'subject' | 'subjects' | 'schedule' | 'scheduleByYear'>,
+  first: Pick<Tutee, 'gradeLevel' | 'gradeLevelByYear' | 'subject' | 'subjects' | 'schedule' | 'scheduleByYear'>,
+  second: Pick<Tutee, 'gradeLevel' | 'gradeLevelByYear' | 'subject' | 'subjects' | 'schedule' | 'scheduleByYear'>,
   schoolYear: string
 ): boolean {
-  const firstGrade = normalizeGrade(first.gradeLevel);
-  const secondGrade = normalizeGrade(second.gradeLevel);
+  const firstGrade = normalizeGrade(getTuteeGradeLevelForYear(first, schoolYear));
+  const secondGrade = normalizeGrade(getTuteeGradeLevelForYear(second, schoolYear));
   if (!firstGrade || !secondGrade || firstGrade !== secondGrade) return false;
 
   const firstSubjects =
@@ -382,7 +383,7 @@ export function findScheduleConflicts({
             firstEndTime: slot.endTime,
             secondTuteeId: tutee.id,
             secondTuteeName: tuteeName,
-            secondGradeLevel: tutee.gradeLevel,
+            secondGradeLevel: getTuteeGradeLevelForYear(tutee, schoolYear),
             secondSubject: tutee.subject,
             secondSubjects: existingSubjects,
             secondStartTime: existing.startTime,

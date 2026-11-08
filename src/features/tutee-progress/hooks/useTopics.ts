@@ -121,15 +121,16 @@ export function useTopics() {
 
   /**
    * Returns topics for a given subject filtered by grade level.
-   * Topics with no gradeLevel set are always included (backward-compatible).
+   * If a grade level is specified, only returns topics assigned to that grade level.
    */
   const getTopicsForSubjectAndGrade = useCallback(
     (subject: string, gradeLevel?: string) => {
       const lower = subject.trim().toLowerCase();
+      const trimmedGrade = gradeLevel?.trim().toLowerCase();
       return topicsForSelectedYear.filter((t) => {
         if (t.subject.trim().toLowerCase() !== lower) return false;
-        if (!gradeLevel || !t.gradeLevel) return true;
-        return t.gradeLevel === gradeLevel;
+        if (!trimmedGrade) return true;
+        return t.gradeLevel?.trim().toLowerCase() === trimmedGrade;
       });
     },
     [topicsForSelectedYear]

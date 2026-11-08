@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/shared/lib/firebase/config';
 import { registerUser, loginUser, logoutUser, resetPassword as resetUserPassword } from '@/shared/lib/firebase/auth';
 import { logActivity } from '@/shared/utils/auditLogger';
@@ -164,6 +164,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => unsubscribe();
   }, []);
 
+  // Watch the signed-in tutor's profile so deactivation takes effect immediately
+  // without waiting for a token refresh or a manual page reload.
+  useEffect(() => {
+    if (!user || user.role !== 'tutor') return;
+
+    let cancelled = false;
+    const unsubscribe = onSnapshot(
+      doc(db, 'users', user.id),
+      (snapshot) => {
+        if (cancelled) return;
+
+        if (!snapshot.exists()) {
+          toast.error('Account not provisioned. Please contact your administrator.');
+          void logoutUser().catch(() => undefined);
+          setUser(null);
+          return;
+        }
+
+        const status = snapshot.data().status;
+        if (typeof status === 'string' && status !== 'active') {
+          toast.error('Your account is inactive. Please contact your administrator.');
+          void logoutUser().catch(() => undefined);
+          setUser(null);
+        }
+      },
+      (error) => {
+        console.warn('Tutor status watcher error:', error);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [user?.id, user?.role]);
+
   const login = async (email: string, password: string): Promise<UserRole> => {
     setIsLoading(true);
     try {
@@ -208,7 +244,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (error?.message && !error?.code) {
         throw error;
       }
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+      if (error.code === 'auth/user-disabled') {
+        throw new Error('Your account has been deactivated. Please contact your administrator.');
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         throw new Error('Invalid email or password');
       } else if (error.code === 'auth/user-not-found') {
         throw new Error('No account found with this email');
@@ -224,49 +262,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const signup = async (email: string, password: string, name: string, role: 'tutor' | 'parent' = 'tutor') => {
-    isSigningUp.current = true;
-    setIsLoading(true);
-    try {
-      // Create user in Firebase Auth
-      const firebaseUser = await registerUser(email, password, name);
-      
-      const newUserData: User = {
-        id: firebaseUser.uid,
-        email: email,
-        name: name,
-        role: role,
-        status: 'active',
-        mustChangePassword: false,
-        linkedStudentIds: [],
-      };
-
-      // Create user document in Firestore
-      await setDoc(doc(db, 'users', firebaseUser.uid), {
-        name: name,
-        email: email,
-        role: role,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-      });
-
-      setUser(newUserData);
-      setIsLoading(false);
-    } catch (error: any) {
-      setIsLoading(false);
-      // Re-throw error with user-friendly message
-      if (error.code === 'auth/email-already-in-use') {
-        throw new Error('An account with this email already exists');
-      } else if (error.code === 'auth/invalid-email') {
-        throw new Error('Invalid email address');
-      } else if (error.code === 'auth/weak-password') {
-        throw new Error('Password is too weak. Please use a stronger password');
-      } else {
-        throw new Error(error.message || 'Signup failed. Please try again');
-      }
-    } finally {
-      isSigningUp.current = false;
-    }
+  const signup = async (_email: string, _password: string, _name: string, _role: 'tutor' | 'parent' = 'tutor') => {
+    throw new Error('Public tutor self-registration is disabled. Please contact the Super Admin to provision your account.');
   };
 
   const refreshUser = async () => {

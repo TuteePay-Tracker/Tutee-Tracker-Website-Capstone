@@ -159,7 +159,7 @@ export const ChangePassword = () => {
         <div className="mt-4 text-center">
           <div className="inline-flex items-center gap-2 text-gray-600 text-sm">
             <GraduationCap size={16} className="text-green-700" />
-            <span>Tutor Track — Secure Parent Portal</span>
+            <span>Tutor Track — Secure Portal</span>
           </div>
         </div>
       </div>

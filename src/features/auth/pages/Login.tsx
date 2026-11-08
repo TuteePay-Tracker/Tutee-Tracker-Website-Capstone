@@ -324,23 +324,10 @@ export const Login = () => {
               </button>
             </form>
 
-            <div className="relative my-8">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">New to TutorTrack?</span>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors group"
-              >
-                <span>Create an account</span>
-                <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-              </Link>
+            <div className="mt-8 text-center">
+              <p className="text-xs text-gray-500">
+                Tutor accounts are provisioned by the Administrator. If you do not have an account, please contact your Super Admin.
+              </p>
             </div>
           </div>
         </div>

@@ -87,18 +87,23 @@ export const SuperAdminActivityLogs = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Activity Logs</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Audit trail of tutor and parent actions across the platform.
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Activity Logs</h1>
+            <span className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">
+              Super Admin
+            </span>
+          </div>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">
+            Audit trail of tutor and parent actions across the platform
           </p>
         </div>
         <button
           type="button"
           onClick={loadData}
           disabled={isLoading}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="self-start sm:self-auto bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
           Refresh

@@ -72,7 +72,7 @@ interface AssessmentFormProps {
 
 function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, onCancel }: AssessmentFormProps) {
   const { user } = useAuth();
-  const { getTopicsForSubject } = useTopics();
+  const { getTopicsForSubjectAndGrade } = useTopics();
   const { saveProgress } = useTopicProgress();
   const getInitialScores = (): AssessmentScoreDraft[] => toScoreDrafts(editing);
 
@@ -141,8 +141,16 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
       ...f,
       tuteeId: id,
       tuteeName: found ? `${found.firstName} ${found.surname}` : '',
+      // Automatically reset topic when switching student if not editing or custom
+      topic: isCustomTopic ? f.topic : '',
     }));
   };
+
+  // Currently selected student object
+  const selectedStudent = useMemo(
+    () => tutees.find((t) => t.id === form.tuteeId),
+    [tutees, form.tuteeId]
+  );
 
   // Students enrolled in the currently selected subject.
   const enrolledTutees = useMemo(
@@ -162,10 +170,10 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
     return selected ? [...enrolledTutees, selected] : enrolledTutees;
   }, [enrolledTutees, tutees, form.tuteeId]);
 
-  // Tutor-configured topics for this subject
+  // Tutor-configured topics filtered by subject and the selected student's grade level
   const availableTopics = useMemo(
-    () => getTopicsForSubject(form.subject),
-    [getTopicsForSubject, form.subject]
+    () => getTopicsForSubjectAndGrade(form.subject, selectedStudent?.gradeLevel),
+    [getTopicsForSubjectAndGrade, form.subject, selectedStudent?.gradeLevel]
   );
 
   const updateAssessmentScore = (index: number, field: 'name' | 'score' | 'totalScore', value: string) => {
@@ -401,6 +409,7 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
             {availableTopics.length > 0 && (
               <span className="text-[10px] text-green-700 font-semibold whitespace-nowrap">
                 {availableTopics.length} topic{availableTopics.length > 1 ? 's' : ''} available
+                {selectedStudent?.gradeLevel ? ` (${selectedStudent.gradeLevel})` : ''}
               </span>
             )}
           </div>
@@ -443,7 +452,9 @@ function AssessmentForm({ tutorId, tutees, subjects, defaultSubject, editing, on
             >
               <option value="">
                 {availableTopics.length === 0
-                  ? 'No topics available for this subject'
+                  ? selectedStudent?.gradeLevel
+                    ? `No topics created for ${selectedStudent.gradeLevel} in ${form.subject}`
+                    : 'No topics available for this subject'
                   : 'Select topic…'}
               </option>
               {availableTopics.map((t) => (

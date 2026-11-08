@@ -1,3 +1,5 @@
+export type TutorAccountStatus = 'active' | 'inactive';
+
 export interface TutorAccount {
   id: string;
   name: string;
@@ -6,6 +8,28 @@ export interface TutorAccount {
   status: string;
   contactNumber?: string;
   photoUrl?: string;
+}
+
+export interface SetTutorAccountStatusResult {
+  ok: boolean;
+  uid: string;
+  status: TutorAccountStatus;
+  disabled: boolean;
+}
+
+export interface DeletedTutorParentSummary {
+  uid: string;
+  email: string | null;
+}
+
+export interface DeleteTutorAccountResult {
+  ok: boolean;
+  uid: string;
+  email: string | null;
+  alreadyDeleted: boolean;
+  deletedParents: DeletedTutorParentSummary[];
+  deletedCollections: string[];
+  deletedChatThreads: number;
 }
 
 export interface ParentAccount {

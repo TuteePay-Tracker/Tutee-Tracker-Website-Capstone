@@ -19,7 +19,7 @@ import { useTopics } from '@/features/tutee-progress/hooks/useTopics';
 import { useTopicProgress } from '@/features/tutee-progress/hooks/useTopicProgress';
 import { getPerformanceLevelConfig } from '@/features/tutee-progress/types/topic';
 import { ProgressReportModal } from '@/features/tutee-progress/components/ProgressReportModal';
-import { Tutee, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear } from '@/features/tutees/types/tutee';
+import { Tutee, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear, getTuteeGradeLevelForYear } from '@/features/tutees/types/tutee';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
@@ -176,7 +176,7 @@ export const TuteeDetails = () => {
       guardianNumber: tutee.guardianNumber || '',
       guardianEmail: tutee.guardianEmail || '',
       address: tutee.address || '',
-      gradeLevel: tutee.gradeLevel || '',
+      gradeLevel: getTuteeGradeLevelForYear(tutee, selectedYear) || '',
       ratePerSession: tutee.ratePerSession || 0,
       subjects: tutee.subjects?.length ? tutee.subjects : (tutee.subject ? [tutee.subject] : []),
       schedule: initialSchedule,
@@ -189,6 +189,10 @@ export const TuteeDetails = () => {
     if (!tutee || !updateTutee) return false;
     setIsSavingInfo(true);
     try {
+      const updatedGradeLevelByYear = {
+        ...(tutee.gradeLevelByYear || {}),
+        ...(editForm.gradeLevel ? { [selectedYear]: editForm.gradeLevel } : {}),
+      };
       const updates = {
         firstName: editForm.firstName.trim(),
         surname: editForm.surname.trim(),
@@ -197,6 +201,7 @@ export const TuteeDetails = () => {
         guardianEmail: editForm.guardianEmail.trim(),
         address: editForm.address.trim(),
         gradeLevel: editForm.gradeLevel,
+        gradeLevelByYear: updatedGradeLevelByYear,
         ratePerSession: Number(editForm.ratePerSession),
         subjects: editForm.subjects,
         subject: editForm.subjects[0] || '', // primary subject
@@ -849,12 +854,12 @@ export const TuteeDetails = () => {
                       </div>
                     </div>
                   )}
-                  {tutee.gradeLevel && (
+                  {getTuteeGradeLevelForYear(tutee, selectedYear) && (
                     <div className="flex items-center gap-3 text-sm text-gray-700">
                       <GraduationCap size={18} className="text-gray-400 shrink-0" />
                       <div>
                         <div className="text-xs text-gray-400 font-medium">Grade Level</div>
-                        <div className="font-semibold mt-0.5">{tutee.gradeLevel}</div>
+                        <div className="font-semibold mt-0.5">{getTuteeGradeLevelForYear(tutee, selectedYear)}</div>
                       </div>
                     </div>
                   )}
@@ -2152,8 +2157,9 @@ const TopicProgressTabContent = ({
 }: TopicProgressTabProps) => {
   const tuteeSubjects = tutee.subjects?.length ? tutee.subjects : (tutee.subject ? [tutee.subject] : []);
   const currentSubject = activeTopicSubject || tuteeSubjects[0] || '';
-  // Filter topics by the student's grade level (topics with no grade are always included)
-  const subjectTopics = getTopicsForSubjectAndGrade(currentSubject, tutee.gradeLevel);
+  // Filter topics by the student's grade level for the current school year
+  const tuteeGradeThisYear = getTuteeGradeLevelForYear(tutee, selectedYear);
+  const subjectTopics = getTopicsForSubjectAndGrade(currentSubject, tuteeGradeThisYear);
   const summary = computeStudentSummary(tutee.id, currentSubject, subjectTopics.map((t) => t.id));
 
   return (
@@ -2222,8 +2228,8 @@ const TopicProgressTabContent = ({
           <BookOpen className="mx-auto text-gray-300 mb-4" size={48} />
           <p className="text-gray-500 text-lg">No topics added yet</p>
           <p className="text-gray-400 text-sm mt-1">
-            {tutee.gradeLevel
-              ? `Your tutor has not set up topics for ${currentSubject || 'this subject'} at ${tutee.gradeLevel} yet.`
+            {tuteeGradeThisYear
+              ? `Your tutor has not set up topics for ${currentSubject || 'this subject'} at ${tuteeGradeThisYear} yet.`
               : `Your tutor has not set up topics for ${currentSubject || 'this subject'} yet.`}
           </p>
         </div>
@@ -2315,7 +2321,7 @@ const TopicProgressTabContent = ({
           studentId={tutee.id}
           studentName={`${tutee.firstName} ${tutee.surname}`}
           subject={reportModalSubject}
-          topics={getTopicsForSubject(reportModalSubject)}
+          topics={getTopicsForSubjectAndGrade(reportModalSubject, tuteeGradeThisYear)}
           progressMap={progressMap}
           assessments={assessments}
           schoolYear={selectedYear}

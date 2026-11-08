@@ -67,7 +67,7 @@ import { TopicManagementModal } from '@/features/tutee-progress/components/Topic
 import { TopicFormModal } from '@/features/tutee-progress/components/TopicFormModal';
 import { TopicProgressModal } from '@/features/tutee-progress/components/TopicProgressModal';
 import { ProgressReportModal } from '@/features/tutee-progress/components/ProgressReportModal';
-import { Tutee } from '@/features/tutees/types/tutee';
+import { Tutee, getTuteeGradeLevelForYear } from '@/features/tutees/types/tutee';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 
 // ─── Analytics helpers ───────────────────────────────────────────────────────
@@ -784,17 +784,18 @@ function SubjectSection({
 
   // Students list for this subject
   const subjectStudents = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
+    const map = new Map<string, { id: string; name: string; gradeLevel?: string }>();
 
     tutees.forEach((t) => {
       if (tuteeEnrolledInSubject(t, activeSubject)) {
-        map.set(t.id, { id: t.id, name: `${t.firstName} ${t.surname}` });
+        map.set(t.id, { id: t.id, name: `${t.firstName} ${t.surname}`, gradeLevel: getTuteeGradeLevelForYear(t, selectedYear) });
       }
     });
 
     filteredAssessments.forEach((a) => {
       if (!map.has(a.tuteeId)) {
-        map.set(a.tuteeId, { id: a.tuteeId, name: a.tuteeName });
+        const found = tutees.find((t) => t.id === a.tuteeId);
+        map.set(a.tuteeId, { id: a.tuteeId, name: a.tuteeName, gradeLevel: found ? getTuteeGradeLevelForYear(found, selectedYear) : undefined });
       }
     });
 
@@ -808,9 +809,12 @@ function SubjectSection({
 
   // Filtered students by search & status
   const filteredStudents = useMemo(() => {
-    const topicIds = currentSubjectTopics.map((t) => t.id);
-
     return subjectStudents.filter((student) => {
+      const studentTopics = student.gradeLevel
+        ? currentSubjectTopics.filter((t) => t.gradeLevel === student.gradeLevel)
+        : currentSubjectTopics;
+      const topicIds = studentTopics.map((t) => t.id);
+
       if (
         searchQuery &&
         !student.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1097,7 +1101,10 @@ function SubjectSection({
             </div>
           ) : (
             filteredStudents.map((student) => {
-              const topicIds = currentSubjectTopics.map((t) => t.id);
+              const studentTopics = student.gradeLevel
+                ? currentSubjectTopics.filter((t) => t.gradeLevel === student.gradeLevel)
+                : currentSubjectTopics;
+              const topicIds = studentTopics.map((t) => t.id);
               const summary = computeStudentSummary(student.id, activeSubject, topicIds);
 
               return (
@@ -1123,7 +1130,7 @@ function SubjectSection({
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {summary.masteredCount} of {currentSubjectTopics.length} topics mastered
+                          {summary.masteredCount} of {studentTopics.length} topics mastered
                           {summary.averageScore > 0 && ` • Avg Score: ${summary.averageScore}%`}
                         </p>
                       </div>
@@ -1156,99 +1163,105 @@ function SubjectSection({
 
                   {/* Topics Grid for this student */}
                   <div className="p-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                      {currentSubjectTopics.map((topic) => {
-                        const progress = progressMap.get(`${student.id}_${topic.id}`);
-                        const score = progress?.score ?? 0;
-                        const level =
-                          progress?.performanceLevel ??
-                          (score > 0 ? scoreToPerformanceLevel(score) : 'not-started');
-                        const config = getPerformanceLevelConfig(level);
+                    {studentTopics.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic py-2">
+                        No topics assigned for {student.gradeLevel || 'this grade level'}.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                        {studentTopics.map((topic) => {
+                          const progress = progressMap.get(`${student.id}_${topic.id}`);
+                          const score = progress?.score ?? 0;
+                          const level =
+                            progress?.performanceLevel ??
+                            (score > 0 ? scoreToPerformanceLevel(score) : 'not-started');
+                          const config = getPerformanceLevelConfig(level);
 
-                        return (
-                          <div
-                            key={topic.id}
-                            className="p-3.5 rounded-xl border border-gray-200 bg-gray-50/40 hover:bg-white hover:shadow-sm hover:border-gray-300 transition-all flex flex-col justify-between space-y-3"
-                          >
-                            <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <h5 className="font-bold text-xs text-gray-900 leading-snug line-clamp-1">
-                                  {topic.name}
-                                </h5>
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shrink-0 ${config.badgeClass}`}
-                                >
-                                  {config.label}
-                                </span>
+                          return (
+                            <div
+                              key={topic.id}
+                              className="p-3.5 rounded-xl border border-gray-200 bg-gray-50/40 hover:bg-white hover:shadow-sm hover:border-gray-300 transition-all flex flex-col justify-between space-y-3"
+                            >
+                              <div>
+                                <div className="flex items-start justify-between gap-2">
+                                  <h5 className="font-bold text-xs text-gray-900 leading-snug line-clamp-1">
+                                    {topic.name}
+                                  </h5>
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shrink-0 ${config.badgeClass}`}
+                                  >
+                                    {config.label}
+                                  </span>
+                                </div>
+                                {topic.description && (
+                                  <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1">
+                                    {topic.description}
+                                  </p>
+                                )}
                               </div>
-                              {topic.description && (
-                                <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1">
-                                  {topic.description}
-                                </p>
+
+                              {/* Measurable Progress Bar */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[11px] font-bold">
+                                  <span className="text-gray-500">Proficiency</span>
+                                  <span className={config.textClass}>{score}%</span>
+                                </div>
+                                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all duration-300 ${config.bgClass}`}
+                                    style={{ width: `${score}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Strengths & Weaknesses quick tags */}
+                              {(progress?.strengths || progress?.areasForImprovement) && (
+                                <div className="space-y-1 pt-1 text-[10px]">
+                                  {progress.strengths && (
+                                    <p className="text-green-800 line-clamp-1">
+                                      <strong>Strength:</strong> {progress.strengths}
+                                    </p>
+                                  )}
+                                  {progress.areasForImprovement && (
+                                    <p className="text-amber-800 line-clamp-1">
+                                      <strong>Focus:</strong> {progress.areasForImprovement}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Tutor Update Action */}
+                              {isTutor && (
+                                <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                                  <span className="text-[10px] text-gray-400">
+                                    {progress?.lastUpdated
+                                      ? `Updated ${new Date(progress.lastUpdated).toLocaleDateString()}`
+                                      : 'Not evaluated'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setProgressModalData({
+                                        studentId: student.id,
+                                        studentName: student.name,
+                                        subject: activeSubject,
+                                        topicId: topic.id,
+                                        topicName: topic.name,
+                                        currentProgress: progress,
+                                      })
+                                    }
+                                    className="text-xs font-semibold text-green-700 hover:text-green-800 hover:underline flex items-center gap-1"
+                                  >
+                                    <Edit2 size={11} />
+                                    <span>Update</span>
+                                  </button>
+                                </div>
                               )}
                             </div>
-
-                            {/* Measurable Progress Bar */}
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between text-[11px] font-bold">
-                                <span className="text-gray-500">Proficiency</span>
-                                <span className={config.textClass}>{score}%</span>
-                              </div>
-                              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full transition-all duration-300 ${config.bgClass}`}
-                                  style={{ width: `${score}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Strengths & Weaknesses quick tags */}
-                            {(progress?.strengths || progress?.areasForImprovement) && (
-                              <div className="space-y-1 pt-1 text-[10px]">
-                                {progress.strengths && (
-                                  <p className="text-green-800 line-clamp-1">
-                                    <strong>Strength:</strong> {progress.strengths}
-                                  </p>
-                                )}
-                                {progress.areasForImprovement && (
-                                  <p className="text-amber-800 line-clamp-1">
-                                    <strong>Focus:</strong> {progress.areasForImprovement}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Tutor Update Action */}
-                            {isTutor && (
-                              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                                <span className="text-[10px] text-gray-400">
-                                  {progress?.lastUpdated
-                                    ? `Updated ${new Date(progress.lastUpdated).toLocaleDateString()}`
-                                    : 'Not evaluated'}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setProgressModalData({
-                                      studentId: student.id,
-                                      studentName: student.name,
-                                      subject: activeSubject,
-                                      topicId: topic.id,
-                                      topicName: topic.name,
-                                      currentProgress: progress,
-                                    })
-                                  }
-                                  className="text-xs font-semibold text-green-700 hover:text-green-800 hover:underline flex items-center gap-1"
-                                >
-                                  <Edit2 size={11} />
-                                  <span>Update</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1267,13 +1280,16 @@ function SubjectSection({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredStudents.map((student) => {
-                const topicIds = currentSubjectTopics.map((t) => t.id);
+                const studentTopics = student.gradeLevel
+                  ? currentSubjectTopics.filter((t) => t.gradeLevel === student.gradeLevel)
+                  : currentSubjectTopics;
+                const topicIds = studentTopics.map((t) => t.id);
                 const summary = computeStudentSummary(student.id, activeSubject, topicIds);
 
                 const strengths: string[] = [];
                 const improvements: string[] = [];
 
-                currentSubjectTopics.forEach((t) => {
+                studentTopics.forEach((t) => {
                   const p = progressMap.get(`${student.id}_${t.id}`);
                   if (p?.strengths) {
                     strengths.push(`${t.name}: ${p.strengths}`);
@@ -1701,20 +1717,27 @@ function SubjectSection({
       )}
 
       {/* ── Full Progress Report Modal ── */}
-      {reportModalData && (
-        <ProgressReportModal
-          isOpen={true}
-          onClose={() => setReportModalData(null)}
-          studentId={reportModalData.studentId}
-          studentName={reportModalData.studentName}
-          subject={activeSubject}
-          topics={currentSubjectTopics}
-          progressMap={progressMap}
-          assessments={assessments}
-          schoolYear={selectedYear}
-          tutorName={user?.role === 'tutor' ? user.name : undefined}
-        />
-      )}
+      {reportModalData && (() => {
+        const studentObj = tutees.find((t) => t.id === reportModalData.studentId);
+        const reportTopics = studentObj?.gradeLevel
+          ? currentSubjectTopics.filter((t) => t.gradeLevel === studentObj.gradeLevel)
+          : currentSubjectTopics;
+
+        return (
+          <ProgressReportModal
+            isOpen={true}
+            onClose={() => setReportModalData(null)}
+            studentId={reportModalData.studentId}
+            studentName={reportModalData.studentName}
+            subject={activeSubject}
+            topics={reportTopics}
+            progressMap={progressMap}
+            assessments={assessments}
+            schoolYear={selectedYear}
+            tutorName={user?.role === 'tutor' ? user.name : undefined}
+          />
+        );
+      })()}
     </div>
   );
 }

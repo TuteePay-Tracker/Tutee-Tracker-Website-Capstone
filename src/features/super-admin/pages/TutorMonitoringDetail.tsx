@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import {
   ArrowLeft,
   CalendarCheck,
@@ -24,14 +24,19 @@ import type { TutorMonitoringDetail as TutorMonitoringDetailData } from '../type
 import { ActivityTable } from '../components/ActivityTable';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
+import { SuperAdminPagination } from '../components/SuperAdminPagination';
+import { TutorAccountActions } from '../components/TutorAccountActions';
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 export const TutorMonitoringDetail = () => {
   const { tutorId } = useParams<{ tutorId: string }>();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<TutorMonitoringDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tuteesPage, setTuteesPage] = useState(1);
+  const [parentsPage, setParentsPage] = useState(1);
 
   const loadDetail = async () => {
     if (!tutorId) {
@@ -111,13 +116,21 @@ export const TutorMonitoringDetail = () => {
             {tutor.contactNumber && <span>· {tutor.contactNumber}</span>}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={loadDetail}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
-        >
-          <RefreshCw size={16} /> Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <TutorAccountActions
+            tutor={tutor}
+            onChanged={loadDetail}
+            onDeleted={() => navigate('/super-admin/tutors')}
+            showViewDetails={false}
+          />
+          <button
+            type="button"
+            onClick={loadDetail}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+          >
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -259,83 +272,109 @@ export const TutorMonitoringDetail = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-4">
-            <h3 className="text-base font-bold text-gray-900">Tutees</h3>
-            <p className="text-xs text-gray-500">
-              {detail.totalTutees} tutee{detail.totalTutees === 1 ? '' : 's'} registered
-              under this tutor.
-            </p>
-          </div>
-          {detail.tutees.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="px-4">Name</TableHead>
-                  <TableHead className="px-4">Subject</TableHead>
-                  <TableHead className="px-4 text-right">Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {detail.tutees.map((tutee) => (
-                  <TableRow key={tutee.id}>
-                    <TableCell className="px-4 py-3 font-medium text-gray-900">
-                      {tutee.name}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-gray-600">
-                      {tutee.subject || '—'}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-right font-semibold text-gray-900">
-                      {formatCurrency(tutee.balance)}
-                    </TableCell>
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-base font-bold text-gray-900">Tutees</h3>
+              <p className="text-xs text-gray-500">
+                {detail.totalTutees} tutee{detail.totalTutees === 1 ? '' : 's'} registered
+                under this tutor.
+              </p>
+            </div>
+            {detail.tutees.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-4">Name</TableHead>
+                    <TableHead className="px-4">Subject</TableHead>
+                    <TableHead className="px-4 text-right">Balance</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="p-6 text-sm text-gray-500">No tutees registered.</div>
+                </TableHeader>
+                <TableBody>
+                  {detail.tutees
+                    .slice((tuteesPage - 1) * 5, tuteesPage * 5)
+                    .map((tutee) => (
+                      <TableRow key={tutee.id}>
+                        <TableCell className="px-4 py-3 font-medium text-gray-900">
+                          {tutee.name}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-gray-600">
+                          {tutee.subject || '—'}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-right font-semibold text-gray-900">
+                          {formatCurrency(tutee.balance)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="p-6 text-sm text-gray-500">No tutees registered.</div>
+            )}
+          </div>
+          {detail.tutees.length > 0 && (
+            <SuperAdminPagination
+              currentPage={tuteesPage}
+              totalItems={detail.tutees.length}
+              pageSize={5}
+              onPageChange={setTuteesPage}
+              itemLabel="tutees"
+            />
           )}
         </section>
 
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-4">
-            <h3 className="text-base font-bold text-gray-900">Parents</h3>
-            <p className="text-xs text-gray-500">
-              {detail.totalParents} parent account
-              {detail.totalParents === 1 ? '' : 's'} linked to this tutor.
-            </p>
-          </div>
-          {detail.parents.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="px-4">Name</TableHead>
-                  <TableHead className="px-4">Email</TableHead>
-                  <TableHead className="px-4">Status</TableHead>
-                  <TableHead className="px-4 text-center">Linked Tutees</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {detail.parents.map((parent) => (
-                  <TableRow key={parent.id}>
-                    <TableCell className="px-4 py-3 font-medium text-gray-900">
-                      {parent.name}
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-gray-600">
-                      {parent.email || '—'}
-                    </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <StatusBadge status={parent.status} />
-                    </TableCell>
-                    <TableCell className="px-4 py-3 text-center font-semibold text-gray-900">
-                      {parent.linkedStudentIds.length}
-                    </TableCell>
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-base font-bold text-gray-900">Parents</h3>
+              <p className="text-xs text-gray-500">
+                {detail.totalParents} parent account
+                {detail.totalParents === 1 ? '' : 's'} linked to this tutor.
+              </p>
+            </div>
+            {detail.parents.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-4">Name</TableHead>
+                    <TableHead className="px-4">Email</TableHead>
+                    <TableHead className="px-4">Status</TableHead>
+                    <TableHead className="px-4 text-center">Linked Tutees</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="p-6 text-sm text-gray-500">No parent accounts linked.</div>
+                </TableHeader>
+                <TableBody>
+                  {detail.parents
+                    .slice((parentsPage - 1) * 5, parentsPage * 5)
+                    .map((parent) => (
+                      <TableRow key={parent.id}>
+                        <TableCell className="px-4 py-3 font-medium text-gray-900">
+                          {parent.name}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-gray-600">
+                          {parent.email || '—'}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <StatusBadge status={parent.status} />
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center font-semibold text-gray-900">
+                          {parent.linkedStudentIds.length}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="p-6 text-sm text-gray-500">No parent accounts linked.</div>
+            )}
+          </div>
+          {detail.parents.length > 0 && (
+            <SuperAdminPagination
+              currentPage={parentsPage}
+              totalItems={detail.parents.length}
+              pageSize={5}
+              onPageChange={setParentsPage}
+              itemLabel="parents"
+            />
           )}
         </section>
       </div>
@@ -346,13 +385,14 @@ export const TutorMonitoringDetail = () => {
             Recent Activity
           </h3>
           <p className="text-xs text-gray-500">
-            Latest 20 actions recorded by this tutor or their parents.
+            Recorded actions by this tutor or their parents.
           </p>
         </div>
         <ActivityTable
           logs={detail.recentActivities}
           showTutor={false}
           emptyMessage="No activity has been recorded for this tutor yet."
+          pageSize={5}
         />
       </section>
     </div>

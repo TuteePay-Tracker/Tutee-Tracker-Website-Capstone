@@ -3,11 +3,13 @@ import cors from 'cors';
 import {
   HttpError,
   assertCanManageParent,
+  assertCanManageTutor,
   credentialHint,
   deleteUserSubcollections,
   ensureAdminCredential,
   findAuthUser,
   getAdminAuth,
+  getAdminDb,
   requireIdToken,
 } from './firebaseAdmin.js';
 
@@ -301,6 +303,187 @@ app.post('/delete-auth-user', async (req, res, next) => {
       email: existing.email ?? null,
       alreadyDeleted: false,
       deletedCollections,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Enables or disables a tutor account.
+ *
+ * Deactivation disables the Firebase Authentication record and revokes refresh
+ * tokens so the tutor cannot sign in on any client, then mirrors the status in
+ * Firestore so the monitoring UI and security rules agree. Reactivation clears
+ * the Auth disabled flag and restores the Firestore status.
+ *
+ * Responding 200 means both stores were updated and verified.
+ */
+app.post('/set-tutor-status', async (req, res, next) => {
+  try {
+    const { uid, status } = req.body || {};
+    const caller = await requireIdToken(req);
+    await assertCanManageTutor(caller.uid, uid);
+
+    if (status !== 'active' && status !== 'inactive') {
+      throw new HttpError(400, "status must be either 'active' or 'inactive'.");
+    }
+
+    const auth = getAdminAuth();
+    const existing = await findAuthUser(uid);
+    if (!existing) {
+      throw new HttpError(404, 'Tutor account not found in Firebase Authentication.');
+    }
+
+    const shouldDisable = status === 'inactive';
+
+    if (shouldDisable) {
+      await auth.updateUser(uid, { disabled: true });
+      await auth.revokeRefreshTokens(uid);
+    } else {
+      await auth.updateUser(uid, { disabled: false });
+    }
+
+    const after = await findAuthUser(uid);
+    if (!after) {
+      throw new HttpError(500, `Auth record for ${uid} disappeared during the status update.`);
+    }
+    if (Boolean(after.disabled) !== shouldDisable) {
+      throw new HttpError(500, `Auth disabled state for ${uid} was not updated.`);
+    }
+
+    const db = getAdminDb();
+    await db.doc(`users/${uid}`).update({ status });
+
+    const profile = await db.doc(`users/${uid}`).get();
+    if (!profile.exists || profile.data()?.status !== status) {
+      throw new HttpError(500, `Firestore status for ${uid} was not updated.`);
+    }
+
+    console.log(`[admin] set tutor ${uid} (${existing.email}) status=${status} by ${caller.uid}`);
+    res.json({ ok: true, uid, status, disabled: shouldDisable });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Permanently deletes a tutor account and its related data.
+ *
+ * The operation removes:
+ *   - the tutor's Firebase Authentication record
+ *   - the tutor's Firestore profile and every subcollection beneath it
+ *   - parent accounts created by this tutor (Auth record, profile, subcollections)
+ *   - chat threads owned by this tutor (including their messages)
+ *
+ * Ordering follows the parent deletion route: every fallible Firestore cascade
+ * runs before the irreversible Auth deletions, and each Auth deletion is
+ * verified before success is reported. Audit logs are intentionally retained as
+ * the immutable activity trail.
+ */
+app.post('/delete-tutor-account', async (req, res, next) => {
+  try {
+    const { uid, expectedEmail } = req.body || {};
+    const caller = await requireIdToken(req);
+    const tutor = await assertCanManageTutor(caller.uid, uid);
+
+    const db = getAdminDb();
+    const tutorAuth = await findAuthUser(uid);
+
+    if (tutorAuth) {
+      if (tutor.email && tutorAuth.email && tutorAuth.email !== tutor.email) {
+        throw new HttpError(
+          409,
+          `Refusing to delete: uid ${uid} belongs to ${tutorAuth.email} in Firebase Authentication, ` +
+            `but the tutor record is ${tutor.email}.`
+        );
+      }
+      if (expectedEmail && tutorAuth.email && tutorAuth.email !== expectedEmail) {
+        throw new HttpError(
+          409,
+          `Refusing to delete: uid ${uid} is ${tutorAuth.email} in Firebase Authentication, ` +
+            `but ${expectedEmail} was expected.`
+        );
+      }
+    }
+
+    const parentsSnap = await db
+      .collection('users')
+      .where('role', '==', 'parent')
+      .where('createdByTutorId', '==', uid)
+      .get();
+
+    const parents = [];
+    for (const parentDoc of parentsSnap.docs) {
+      const parent = { id: parentDoc.id, data: parentDoc.data() || {}, authUser: null };
+
+      const parentAuth = await findAuthUser(parent.id);
+      if (
+        parentAuth &&
+        parent.data.email &&
+        parentAuth.email &&
+        parentAuth.email !== parent.data.email
+      ) {
+        throw new HttpError(
+          409,
+          `Refusing to delete: parent uid ${parent.id} belongs to ${parentAuth.email} in Firebase Authentication, ` +
+            `but the parent record is ${parent.data.email}.`
+        );
+      }
+
+      parent.authUser = parentAuth;
+      parents.push(parent);
+    }
+
+    const deletedCollections = await deleteUserSubcollections(uid);
+    for (const parent of parents) {
+      parent.deletedCollections = await deleteUserSubcollections(parent.id);
+    }
+
+    const chatSnap = await db.collection('chats').where('tutorId', '==', uid).get();
+    for (const chatDoc of chatSnap.docs) {
+      await db.recursiveDelete(chatDoc.ref);
+    }
+
+    const auth = getAdminAuth();
+
+    for (const parent of parents) {
+      if (!parent.authUser) continue;
+      await auth.deleteUser(parent.id);
+      if (await findAuthUser(parent.id)) {
+        throw new HttpError(500, `Auth record for parent ${parent.id} still exists after deletion.`);
+      }
+    }
+
+    if (tutorAuth) {
+      await auth.deleteUser(uid);
+      if (await findAuthUser(uid)) {
+        throw new HttpError(500, `Auth record for ${uid} still exists after deletion.`);
+      }
+    }
+
+    for (const parent of parents) {
+      await db.doc(`users/${parent.id}`).delete();
+    }
+    await db.doc(`users/${uid}`).delete();
+
+    console.log(
+      `[admin] deleted tutor ${uid} (${tutorAuth?.email ?? tutor.email ?? 'unknown'}) ` +
+        `with ${parents.length} parent account(s) and ${chatSnap.size} chat thread(s), ` +
+        `requested by ${caller.uid}`
+    );
+
+    res.json({
+      ok: true,
+      uid,
+      email: tutorAuth?.email ?? tutor.email ?? null,
+      alreadyDeleted: !tutorAuth,
+      deletedParents: parents.map((parent) => ({
+        uid: parent.id,
+        email: parent.authUser?.email ?? parent.data.email ?? null,
+      })),
+      deletedCollections,
+      deletedChatThreads: chatSnap.size,
     });
   } catch (err) {
     next(err);

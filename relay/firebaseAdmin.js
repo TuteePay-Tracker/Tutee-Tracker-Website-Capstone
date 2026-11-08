@@ -156,6 +156,50 @@ export async function assertCanManageParent(callerUid, targetUid) {
 }
 
 /**
+ * Confirms the caller may administer the given tutor account.
+ *
+ * Authorization requires all of the following, checked server-side against
+ * Firestore so a client cannot spoof any of it:
+ *   - the caller is an active Super Admin
+ *   - the target is a tutor
+ *   - the target is not the caller
+ *
+ * @returns the target tutor's Firestore data.
+ */
+export async function assertCanManageTutor(callerUid, targetUid) {
+  if (typeof targetUid !== 'string' || targetUid.length === 0) {
+    throw new HttpError(400, 'A target uid is required.');
+  }
+  if (targetUid === callerUid) {
+    throw new HttpError(403, 'You cannot manage your own account through this endpoint.');
+  }
+
+  const db = getAdminDb();
+
+  const callerSnap = await db.doc(`users/${callerUid}`).get();
+  if (!callerSnap.exists) {
+    throw new HttpError(403, 'Caller profile not found.');
+  }
+
+  const caller = callerSnap.data();
+  if (caller?.role !== 'super_admin' || caller?.status !== 'active') {
+    throw new HttpError(403, 'Only an active Super Admin can manage tutor accounts.');
+  }
+
+  const targetSnap = await db.doc(`users/${targetUid}`).get();
+  if (!targetSnap.exists) {
+    throw new HttpError(404, 'Target user document not found.');
+  }
+
+  const target = targetSnap.data();
+  if (target.role !== 'tutor') {
+    throw new HttpError(403, 'Target user is not a tutor account.');
+  }
+
+  return target;
+}
+
+/**
  * Reads an Auth record, distinguishing "absent" from "failed".
  *
  * @returns the decoded user, or null when it genuinely does not exist.

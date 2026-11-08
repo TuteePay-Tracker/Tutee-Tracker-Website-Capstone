@@ -9,7 +9,7 @@ import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User, CalendarRange } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear, isTuteeArchivedForYear } from '@/features/tutees/types/tutee';
+import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear, isTuteeArchivedForYear, getTuteeGradeLevelForYear, getPromotedGradeLevelForNewYear } from '@/features/tutees/types/tutee';
 import { findScheduleConflicts, hasBlockingConflicts, toMinutes, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
 import { ScheduleConflictAlert } from '@/features/schedule/components/ScheduleConflictAlert';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
@@ -107,10 +107,20 @@ export const Tutees = () => {
   };
 
   const enrollInYear = async (t: Tutee) => {
+    // Prevent duplicate enrollment in the same school year
+    if (t.schoolYears?.includes(selectedYear)) {
+      toast.error(`${t.firstName} ${t.surname} is already enrolled in this school year`);
+      throw new Error(`Already enrolled in ${selectedYear}`);
+    }
+
+    // Auto-promote grade level based on prior school year
+    const promotedGrade = getPromotedGradeLevelForNewYear(t, selectedYear);
+    const effectiveGrade = promotedGrade ?? getTuteeGradeLevelForYear(t, selectedYear);
+
     const candidateSchedule = getTuteeScheduleForYear(t, selectedYear);
     const conflicts = findScheduleConflicts({
       candidateSchedule,
-      candidateGradeLevel: t.gradeLevel,
+      candidateGradeLevel: effectiveGrade,
       candidateSubject: t.subject,
       candidateName: `${t.firstName} ${t.surname}`.trim(),
       candidateTuteeId: t.id,
@@ -128,11 +138,20 @@ export const Tutees = () => {
       ...(t.totalsByYear || {}),
       [selectedYear]: { totalSessions: 0, totalPaid: 0, balance: 0 },
     };
+
+    const updatedGradeLevelByYear = {
+      ...(t.gradeLevelByYear || {}),
+      ...(effectiveGrade ? { [selectedYear]: effectiveGrade } : {}),
+    };
+
     await updateTutee(t.id, {
       schoolYears: [...(t.schoolYears || []), selectedYear],
       archivedForYears: (t.archivedForYears || []).filter((y) => y !== selectedYear),
       totalsByYear: yearTotals,
+      gradeLevelByYear: updatedGradeLevelByYear,
+      ...(effectiveGrade ? { gradeLevel: effectiveGrade } : {}),
     });
+
     // Optimistically update the unfiltered list so the student disappears
     // from the carry-over panel immediately.
     setAllTutees((prev) =>
@@ -147,10 +166,16 @@ export const Tutees = () => {
                 (y) => y !== selectedYear
               ),
               totalsByYear: yearTotals,
+              gradeLevelByYear: updatedGradeLevelByYear,
+              ...(effectiveGrade ? { gradeLevel: effectiveGrade } : {}),
             }
           : item
       )
     );
+
+    if (promotedGrade) {
+      toast.info(`${t.firstName} ${t.surname} promoted to ${promotedGrade}`);
+    }
   };
 
   const handleEnrollSelected = async () => {
@@ -248,7 +273,7 @@ export const Tutees = () => {
   }, [searchParams, setSearchParams]);
 
   const tuteeSubjectNames = Array.from(new Set(tutees.flatMap(t => t.subjects?.length ? t.subjects : [t.subject])));
-  const gradeLevels = GRADE_LEVELS.filter(g => tutees.some(t => t.gradeLevel === g));
+  const gradeLevels = GRADE_LEVELS.filter(g => tutees.some(t => getTuteeGradeLevelForYear(t, selectedYear) === g));
 
   const filteredAndSortedTutees = tutees
     .filter(tutee => {
@@ -264,7 +289,8 @@ export const Tutees = () => {
       const matchesSearch = fullName.includes(searchQuery.toLowerCase()) ||
         allSubjects.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesSubject = !selectedSubject || allSubjects.includes(selectedSubject);
-      const matchesGrade = !selectedGrade || tutee.gradeLevel === selectedGrade;
+      const tuteeGradeThisYear = getTuteeGradeLevelForYear(tutee, selectedYear);
+      const matchesGrade = !selectedGrade || tuteeGradeThisYear === selectedGrade;
       return matchesSearch && matchesSubject && matchesGrade;
     })
     .sort((a, b) => {
@@ -276,7 +302,7 @@ export const Tutees = () => {
         case 'balance':
           return getTuteeYearTotals(b, selectedYear).balance - getTuteeYearTotals(a, selectedYear).balance;
         case 'grade':
-          return (a.gradeLevel || '').localeCompare(b.gradeLevel || '');
+          return (getTuteeGradeLevelForYear(a, selectedYear) || '').localeCompare(getTuteeGradeLevelForYear(b, selectedYear) || '');
         default:
           return 0;
       }
@@ -1001,7 +1027,7 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
     surname: tutee?.surname || '',
     subject: tutee?.subject || '',
     subjects: tutee?.subjects?.length ? tutee.subjects : (tutee?.subject ? [tutee.subject] : []),
-    gradeLevel: tutee?.gradeLevel || '',
+    gradeLevel: (tutee ? (getTuteeGradeLevelForYear(tutee, schoolYear) || '') : '') ,
     ratePerSession: tutee?.ratePerSession || 0,
     schedule: getInitialSchedule(),
     email: tutee?.email || '',
