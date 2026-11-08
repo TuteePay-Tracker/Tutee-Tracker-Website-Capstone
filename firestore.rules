@@ -13,6 +13,32 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
+    // Helper: read the caller's own profile document.
+    function callerDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Helper: active Super Admin (manually provisioned role).
+    function isSuperAdmin() {
+      return isAuthenticated()
+        && callerDoc().data.role == 'super_admin'
+        && callerDoc().data.status == 'active';
+    }
+
+    function isTutorCaller() {
+      return isAuthenticated() && callerDoc().data.role == 'tutor';
+    }
+
+    function isParentCaller() {
+      return isAuthenticated() && callerDoc().data.role == 'parent';
+    }
+
+    // Helper: owner updates may not touch privileged/immutable fields.
+    function isSafeOwnerUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['role', 'status', 'createdByTutorId', 'createdAt']);
+    }
+
     // Helper: check if the caller is linked to a specific tutee of this tutor
     // via the tutee document's parentId field (the source the mobile app's
     // tuteeService.subscribeAll already uses to list a parent's tutees).
@@ -63,29 +89,53 @@ service cloud.firestore {
         && (!data.keys().hasAny(['createdByTutorId']) || data.createdByTutorId is string);
     }
 
-    function isValidParentUserUpdateByOwner() {
-      let data = request.resource.data;
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return resource.data.role == 'parent'
-        && data.role == 'parent'
-        && changed.hasOnly(['mustChangePassword', 'name', 'contactNumber', 'photoUrl']);
-    }
-
-    function isValidParentUserUpdateByTutor() {
-      let data = request.resource.data;
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      // Do NOT call isTutor() here — that makes a nested Firestore read which
-      // can itself fail with "Missing or insufficient permissions".
-      // Instead require the writer is authenticated, is writing for a DIFFERENT uid,
-      // the document is a parent, and only linking fields are being changed.
-      return isAuthenticated()
-        && resource.data.role == 'parent'
-        && data.role == 'parent'
-        && changed.hasOnly(['linkedStudentIds', 'createdByTutorId']);
-    }
-    
     // User profile documents
     match /users/{userId} {
+      function isValidParentUserUpdateByOwner() {
+        let data = request.resource.data;
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return resource.data.role == 'parent'
+          && data.role == 'parent'
+          && changed.hasOnly([
+            'mustChangePassword', 'name', 'contactNumber', 'photoUrl', 'tempPassword'
+          ]);
+      }
+
+      function isValidParentUserUpdateByTutor() {
+        let data = request.resource.data;
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        // Only tutors may re-link parents, only linking fields may change, and a
+        // parent may only be linked by its existing tutor (or claimed when unowned).
+        return isTutorCaller()
+          && !isOwner(userId)
+          && resource.data.role == 'parent'
+          && data.role == 'parent'
+          && changed.hasOnly(['linkedStudentIds', 'createdByTutorId'])
+          && (
+            (resource.data.keys().hasAny(['createdByTutorId'])
+              && resource.data.createdByTutorId == request.auth.uid)
+            || (!resource.data.keys().hasAny(['createdByTutorId'])
+              && data.createdByTutorId == request.auth.uid)
+          );
+      }
+
+      function isValidOwnedParentUpdate() {
+        let data = request.resource.data;
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        // Owning tutors may refresh a parent's profile or rotate a temp password.
+        // Role, status, and ownership remain immutable here.
+        return isTutorCaller()
+          && !isOwner(userId)
+          && resource.data.role == 'parent'
+          && resource.data.createdByTutorId == request.auth.uid
+          && data.role == 'parent'
+          && data.createdByTutorId == request.auth.uid
+          && changed.hasOnly([
+            'name', 'email', 'contactNumber', 'photoUrl',
+            'mustChangePassword', 'tempPassword', 'linkedStudentIds', 'createdAt'
+          ]);
+      }
+
       // Allow authenticated users to read user profiles (parent linking, parent list)
       allow read: if isAuthenticated();
 
@@ -93,26 +143,27 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isOwner(userId) && isValidUserCreate();
 
       // Tutor creates a parent portal account (writes to the new parent's uid).
-      // We do NOT call isTutor() here because that performs a nested Firestore get()
-      // which can itself return "Missing or insufficient permissions".
-      // Instead, we verify the writer is authenticated, is writing for a DIFFERENT uid,
-      // and that the data matches the parent portal schema OR is restored by the tutor who created it.
-      allow create: if isAuthenticated() && userId != request.auth.uid && (
+      // We verify the writer is an active tutor, is writing for a DIFFERENT uid,
+      // and that the data matches the parent portal schema OR is restored by the
+      // tutor who created it.
+      allow create: if isAuthenticated() && userId != request.auth.uid && isTutorCaller() && (
         isValidParentPortalCreate()
-        || (request.resource.data.role == 'parent' && request.resource.data.createdByTutorId == request.auth.uid)
+        || (request.resource.data.role == 'parent'
+            && request.resource.data.createdByTutorId == request.auth.uid)
       );
 
-      // Users update their own profile
+      // Users update their own profile. Role/status/ownership fields are immutable.
       allow update: if isAuthenticated() && isOwner(userId) && (
-        !resource.data.keys().hasAny(['role'])
-        || resource.data.role == 'tutor'
+        (resource.data.role == 'tutor' && isSafeOwnerUpdate())
         || (resource.data.role == 'parent' && isValidParentUserUpdateByOwner())
+        || (!resource.data.keys().hasAny(['role']) && isSafeOwnerUpdate())
       );
 
-      // Tutor updates parent linkedStudentIds / createdByTutorId when linking students or restoring backup
+      // Tutor updates parent linkedStudentIds / createdByTutorId when linking students,
+      // or refreshes a parent profile / temp password for a parent they own.
       allow update: if isAuthenticated() && !isOwner(userId) && (
         isValidParentUserUpdateByTutor()
-        || (resource.data.role == 'parent' && resource.data.createdByTutorId == request.auth.uid && request.resource.data.role == 'parent' && request.resource.data.createdByTutorId == request.auth.uid)
+        || isValidOwnedParentUpdate()
       );
 
       // Allow owner or the tutor who created the parent account to delete it
@@ -151,8 +202,8 @@ service cloud.firestore {
             || changed.hasOnly(['parentId', 'updatedAt']);
         }
 
-        // Users can read their own tutees, and parents can read if they are linked
-        allow read: if isAuthenticated() && (isOwner(userId) || (resource != null && resource.data.parentId == request.auth.uid));
+        // Users can read their own tutees, parents can read if linked, Super Admin can monitor
+        allow read: if isAuthenticated() && (isOwner(userId) || (resource != null && resource.data.parentId == request.auth.uid) || isSuperAdmin());
 
         allow delete: if isAuthenticated() && isOwner(userId);
 
@@ -183,10 +234,11 @@ service cloud.firestore {
             && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
-        // Tutor reads own payments; linked parent can read too (if parentId matches)
+        // Tutor reads own payments; linked parent can read too; Super Admin can monitor
         allow read: if isAuthenticated() && (
           isOwner(userId) || 
-          isParentOfTutee(userId, resource.data.tuteeId)
+          isParentOfTutee(userId, resource.data.tuteeId) ||
+          isSuperAdmin()
         );
         allow delete: if isAuthenticated() && isOwner(userId);
 
@@ -216,10 +268,11 @@ service cloud.firestore {
             && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
-        // Tutor reads own sessions; linked parent can read too (if parentId matches)
+        // Tutor reads own sessions; linked parent can read too; Super Admin can monitor
         allow read: if isAuthenticated() && (
           isOwner(userId) || 
-          isParentOfTutee(userId, resource.data.tuteeId)
+          isParentOfTutee(userId, resource.data.tuteeId) ||
+          isSuperAdmin()
         );
         allow delete: if isAuthenticated() && isOwner(userId);
 
@@ -248,11 +301,12 @@ service cloud.firestore {
             && (!data.keys().hasAny(['tutorId']) || data.tutorId is string)
             && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
-        // Allow read if tutor owner OR parent of tutee
+        // Allow read if tutor owner OR parent of tutee OR Super Admin
         allow read: if isAuthenticated() && (
           isOwner(userId) || 
           isParentOfTutee(userId, resource.data.tuteeId) ||
-          (resource != null && resource.data.keys().hasAny(['parentId']) && resource.data.parentId == request.auth.uid)
+          (resource != null && resource.data.keys().hasAny(['parentId']) && resource.data.parentId == request.auth.uid) ||
+          isSuperAdmin()
         );
         allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
@@ -275,12 +329,48 @@ service cloud.firestore {
             && (!data.keys().hasAny(['paymentId']) || data.paymentId is string)
             && (!data.keys().hasAny(['notes']) || data.notes is string);
         }
-        // Allow read if tutor owner OR parent of tutee
+        // Allow read if tutor owner OR parent of tutee OR Super Admin
         allow read: if isAuthenticated() && (
           isOwner(userId) || 
-          isParentOfTutee(userId, resource.data.tuteeId)
+          isParentOfTutee(userId, resource.data.tuteeId) ||
+          isSuperAdmin()
         );
         allow create, update: if isAuthenticated() && isOwner(userId);
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // MAKE-UP CREDITS subcollection (credits earned from absences)
+      match /makeUpCredits/{creditId} {
+        function isValidMakeUpCredit() {
+          let data = request.resource.data;
+          return data.keys().hasAll([
+              'tuteeId', 'tuteeName', 'sourceDate', 'sourceMonth',
+              'durationMinutes', 'status', 'createdAt', 'updatedAt'
+            ])
+            && data.tuteeId is string && data.tuteeId.size() > 0
+            && data.tuteeName is string
+            && data.sourceDate is string && data.sourceDate.size() == 10
+            && data.sourceMonth is string && data.sourceMonth.size() == 7
+            && data.durationMinutes is number && data.durationMinutes > 0
+            && data.status in ['pending', 'scheduled', 'completed', 'reversed']
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp
+            && (!data.keys().hasAny(['targetMonth']) || data.targetMonth is string)
+            && (!data.keys().hasAny(['scheduledDate']) || data.scheduledDate is string)
+            && (!data.keys().hasAny(['startTime']) || data.startTime is string)
+            && (!data.keys().hasAny(['endTime']) || data.endTime is string)
+            && (!data.keys().hasAny(['attendanceRecordId']) || data.attendanceRecordId is string)
+            && (!data.keys().hasAny(['completedAt']) || data.completedAt is string)
+            && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string)
+            && (!data.keys().hasAny(['notes']) || data.notes is string);
+        }
+
+        allow read: if isAuthenticated() && (
+          isOwner(userId) ||
+          isParentOfTutee(userId, resource.data.tuteeId) ||
+          isSuperAdmin()
+        );
+        allow create, update: if isAuthenticated() && isOwner(userId) && isValidMakeUpCredit();
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 
@@ -302,10 +392,11 @@ service cloud.firestore {
             && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
-        // Allow read if tutor owner OR parent of tutee
+        // Allow read if tutor owner OR parent of tutee OR Super Admin
         allow read: if isAuthenticated() && (
           isOwner(userId) || 
-          isParentOfTutee(userId, resource.data.tuteeId)
+          isParentOfTutee(userId, resource.data.tuteeId) ||
+          isSuperAdmin()
         );
         allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
@@ -328,7 +419,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && (
           isOwner(userId) ||
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId) ||
+          isSuperAdmin()
         );
 
         allow create, update: if isAuthenticated() && isOwner(userId);
@@ -347,7 +439,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && (
           isOwner(userId) ||
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId) ||
+          isSuperAdmin()
         );
         allow delete: if isAuthenticated() && isOwner(userId);
         allow create, update: if isAuthenticated() && isOwner(userId);
@@ -365,7 +458,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && (
           isOwner(userId) ||
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId) ||
+          isSuperAdmin()
         );
         allow create, update: if isAuthenticated() && isOwner(userId) && isValidTopic();
         allow delete: if isAuthenticated() && isOwner(userId);
@@ -376,7 +470,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && (
           isOwner(userId) ||
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId) ||
+          isSuperAdmin()
         );
         allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
@@ -402,11 +497,12 @@ service cloud.firestore {
             && (!data.keys().hasAny(['schoolYear']) || data.schoolYear is string);
         }
 
-        // Tutor reads/writes own assessments; linked parents can read too
+        // Tutor reads/writes own assessments; linked parents and Super Admin can read too
         allow read: if isAuthenticated() && (
           isOwner(userId) ||
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId) ||
+          isSuperAdmin()
         );
         allow create, update: if isAuthenticated() && isOwner(userId);
         allow delete: if isAuthenticated() && isOwner(userId);
@@ -420,7 +516,8 @@ service cloud.firestore {
         allow read: if isAuthenticated() && (
           isOwner(userId) ||
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent' &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId)
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.createdByTutorId == userId) ||
+          isSuperAdmin()
         );
         allow create: if isAuthenticated() && isOwner(userId)
           && request.resource.data.keys().hasOnly(['value', 'createdAt', 'source'])
@@ -480,12 +577,27 @@ service cloud.firestore {
       }
     }
 
-    // AUDIT LOGS
+    // AUDIT LOGS (immutable activity trail)
     match /audit_logs/{logId} {
-      allow create: if isAuthenticated();
-      allow read: if isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tutor';
-      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tutor' && resource.data.tutorId == request.auth.uid;
-      allow update: if false;
+      // Only the acting user may append a log, scoped to their own tutor account.
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.userRole in ['tutor', 'parent', 'super_admin']
+        && request.resource.data.actionType is string
+        && request.resource.data.module is string
+        && request.resource.data.description is string
+        && request.resource.data.timestamp is timestamp
+        && (
+          ((isTutorCaller() || isSuperAdmin()) && request.resource.data.tutorId == request.auth.uid)
+          || (isParentCaller() && request.resource.data.tutorId == callerDoc().data.createdByTutorId)
+        );
+
+      // Super Admin can monitor all activity; tutors can read their own trail only.
+      allow read: if isSuperAdmin()
+        || (isTutorCaller() && resource.data.tutorId == request.auth.uid);
+
+      // Audit logs are append-only.
+      allow update, delete: if false;
     }
   }
 }

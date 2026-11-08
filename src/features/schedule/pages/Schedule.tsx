@@ -16,11 +16,28 @@ import { formatTime12h } from '@/shared/utils/formatDate';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
+import { isMakeUpDay } from '@/features/attendance/types/dayPayment';
 
 const toMinutes = (time: string) => {
   const [hours, minutes] = time.split(':').map(Number);
   return (hours || 0) * 60 + (minutes || 0);
 };
+
+interface MakeUpSessionEntry {
+  tuteeId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes?: number;
+  makeUpCreditId?: string;
+}
+
+interface ScheduleDisplayEntry {
+  tutee: Tutee;
+  schedule: NormalizedScheduleItem;
+  isMakeUp?: boolean;
+  sessionId?: string;
+}
 
 export const Schedule = () => {
   const { tutees, isLoading } = useTutees();
@@ -30,6 +47,7 @@ export const Schedule = () => {
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
   const [chargedTuteeMonths, setChargedTuteeMonths] = useState<Set<string>>(new Set());
+  const [makeUpSessions, setMakeUpSessions] = useState<MakeUpSessionEntry[]>([]);
 
   // Keep the timetable inside the selected school year. Switching years (or
   // changing the start month) snaps back to the start of that school year.
@@ -48,13 +66,26 @@ export const Schedule = () => {
     const recordsRef = collection(db, 'users', tutorId, 'paymentRecords');
     const unsubscribe = onSnapshot(recordsRef, (snapshot) => {
       const set = new Set<string>();
+      const makeUps: MakeUpSessionEntry[] = [];
       snapshot.docs.forEach((docSnap) => {
         const data = docSnap.data();
         if (data.tuteeId && data.month) {
           set.add(`${data.tuteeId}_${data.month}`);
         }
+        (data.dayPayments || []).forEach((day: any) => {
+          if (!isMakeUpDay(day)) return;
+          makeUps.push({
+            tuteeId: day.tuteeId || data.tuteeId,
+            date: day.date,
+            startTime: day.startTime || '09:00',
+            endTime: day.endTime || '10:00',
+            durationMinutes: day.durationMinutes,
+            makeUpCreditId: day.makeUpCreditId,
+          });
+        });
       });
       setChargedTuteeMonths(set);
+      setMakeUpSessions(makeUps);
     });
 
     return () => unsubscribe();
@@ -80,6 +111,16 @@ export const Schedule = () => {
       earliestHour = Math.min(earliestHour, Math.max(0, Math.floor(start / 60)));
       latestHour = Math.max(latestHour, Math.min(24, Math.ceil(end / 60)));
     });
+  });
+
+  const visibleTuteeIdsForRange = new Set(filteredTutees.map((tutee) => tutee.id));
+  makeUpSessions.forEach((session) => {
+    if (!visibleTuteeIdsForRange.has(session.tuteeId)) return;
+    const start = toMinutes(session.startTime);
+    let end = toMinutes(session.endTime);
+    if (end <= start) end += 24 * 60;
+    earliestHour = Math.min(earliestHour, Math.max(0, Math.floor(start / 60)));
+    latestHour = Math.max(latestHour, Math.min(24, Math.ceil(end / 60)));
   });
 
   const timeSlots = Array.from({ length: Math.max(1, latestHour - earliestHour) }, (_, i) => {
@@ -123,7 +164,8 @@ export const Schedule = () => {
     }
 
     const monthKey = format(date, 'yyyy-MM');
-    const schedules: Array<{ tutee: Tutee; schedule: NormalizedScheduleItem }> = [];
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const schedules: ScheduleDisplayEntry[] = [];
 
     filteredTutees.forEach(tutee => {
       // If tutee wasn't added to this month in payments, don't show on schedule
@@ -135,6 +177,25 @@ export const Schedule = () => {
         .filter(slot => slot.day === dayName)
         .forEach(schedule => schedules.push({ tutee, schedule }));
     });
+
+    // Make-up sessions are extra dates stored on the billing record, not part of
+    // the weekly timetable. They can fall on a day the tutee has no regular class.
+    makeUpSessions
+      .filter((session) => session.date === dateKey)
+      .forEach((session) => {
+        const tutee = filteredTutees.find((item) => item.id === session.tuteeId);
+        if (!tutee) return;
+        schedules.push({
+          tutee,
+          schedule: {
+            day: dayName,
+            startTime: session.startTime,
+            endTime: session.endTime,
+          },
+          isMakeUp: true,
+          sessionId: session.makeUpCreditId,
+        });
+      });
 
     return schedules;
   };
@@ -269,7 +330,7 @@ export const Schedule = () => {
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             <div className="min-w-0 text-xs text-red-700">
               <p className="text-sm font-bold text-red-800">
-                {visibleBlockingConflicts.length} different-grade conflict
+                {visibleBlockingConflicts.length} schedule conflict
                 {visibleBlockingConflicts.length === 1 ? '' : 's'}
               </p>
               <ul className="mt-1 space-y-0.5">
@@ -287,7 +348,7 @@ export const Schedule = () => {
             <Users className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div className="min-w-0 text-xs text-amber-700">
               <p className="text-sm font-bold text-amber-800">
-                {visibleWarningConflicts.length} same-grade overlap
+                {visibleWarningConflicts.length} same-grade group session
                 {visibleWarningConflicts.length === 1 ? '' : 's'}
               </p>
               <ul className="mt-1 space-y-0.5">
@@ -303,11 +364,15 @@ export const Schedule = () => {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-600">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-            Different grade conflict
+            Schedule conflict
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-            Same grade / group session
+            Same-grade group session
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm border border-dashed border-amber-500 bg-amber-50" />
+            Make-up class
           </span>
         </div>
       </div>
@@ -397,26 +462,34 @@ export const Schedule = () => {
                                 : ''
                           }`}
                         >
-                          {sessionsInSlot.map(({ tutee, schedule }, index) => {
-                            const sessionConflict = getSessionConflictForDay(day, tutee, schedule);
+                          {sessionsInSlot.map(({ tutee, schedule, isMakeUp, sessionId }, index) => {
+                            const sessionConflict = isMakeUp
+                              ? undefined
+                              : getSessionConflictForDay(day, tutee, schedule);
                             return (
                               <div
-                                key={`${tutee.id}-${schedule.startTime}-${schedule.endTime}-${index}`}
+                                key={`${tutee.id}-${schedule.startTime}-${schedule.endTime}-${isMakeUp ? sessionId || 'make-up' : 'regular'}-${index}`}
                                 className={`border rounded px-2 py-1 mb-1 text-xs ${
-                                  sessionConflict?.severity === 'blocking'
-                                    ? 'bg-red-50 border-red-300 text-red-950 shadow-sm ring-2 ring-red-300'
-                                    : sessionConflict
-                                      ? 'bg-amber-50 border-amber-300 text-amber-950 ring-2 ring-amber-200'
-                                      : isWeekend
-                                        ? 'bg-red-50 border-red-200 text-red-950 shadow-sm'
-                                        : 'bg-green-100 border-green-300 text-green-950'
+                                  isMakeUp
+                                    ? 'bg-amber-50 border-dashed border-amber-400 text-amber-950'
+                                    : sessionConflict?.severity === 'blocking'
+                                      ? 'bg-red-50 border-red-300 text-red-950 shadow-sm ring-2 ring-red-300'
+                                      : sessionConflict
+                                        ? 'bg-amber-50 border-amber-300 text-amber-950 ring-2 ring-amber-200'
+                                        : isWeekend
+                                          ? 'bg-red-50 border-red-200 text-red-950 shadow-sm'
+                                          : 'bg-green-100 border-green-300 text-green-950'
                                 }`}
                               >
                                 <div className="flex items-start justify-between gap-1">
-                                  <div className={`font-semibold ${sessionConflict?.severity === 'blocking' ? 'text-red-900' : isWeekend ? 'text-red-900' : 'text-green-900'}`}>
+                                  <div className={`font-semibold ${isMakeUp ? 'text-amber-900' : sessionConflict?.severity === 'blocking' ? 'text-red-900' : isWeekend ? 'text-red-900' : 'text-green-900'}`}>
                                     {tutee.firstName} {tutee.surname}
                                   </div>
-                                  {sessionConflict && (
+                                  {isMakeUp ? (
+                                    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
+                                      Make-Up
+                                    </span>
+                                  ) : sessionConflict && (
                                     <span
                                       className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
                                         sessionConflict.severity === 'blocking'
@@ -428,8 +501,10 @@ export const Schedule = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className={isWeekend ? 'text-red-700 font-medium' : 'text-green-700'}>{tutee.subject}</div>
-                                <div className={`${isWeekend ? 'text-red-600' : 'text-green-600'} text-[10px] mt-0.5`}>
+                                <div className={isMakeUp ? 'text-amber-700 font-medium' : isWeekend ? 'text-red-700 font-medium' : 'text-green-700'}>
+                                  {isMakeUp ? 'Make-up class' : tutee.subject}
+                                </div>
+                                <div className={`${isMakeUp ? 'text-amber-600' : isWeekend ? 'text-red-600' : 'text-green-600'} text-[10px] mt-0.5`}>
                                   {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
                                 </div>
                               </div>
@@ -469,23 +544,27 @@ export const Schedule = () => {
                   <div className="space-y-3">
                     {schedules
                       .sort((a, b) => a.schedule.startTime.localeCompare(b.schedule.startTime))
-                      .map(({ tutee, schedule }, index) => {
-                        const sessionConflict = getSessionConflictForDay(dayName, tutee, schedule);
+                      .map(({ tutee, schedule, isMakeUp, sessionId }, index) => {
+                        const sessionConflict = isMakeUp
+                          ? undefined
+                          : getSessionConflictForDay(dayName, tutee, schedule);
                         return (
                           <div
-                            key={`${tutee.id}-${schedule.startTime}-${schedule.endTime}-${index}`}
+                            key={`${tutee.id}-${schedule.startTime}-${schedule.endTime}-${isMakeUp ? sessionId || 'make-up' : 'regular'}-${index}`}
                             className={`flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50/80 transition-colors ${
-                              sessionConflict?.severity === 'blocking'
-                                ? 'border-red-300 bg-red-50/40 ring-2 ring-red-200'
-                                : sessionConflict
-                                  ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-200'
-                                  : isWeekend
-                                    ? 'border-red-150 bg-red-50/10'
-                                    : ''
+                              isMakeUp
+                                ? 'border-dashed border-amber-400 bg-amber-50/40'
+                                : sessionConflict?.severity === 'blocking'
+                                  ? 'border-red-300 bg-red-50/40 ring-2 ring-red-200'
+                                  : sessionConflict
+                                    ? 'border-amber-300 bg-amber-50/40 ring-2 ring-amber-200'
+                                    : isWeekend
+                                      ? 'border-red-150 bg-red-50/10'
+                                      : ''
                             }`}
                           >
                             <div className="flex-shrink-0 w-24 text-center">
-                              <div className={`text-sm font-semibold ${isWeekend ? 'text-red-700' : 'text-gray-900'}`}>
+                              <div className={`text-sm font-semibold ${isMakeUp ? 'text-amber-800' : isWeekend ? 'text-red-700' : 'text-gray-900'}`}>
                                 {formatTime12h(schedule.startTime)}
                               </div>
                               <div className="text-xs text-gray-500">{formatTime12h(schedule.endTime)}</div>
@@ -494,13 +573,19 @@ export const Schedule = () => {
                               <h3 className="font-semibold text-gray-900">
                                 {tutee.firstName} {tutee.surname}
                               </h3>
-                              <p className="text-sm text-gray-600">{tutee.subject}</p>
+                              <p className={`text-sm ${isMakeUp ? 'text-amber-700 font-medium' : 'text-gray-600'}`}>
+                                {isMakeUp ? 'Make-up class' : tutee.subject}
+                              </p>
                               {tutee.gradeLevel && (
                                 <p className="text-xs text-gray-500">{tutee.gradeLevel}</p>
                               )}
                             </div>
                             <div className="text-right">
-                              {sessionConflict && (
+                              {isMakeUp ? (
+                                <span className="mb-1 inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-full border border-amber-300 bg-amber-100 text-amber-700">
+                                  Make-Up
+                                </span>
+                              ) : sessionConflict && (
                                 <span className={`mb-1 inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-full border ${
                                   sessionConflict.severity === 'blocking'
                                     ? 'bg-red-100 text-red-700 border-red-300'
@@ -516,11 +601,13 @@ export const Schedule = () => {
                               )}
                               <div>
                                 <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full border ${
-                                  isWeekend 
-                                    ? 'bg-red-50 text-red-700 border-red-200' 
-                                    : 'bg-green-50 text-green-700 border-green-200'
+                                  isMakeUp
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                    : isWeekend
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : 'bg-green-50 text-green-700 border-green-200'
                                 }`}>
-                                  Scheduled
+                                  {isMakeUp ? 'Make-Up' : 'Scheduled'}
                                 </span>
                               </div>
                             </div>

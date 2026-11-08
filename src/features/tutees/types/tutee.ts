@@ -129,14 +129,31 @@ const SINGLE_TIME_REGEX = new RegExp(TIME_TOKEN, 'i');
 
 function findScheduleDays(value: string): string[] {
   const lower = value.toLowerCase();
-  return WEEKDAYS.filter((day) => {
+  const matched = new Set<string>();
+
+  // Support common multi-day acronyms like MWF (Mon/Wed/Fri) and TTH (Tue/Thu)
+  if (/\bmwf\b|\bm-w-f\b/i.test(lower)) {
+    matched.add('Monday');
+    matched.add('Wednesday');
+    matched.add('Friday');
+  }
+  if (/\btth\b|\bt-th\b/i.test(lower)) {
+    matched.add('Tuesday');
+    matched.add('Thursday');
+  }
+
+  WEEKDAYS.forEach((day) => {
     const full = day.toLowerCase();
     const abbr = full.slice(0, 3);
-    return (
+    if (
       new RegExp(`\\b${full}\\b`, 'i').test(lower) ||
       new RegExp(`(^|[^a-z])${abbr}([^a-z]|$)`, 'i').test(lower)
-    );
+    ) {
+      matched.add(day);
+    }
   });
+
+  return Array.from(matched);
 }
 
 function parseTimeToken(value: string): string | undefined {

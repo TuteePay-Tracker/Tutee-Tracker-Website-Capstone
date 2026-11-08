@@ -60,7 +60,7 @@ export const MainLayout = () => {
 
   // Listen to threads for unread count & notifications
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || user.role === 'super_admin') return;
 
     const unsubscribe = chatService.subscribeToThreads(user.id, user.role, (threads) => {
       // Sum up total unread messages

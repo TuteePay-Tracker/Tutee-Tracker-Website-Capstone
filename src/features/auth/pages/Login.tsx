@@ -51,10 +51,10 @@ export const Login = () => {
     }
 
     try {
-      await login(loginIdentifier, password);
+      const role = await login(loginIdentifier, password);
       toast.success('Welcome back!');
       setIsModalOpen(false);
-      navigate('/');
+      navigate(role === 'super_admin' ? '/super-admin' : '/');
     } catch (error: any) {
       toast.error(error.message || 'Login failed. Please check your credentials.');
       setIsLoading(false);

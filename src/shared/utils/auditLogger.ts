@@ -21,10 +21,17 @@ export const logActivity = async (
 ): Promise<void> => {
   try {
     let tutorId = userId;
+    let tutorName = userName;
     if (userRole === 'parent') {
       const userDoc = await getDoc(doc(db, 'users', userId));
       if (userDoc.exists()) {
         tutorId = userDoc.data().createdByTutorId || userId;
+      }
+      if (tutorId !== userId) {
+        const tutorDoc = await getDoc(doc(db, 'users', tutorId));
+        if (tutorDoc.exists()) {
+          tutorName = tutorDoc.data().name || tutorName;
+        }
       }
     }
 
@@ -38,6 +45,7 @@ export const logActivity = async (
       module,
       description,
       tutorId,
+      tutorName,
       timestamp: serverTimestamp(),
     });
   } catch (error) {

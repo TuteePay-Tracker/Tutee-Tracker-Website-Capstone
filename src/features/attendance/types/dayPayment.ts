@@ -2,6 +2,8 @@ export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'no-class';
 
 export type AttendanceMark = 'present' | 'absent' | 'no-class';
 
+export type SessionType = 'regular' | 'make-up';
+
 export interface DayPayment {
   date: string; // YYYY-MM-DD format
   amountDue: number;
@@ -10,9 +12,20 @@ export interface DayPayment {
   attendance?: AttendanceMark;
   tuteeId: string;
   tuteeName: string;
+  /** Defaults to "regular" for legacy records. */
+  sessionType?: SessionType;
+  /** Links a make-up session back to its credit. */
+  makeUpCreditId?: string;
+  /** Make-up session duration in minutes. */
+  durationMinutes?: number;
+  startTime?: string;
+  endTime?: string;
 }
 
 export type AttendanceStatus = AttendanceMark | 'none';
+
+export const isMakeUpDay = (day: Pick<DayPayment, 'sessionType' | 'makeUpCreditId'>): boolean =>
+  day.sessionType === 'make-up' || Boolean(day.makeUpCreditId);
 
 /**
  * Resolve a day's attendance mark.

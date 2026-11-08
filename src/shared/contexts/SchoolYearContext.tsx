@@ -55,7 +55,7 @@ export const SchoolYearProvider = ({ children }: { children: ReactNode }) => {
     const loadForUser = async () => {
       setIsLoading(true);
       try {
-        if (!user) {
+        if (!user || user.role === 'super_admin') {
           if (!cancelled) {
             setSchoolYears(getDefaultSchoolYears(3, 1, startMonth));
             setIsLoading(false);

@@ -9,7 +9,7 @@ import {
   ArrowLeft, Mail, Phone, Calendar, CalendarX, DollarSign, BookOpen, Users, UserPlus, Trash2, Key,
   X, Copy, CheckCircle2, FileText, AlertCircle, XCircle, Clock,
   Download, Upload, Smartphone, TrendingUp, TrendingDown, Minus, Star, Hash,
-  Pencil, GraduationCap, ChevronUp, ChevronDown
+  Pencil, GraduationCap, ChevronUp, ChevronDown, CalendarClock
 } from 'lucide-react';
 import { ImageUpload } from '@/shared/components/ui/ImageUpload';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
@@ -24,9 +24,12 @@ import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { useSubjects } from '@/features/tutees/hooks/useSubjects';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { belongsToSchoolYear } from '@/shared/utils/schoolYear';
-import { PaymentRecord, getDayAttendance } from '@/features/attendance/types/dayPayment';
+import { PaymentRecord, getDayAttendance, isMakeUpDay } from '@/features/attendance/types/dayPayment';
+import type { MakeUpCredit } from '@/features/attendance/types/makeUpCredit';
+import { buildSessionSummaries } from '@/features/attendance/utils/sessionSummary';
 import { PaymentMethod } from '@/features/payments/types/payment';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
+import { makeUpService } from '@/features/attendance/services/makeUpService';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import gcashLogo from '@/assets/gcash-com-logo.png';
@@ -37,9 +40,8 @@ import { logActivity } from '@/shared/utils/auditLogger';
 import { removeParentAccount, updateParentTempPassword, CreatedParentCredentials } from '@/features/tutees/services/parentManagementService';
 import { CreateOrLinkParentModal } from '@/features/tutees/components/CreateOrLinkParentModal';
 import { ParentCredentialsModal } from '@/features/tutees/components/ParentCredentialsModal';
-import { findScheduleConflicts, hasBlockingConflicts, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
+import { findScheduleConflicts, hasBlockingConflicts, toMinutes, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
 import { ScheduleConflictAlert } from '@/features/schedule/components/ScheduleConflictAlert';
-import { ScheduleConflictOverrideDialog } from '@/features/schedule/components/ScheduleConflictOverrideDialog';
 
 export const TuteeDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -142,7 +144,6 @@ export const TuteeDetails = () => {
   const tutee = id ? getTuteeById(id) : undefined;
   const payments = id ? getPaymentsByTuteeId(id) : [];
 
-  const [pendingConflictOverride, setPendingConflictOverride] = useState<ScheduleConflict[] | null>(null);
   const [isSavingInfo, setIsSavingInfo] = useState(false);
 
   const editConflicts = useMemo(
@@ -151,6 +152,7 @@ export const TuteeDetails = () => {
         candidateSchedule: editForm.schedule,
         candidateGradeLevel: editForm.gradeLevel,
         candidateSubject: editForm.subjects[0],
+        candidateSubjects: editForm.subjects,
         candidateName: `${editForm.firstName} ${editForm.surname}`.trim() || 'This tutee',
         candidateTuteeId: tutee?.id ?? 'candidate',
         tutees,
@@ -159,6 +161,9 @@ export const TuteeDetails = () => {
       }),
     [editForm, tutees, selectedYear, tutee?.id]
   );
+
+  const hasEditConflict = hasBlockingConflicts(editConflicts);
+  const isInvalidEditTimeRange = toMinutes(scheduleTime.endTime) <= toMinutes(scheduleTime.startTime);
 
   const handleStartEdit = () => {
     if (!tutee) return;
@@ -237,45 +242,20 @@ export const TuteeDetails = () => {
       return;
     }
 
-    if (hasBlockingConflicts(editConflicts)) {
-      setPendingConflictOverride(
-        editConflicts.filter((conflict) => conflict.severity === 'blocking')
-      );
+    if (isInvalidEditTimeRange) {
+      toast.error('Class End time must be after Class Start time');
+      return;
+    }
+
+    if (hasEditConflict) {
+      toast.error('Cannot save: Schedule conflict detected. The selected time slot is already occupied.');
       return;
     }
 
     await persistInfo();
   };
 
-  const handleConfirmConflictOverride = async () => {
-    const conflicts = pendingConflictOverride ?? [];
-    const saved = await persistInfo();
-    if (!saved) return;
-
-    setPendingConflictOverride(null);
-
-    if (user && conflicts.length > 0) {
-      const details = conflicts
-        .map((conflict) =>
-          `${conflict.day} ${formatTime12h(conflict.firstStartTime)}-${formatTime12h(conflict.firstEndTime)} overlaps ${conflict.secondTuteeName}${conflict.secondGradeLevel ? ` (${conflict.secondGradeLevel})` : ''}`
-        )
-        .join('; ');
-      await logActivity(
-        user.id,
-        user.name,
-        user.role,
-        'Schedule Conflict Overridden',
-        'Students',
-        `Scheduled ${editForm.firstName} ${editForm.surname} in ${selectedYear} despite ${conflicts.length} cross-grade conflict${conflicts.length === 1 ? '' : 's'}: ${details}`
-      );
-    }
-  };
-
-  const handleCancelConflictOverride = () => {
-    setPendingConflictOverride(null);
-  };
-
-  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'reports' | 'topic-progress'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'session-summary' | 'payments' | 'reports' | 'topic-progress'>('overview');
   const [expandedAssessmentId, setExpandedAssessmentId] = useState<string | null>(null);
   const [showParentModal, setShowParentModal] = useState(false);
   const [parentData, setParentData] = useState<any>(null);
@@ -313,15 +293,24 @@ export const TuteeDetails = () => {
   // Attendance states
   const [attendanceRecords, setAttendanceRecords] = useState<PaymentRecord[]>([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [makeUpCredits, setMakeUpCredits] = useState<MakeUpCredit[]>([]);
 
   // Load payments and attendance when tutee changes or school year changes
   useEffect(() => {
     let unsubscribeAttendance: (() => void) | undefined;
     let unsubscribePayments: (() => void) | undefined;
+    let unsubscribeCredits: (() => void) | undefined;
 
     if (tutee) {
       // Always subscribe to attendance and payments to ensure accurate financial summary
       unsubscribeAttendance = loadAttendance();
+
+      const tutorId = user?.role === 'parent' ? user.createdByTutorId : undefined;
+      unsubscribeCredits = makeUpService.subscribeByTutee(
+        tutee.id,
+        setMakeUpCredits,
+        tutorId
+      );
 
       if (user?.role === 'parent') {
         if (user.createdByTutorId) {
@@ -333,6 +322,7 @@ export const TuteeDetails = () => {
     return () => {
       unsubscribeAttendance?.();
       unsubscribePayments?.();
+      unsubscribeCredits?.();
     };
   }, [tutee, user, selectedYear]);
 
@@ -407,6 +397,11 @@ export const TuteeDetails = () => {
       };
     });
   }, [studentAssessments]);
+
+  const sessionSummaries = useMemo(
+    () => buildSessionSummaries(attendanceRecords, makeUpCredits),
+    [attendanceRecords, makeUpCredits]
+  );
 
   const handleViewParent = async () => {
     if (!tutee?.parentId) return;
@@ -554,6 +549,14 @@ export const TuteeDetails = () => {
     ? currentMonthRecord.totalBalance <= 0
     : false;
 
+  const availableMakeUpCredits = makeUpCredits.filter((credit) => credit.status === 'pending');
+  const scheduledMakeUpCredits = makeUpCredits.filter((credit) => credit.status === 'scheduled');
+  const completedMakeUpCredits = makeUpCredits.filter((credit) => credit.status === 'completed');
+  const totalMakeUpSessions = sessionSummaries.reduce(
+    (sum, summary) => sum + summary.makeUpSessions,
+    0
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -572,6 +575,7 @@ export const TuteeDetails = () => {
           {[
             { id: 'overview', name: 'Overview' },
             ...(user?.role === 'parent' ? [{ id: 'attendance', name: 'Attendance' }] : []),
+            { id: 'session-summary', name: 'Session Summary' },
             { id: 'payments', name: 'Payments' },
             { id: 'reports', name: 'Progress Reports' },
             { id: 'topic-progress', name: 'Topic Progress' },
@@ -743,6 +747,9 @@ export const TuteeDetails = () => {
                           className="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white focus:ring-2 focus:ring-green-700 outline-none"
                         />
                       </div>
+                      {isInvalidEditTimeRange && (
+                        <p className="text-[11px] text-red-600 col-span-2">Class End must be after Class Start.</p>
+                      )}
                     </div>
 
                     <div>
@@ -780,19 +787,24 @@ export const TuteeDetails = () => {
                     <ScheduleConflictAlert conflicts={editConflicts} />
                   </div>
 
-                  <ScheduleConflictOverrideDialog
-                    open={pendingConflictOverride !== null}
-                    conflicts={pendingConflictOverride ?? []}
-                    onConfirm={handleConfirmConflictOverride}
-                    onCancel={handleCancelConflictOverride}
-                    confirming={isSavingInfo}
-                  />
                   <div className="flex gap-2.5 pt-3">
                     <button
                       onClick={handleSaveInfo}
-                      className="flex-1 bg-green-700 hover:bg-green-800 text-white font-bold text-sm py-2.5 rounded-xl transition-colors shadow-sm"
+                      disabled={isSavingInfo || hasEditConflict || isInvalidEditTimeRange}
+                      className={`flex-1 font-bold text-sm py-2.5 rounded-xl transition-colors shadow-sm ${
+                        hasEditConflict || isInvalidEditTimeRange
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-300'
+                          : 'bg-green-700 hover:bg-green-800 text-white'
+                      }`}
+                      title={
+                        hasEditConflict
+                          ? 'Cannot save: Schedule conflict detected. Please resolve conflicting time slots.'
+                          : isInvalidEditTimeRange
+                          ? 'Cannot save: Class End must be after Class Start.'
+                          : undefined
+                      }
                     >
-                      Save
+                      {isSavingInfo ? 'Saving...' : 'Save'}
                     </button>
                     <button
                       onClick={() => setIsEditingInfo(false)}
@@ -1036,6 +1048,7 @@ export const TuteeDetails = () => {
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {record.dayPayments.map((day) => {
                           const attendance = getDayAttendance(day);
+                          const isMakeUp = isMakeUpDay(day);
                           let cardClass = 'bg-white border-gray-200 text-gray-500';
                           let statusLabel = 'Scheduled';
                           let statusIcon = <Clock size={14} className="text-gray-400" />;
@@ -1060,11 +1073,21 @@ export const TuteeDetails = () => {
 
                           return (
                             <div
-                              key={day.date}
-                              className={`p-3 rounded-xl border flex flex-col gap-1 items-center justify-center text-center w-full ${cardClass}`}
+                              key={`${day.date}_${isMakeUp ? day.makeUpCreditId || 'make-up' : 'regular'}`}
+                              className={`relative p-3 rounded-xl border flex flex-col gap-1 items-center justify-center text-center w-full ${isMakeUp ? 'border-dashed border-amber-400' : ''} ${cardClass}`}
                             >
+                              {isMakeUp && (
+                                <span className="absolute top-1 right-1 rounded bg-amber-500 px-1 text-[7px] font-extrabold uppercase tracking-wide text-white">
+                                  MU
+                                </span>
+                              )}
                               {statusIcon}
                               <span className="text-xs font-bold mt-1">{format(parseISO(day.date), 'EEE, MMM dd')}</span>
+                              {isMakeUp && day.startTime && day.endTime && (
+                                <span className="text-[9px] font-semibold text-amber-700">
+                                  {day.startTime}–{day.endTime}
+                                </span>
+                              )}
                               <span className={`text-[9px] uppercase font-extrabold tracking-wider ${labelColorClass}`}>
                                 {statusLabel}
                               </span>
@@ -1078,6 +1101,139 @@ export const TuteeDetails = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Session Summary Tab */}
+      {activeTab === 'session-summary' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-2xl border border-amber-200 p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-amber-700">
+                <CalendarClock size={16} />
+                <p className="text-xs font-bold uppercase tracking-wider">Available Credits</p>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{availableMakeUpCredits.length}</p>
+              <p className="text-xs text-gray-500 mt-1">Unused make-ups from absences</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-blue-200 p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-blue-700">
+                <Calendar size={16} />
+                <p className="text-xs font-bold uppercase tracking-wider">Scheduled</p>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{scheduledMakeUpCredits.length}</p>
+              <p className="text-xs text-gray-500 mt-1">Upcoming make-up classes</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-emerald-200 p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <CheckCircle2 size={16} />
+                <p className="text-xs font-bold uppercase tracking-wider">Completed</p>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{completedMakeUpCredits.length}</p>
+              <p className="text-xs text-gray-500 mt-1">Make-up classes attended</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-gray-600">
+                <BookOpen size={16} />
+                <p className="text-xs font-bold uppercase tracking-wider">Make-Up Sessions</p>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{totalMakeUpSessions}</p>
+              <p className="text-xs text-gray-500 mt-1">Sessions placed in billing months</p>
+            </div>
+          </div>
+
+          {scheduledMakeUpCredits.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-blue-900 mb-3">
+                <CalendarClock size={16} />
+                Upcoming Make-Up Classes
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {scheduledMakeUpCredits.map((credit) => (
+                  <div key={credit.id} className="bg-white rounded-xl border border-blue-200 p-3 text-sm">
+                    <p className="font-bold text-gray-900">
+                      {credit.scheduledDate
+                        ? format(parseISO(credit.scheduledDate), 'EEE, MMM d, yyyy')
+                        : 'Date not set'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {credit.startTime && credit.endTime
+                        ? `${credit.startTime}–${credit.endTime}`
+                        : 'Time not set'}
+                      {' · '}{credit.durationMinutes} min
+                    </p>
+                    <p className="text-[11px] text-blue-600 mt-1">
+                      Credit from {format(parseISO(credit.sourceDate), 'MMM d, yyyy')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Monthly Session Summary</h2>
+                <p className="text-gray-500 text-sm mt-0.5">
+                  Regular + make-up sessions and credits earned from absences
+                </p>
+              </div>
+              {loadingAttendance && (
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-700"></div>
+              )}
+            </div>
+
+            {sessionSummaries.length === 0 ? (
+              <div className="text-center py-12">
+                <Calendar className="mx-auto text-gray-300 mb-3" size={44} />
+                <p className="text-gray-500">No billing months available</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-[11px] uppercase tracking-wider text-gray-500">
+                      <th className="py-2 pr-4 font-bold">Month</th>
+                      <th className="py-2 px-3 font-bold text-center">Regular</th>
+                      <th className="py-2 px-3 font-bold text-center">Make-Up</th>
+                      <th className="py-2 px-3 font-bold text-center">Present</th>
+                      <th className="py-2 px-3 font-bold text-center">Absent</th>
+                      <th className="py-2 px-3 font-bold text-center">No Class</th>
+                      <th className="py-2 px-3 font-bold text-center">Credits</th>
+                      <th className="py-2 pl-3 font-bold text-center">Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessionSummaries.map((summary) => (
+                      <tr key={summary.month} className="border-b border-gray-100 last:border-0">
+                        <td className="py-3 pr-4 font-semibold text-gray-900 capitalize">
+                          {format(parseISO(summary.month + '-01'), 'MMMM yyyy')}
+                        </td>
+                        <td className="py-3 px-3 text-center text-gray-700">{summary.regularSessions}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={summary.makeUpSessions > 0 ? 'font-bold text-amber-700' : 'text-gray-400'}>
+                            {summary.makeUpSessions}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center font-semibold text-emerald-700">{summary.present}</td>
+                        <td className="py-3 px-3 text-center font-semibold text-red-600">{summary.absent}</td>
+                        <td className="py-3 px-3 text-center text-purple-600">{summary.noClass}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                            {summary.availableCredits}
+                          </span>
+                        </td>
+                        <td className="py-3 pl-3 text-center font-bold text-gray-700">
+                          {summary.attendanceRate}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

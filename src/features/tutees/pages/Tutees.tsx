@@ -10,9 +10,8 @@ import { LoadingScreen } from '@/shared/components/LoadingScreen';
 import { Search, Plus, Pencil, Trash2, Eye, Users, UserPlus, Copy, CheckCircle, X, Printer, ShieldCheck, MoreVertical, User, CalendarRange } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 import { Tutee, TuteeFormData, ScheduleItem, GRADE_LEVELS, getTuteeYearTotals, getTuteeScheduleForYear, isTuteeArchivedForYear } from '@/features/tutees/types/tutee';
-import { findScheduleConflicts, hasBlockingConflicts, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
+import { findScheduleConflicts, hasBlockingConflicts, toMinutes, type ScheduleConflict } from '@/features/schedule/utils/scheduleConflicts';
 import { ScheduleConflictAlert } from '@/features/schedule/components/ScheduleConflictAlert';
-import { ScheduleConflictOverrideDialog } from '@/features/schedule/components/ScheduleConflictOverrideDialog';
 import { tuteeService } from '@/features/tutees/services/tuteeService';
 import { useSchoolYear } from '@/shared/contexts/SchoolYearContext';
 import { formatSchoolYear } from '@/shared/utils/schoolYear';
@@ -108,6 +107,23 @@ export const Tutees = () => {
   };
 
   const enrollInYear = async (t: Tutee) => {
+    const candidateSchedule = getTuteeScheduleForYear(t, selectedYear);
+    const conflicts = findScheduleConflicts({
+      candidateSchedule,
+      candidateGradeLevel: t.gradeLevel,
+      candidateSubject: t.subject,
+      candidateName: `${t.firstName} ${t.surname}`.trim(),
+      candidateTuteeId: t.id,
+      tutees,
+      schoolYear: selectedYear,
+      excludeTuteeId: t.id,
+    });
+    if (hasBlockingConflicts(conflicts)) {
+      const blocking = conflicts.find((c) => c.severity === 'blocking');
+      toast.error(`Cannot enroll ${t.firstName} ${t.surname}: ${blocking?.message || 'Schedule conflict'}`);
+      throw new Error(`Schedule conflict detected for ${t.firstName} ${t.surname}`);
+    }
+
     const yearTotals = {
       ...(t.totalsByYear || {}),
       [selectedYear]: { totalSessions: 0, totalPaid: 0, balance: 0 },
@@ -427,6 +443,25 @@ export const Tutees = () => {
             try {
               if (!user) {
                 toast.error('You must be logged in');
+                return;
+              }
+
+              // Validate schedule conflicts before submitting enrollment
+              const conflicts = findScheduleConflicts({
+                candidateSchedule: data.schedule,
+                candidateGradeLevel: data.gradeLevel,
+                candidateSubject: data.subjects?.[0] || data.subject,
+                candidateSubjects: data.subjects,
+                candidateName: `${data.firstName} ${data.surname}`.trim() || 'This tutee',
+                candidateTuteeId: editingTutee?.id ?? 'candidate',
+                tutees,
+                schoolYear: selectedYear,
+                excludeTuteeId: editingTutee?.id,
+              });
+
+              if (hasBlockingConflicts(conflicts)) {
+                const blocking = conflicts.find((c) => c.severity === 'blocking');
+                toast.error(`Cannot ${editingTutee ? 'save' : 'enroll'}: ${blocking?.message ?? 'Schedule conflict detected'}`);
                 return;
               }
 
@@ -867,12 +902,6 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Ref guard prevents double-submit even before React state re-renders
   const submittingRef = useRef(false);
-  const [pendingOverride, setPendingOverride] = useState<ScheduleConflict[] | null>(null);
-  const pendingSubmitRef = useRef<{
-    submitData: TuteeFormData;
-    parentData?: { name: string; contactNumber: string };
-    conflicts: ScheduleConflict[];
-  } | null>(null);
   const [parentName, setParentName] = useState('');
   const [parentContact, setParentContact] = useState('');
   const [linkedParentId, setLinkedParentId] = useState<string | null>(tutee?.parentId || null);
@@ -1057,6 +1086,7 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
         candidateSchedule: formData.schedule,
         candidateGradeLevel: formData.gradeLevel,
         candidateSubject: formData.subjects[0],
+        candidateSubjects: formData.subjects,
         candidateName: `${formData.firstName} ${formData.surname}`.trim() || 'This tutee',
         candidateTuteeId: tutee?.id ?? 'candidate',
         tutees: existingTutees,
@@ -1075,6 +1105,9 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
     ]
   );
 
+  const hasConflict = hasBlockingConflicts(conflictCandidate);
+  const isInvalidTimeRange = toMinutes(scheduleTime.endTime) <= toMinutes(scheduleTime.startTime);
+
   const runSubmit = async (
     submitData: TuteeFormData,
     parentData?: { name: string; contactNumber: string }
@@ -1089,42 +1122,6 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
     }
   };
 
-  const logConflictOverride = async (conflicts: ScheduleConflict[], submitData: TuteeFormData) => {
-    if (!currentUser) return;
-    const details = conflicts
-      .map((conflict) =>
-        `${conflict.day} ${formatTime12h(conflict.firstStartTime)}-${formatTime12h(conflict.firstEndTime)} overlaps ${conflict.secondTuteeName}${conflict.secondGradeLevel ? ` (${conflict.secondGradeLevel})` : ''}`
-      )
-      .join('; ');
-    try {
-      await logActivity(
-        currentUser.id,
-        currentUser.name,
-        currentUser.role,
-        'Schedule Conflict Overridden',
-        'Students',
-        `Scheduled ${submitData.firstName} ${submitData.surname} in ${schoolYear} despite ${conflicts.length} cross-grade conflict${conflicts.length === 1 ? '' : 's'}: ${details}`
-      );
-    } catch (error) {
-      console.error('Failed to log schedule conflict override:', error);
-    }
-  };
-
-  const handleConfirmOverride = async () => {
-    const pending = pendingSubmitRef.current;
-    if (!pending) return;
-    const { submitData, parentData, conflicts } = pending;
-    await runSubmit(submitData, parentData);
-    await logConflictOverride(conflicts, submitData);
-    pendingSubmitRef.current = null;
-    setPendingOverride(null);
-  };
-
-  const handleCancelOverride = () => {
-    pendingSubmitRef.current = null;
-    setPendingOverride(null);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Synchronous guard against double-submit
@@ -1136,6 +1133,16 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
     }
     if (formData.schedule.length === 0) {
       toast.error('Please add at least one schedule slot');
+      return;
+    }
+
+    if (isInvalidTimeRange) {
+      toast.error('Class End time must be after Class Start time');
+      return;
+    }
+
+    if (hasConflict) {
+      toast.error('Cannot save: Schedule conflict detected. Please resolve conflicting time slots.');
       return;
     }
 
@@ -1174,13 +1181,6 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
       name: newParentName.trim(),
       contactNumber: newParentContactNumber.trim(),
     } : undefined;
-
-    if (hasBlockingConflicts(conflictCandidate)) {
-      const blocking = conflictCandidate.filter((conflict) => conflict.severity === 'blocking');
-      pendingSubmitRef.current = { submitData, parentData, conflicts: blocking };
-      setPendingOverride(blocking);
-      return;
-    }
 
     await runSubmit(submitData, parentData);
   };
@@ -1641,6 +1641,9 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
                   />
                 </div>
               </div>
+              {isInvalidTimeRange && (
+                <p className="text-xs text-red-600 mt-1">Class End time must be after Class Start time.</p>
+              )}
             </div>
 
             <div>
@@ -1679,8 +1682,19 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
         <div className="flex gap-3 pt-4">
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="flex-1 bg-green-700 text-white py-2 px-4 rounded-lg hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={isSubmitting || hasConflict || isInvalidTimeRange}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
+              hasConflict || isInvalidTimeRange
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-300'
+                : 'bg-green-700 text-white hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm'
+            }`}
+            title={
+              hasConflict
+                ? 'Cannot save: Schedule conflict detected. Please resolve conflicting time slots.'
+                : isInvalidTimeRange
+                ? 'Cannot save: Class End must be after Class Start.'
+                : undefined
+            }
           >
             {isSubmitting ? (
               <>
@@ -1691,7 +1705,7 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
                 {tutee ? 'Saving...' : 'Adding...'}
               </>
             ) : (
-              tutee ? 'Update Tutee' : 'Add Tutee'
+              tutee ? 'Update Tutee' : 'Enroll Tutee'
             )}
           </button>
           <button
@@ -1704,14 +1718,6 @@ const TuteeForm = ({ tutee, subjects, schoolYear, existingTutees = [], onSubmit,
           </button>
         </div>
       </form>
-
-      <ScheduleConflictOverrideDialog
-        open={pendingOverride !== null}
-        conflicts={pendingOverride ?? []}
-        onConfirm={handleConfirmOverride}
-        onCancel={handleCancelOverride}
-        confirming={isSubmitting}
-      />
     </div>
   );
 };

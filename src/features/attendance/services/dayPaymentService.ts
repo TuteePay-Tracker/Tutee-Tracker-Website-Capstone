@@ -1,4 +1,5 @@
-import { PaymentRecord, PaymentTransaction, DayPayment, PaymentStatus, AttendanceMark } from '@/features/attendance/types/dayPayment';
+import { PaymentRecord, PaymentTransaction, DayPayment, PaymentStatus, AttendanceMark, getDayAttendance, isMakeUpDay } from '@/features/attendance/types/dayPayment';
+import { makeUpCreditId } from '@/features/attendance/types/makeUpCredit';
 import { Payment } from '@/features/payments/types/payment';
 import {
   collection,
@@ -13,6 +14,8 @@ import {
   Timestamp,
   updateDoc,
   deleteDoc,
+  deleteField,
+  runTransaction,
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '@/shared/lib/firebase/config';
@@ -149,6 +152,39 @@ class DayPaymentService {
       };
 
       const docRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+      const existingSnap = await getDoc(docRef);
+
+      if (existingSnap.exists()) {
+        // Never overwrite an initialized month. Preserve attendance, payments, and
+        // make-up sessions while adding any missing regular scheduled days.
+        const existing = existingSnap.data();
+        const existingDays = (existing.dayPayments || []) as DayPayment[];
+        const existingRegularDates = new Set(
+          existingDays.filter((day) => !isMakeUpDay(day)).map((day) => day.date)
+        );
+        const missingRegularDays = dayPayments.filter(
+          (day) => !existingRegularDates.has(day.date)
+        );
+        const mergedDays = [...existingDays, ...missingRegularDays].sort((a, b) =>
+          a.date.localeCompare(b.date)
+        );
+
+        await updateDoc(docRef, {
+          dayPayments: mergedDays,
+          lastUpdated: Timestamp.fromDate(new Date()),
+        });
+
+        await this.syncTuteeTotals(tuteeId, userId);
+
+        return {
+          id: recordId,
+          ...existing,
+          dayPayments: mergedDays,
+          lastUpdated: new Date().toISOString(),
+          createdAt: existing.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        } as PaymentRecord;
+      }
+
       await setDoc(docRef, {
         ...record,
         createdAt: Timestamp.fromDate(new Date()),
@@ -190,8 +226,10 @@ class DayPaymentService {
         throw new Error('Tutee not found');
       }
 
-      // Update day payments
+      // Update day payments. Make-up sessions are zero-charge and must never
+      // receive a payment even if they fall on the same date as a regular class.
       const updatedDayPayments = record.dayPayments.map(day => {
+        if (isMakeUpDay(day)) return day;
         const payment = daysPaid.find(p => p.date === day.date);
         if (payment) {
           const newAmountPaid = day.amountPaid + payment.amountPaid;
@@ -230,7 +268,9 @@ class DayPaymentService {
         tuteeName: `${tutee.firstName} ${tutee.surname}`,
         paymentDate: new Date().toISOString().split('T')[0],
         daysPaid: daysPaid.map(dp => {
-          const day = updatedDayPayments.find(d => d.date === dp.date)!;
+          const day = updatedDayPayments.find(
+            d => d.date === dp.date && !isMakeUpDay(d)
+          )!;
           return {
             date: dp.date,
             amountDue: day.amountDue,
@@ -298,57 +338,187 @@ class DayPaymentService {
     }
   }
 
-  // Set a day's attendance mark explicitly (does NOT touch payment status/amounts)
+  // Set a day's attendance mark explicitly (does NOT touch payment status/amounts).
+  // Also keeps make-up credits in sync:
+  //  - make-up marked present  -> credit completed
+  //  - make-up marked absent/no-class -> session removed, credit available again
+  //  - regular absence cleared -> any unused credit for that source date is reversed
   async setDayAttendance(
     tuteeId: string,
     month: string,
     date: string,
-    attendance: AttendanceMark | 'none'
+    attendance: AttendanceMark | 'none',
+    dayMakeUpCreditId?: string
   ): Promise<PaymentRecord> {
     try {
-      const record = await this.getMonthlyRecord(tuteeId, month);
-      let found = false;
-      const updatedDayPayments = record.dayPayments.map(day => {
-        if (day.date === date) {
-          found = true;
-          const next = { ...day };
-          if (attendance === 'none') {
-            delete next.attendance;
-          } else {
-            next.attendance = attendance;
-          }
-          return next;
-        }
-        return day;
-      });
-
-      if (!found && attendance !== 'none') {
-        updatedDayPayments.push({
-          date,
-          amountDue: 0,
-          amountPaid: 0,
-          status: 'unpaid' as PaymentStatus,
-          attendance,
-          tuteeId,
-          tuteeName: record.tuteeName,
-        });
-        updatedDayPayments.sort((a, b) => a.date.localeCompare(b.date));
-      }
-
       const userId = this.getUserId();
       const recordId = `${tuteeId}_${month}`;
-      const docRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+      const recordRef = doc(db, 'users', userId, 'paymentRecords', recordId);
+      const creditId = dayMakeUpCreditId || makeUpCreditId(tuteeId, date);
+      const creditRef = doc(db, 'users', userId, 'makeUpCredits', creditId);
+      const now = Timestamp.fromDate(new Date());
 
-      await updateDoc(docRef, {
-        dayPayments: updatedDayPayments,
-        lastUpdated: Timestamp.fromDate(new Date()),
+      let result: PaymentRecord | undefined;
+
+      await runTransaction(db, async (transaction) => {
+        const recordSnap = await transaction.get(recordRef);
+        if (!recordSnap.exists()) {
+          throw new Error('Monthly payment record not found');
+        }
+
+        const record = recordSnap.data() as PaymentRecord;
+        const updatedDayPayments = [...(record.dayPayments || [])];
+        const existingIndex = updatedDayPayments.findIndex((day) =>
+          dayMakeUpCreditId
+            ? day.date === date && day.makeUpCreditId === dayMakeUpCreditId
+            : day.date === date && !isMakeUpDay(day)
+        );
+        const existing = existingIndex >= 0 ? updatedDayPayments[existingIndex] : undefined;
+        const existingIsMakeUp = existing ? isMakeUpDay(existing) : false;
+        const oldAttendance = existing ? getDayAttendance(existing) : 'none';
+
+        const needsCreditRead =
+          existingIsMakeUp ||
+          (!existingIsMakeUp &&
+            (attendance === 'absent' ||
+              (Boolean(existing) && oldAttendance === 'absent')));
+
+        const creditSnap = needsCreditRead
+          ? await transaction.get(creditRef)
+          : undefined;
+
+        if (existingIsMakeUp && existing && (attendance === 'absent' || attendance === 'no-class')) {
+          // A cancelled/no-show make-up returns the credit to the available pool.
+          updatedDayPayments.splice(existingIndex, 1);
+          if (creditSnap?.exists()) {
+            const credit = creditSnap.data();
+            if (credit.status !== 'reversed') {
+              transaction.update(creditRef, {
+                status: 'pending',
+                targetMonth: deleteField(),
+                scheduledDate: deleteField(),
+                startTime: deleteField(),
+                endTime: deleteField(),
+                attendanceRecordId: deleteField(),
+                completedAt: deleteField(),
+                updatedAt: now,
+              });
+            }
+          }
+        } else if (existing) {
+          if (attendance === 'none') {
+            const { attendance: _cleared, ...rest } = existing;
+            updatedDayPayments[existingIndex] = rest as DayPayment;
+          } else {
+            updatedDayPayments[existingIndex] = { ...existing, attendance };
+          }
+
+          if (existingIsMakeUp && attendance === 'present' && creditSnap?.exists()) {
+            const credit = creditSnap.data();
+            if (credit.status !== 'completed' && credit.status !== 'reversed') {
+              transaction.update(creditRef, {
+                status: 'completed',
+                completedAt: now.toDate().toISOString(),
+                updatedAt: now,
+              });
+            }
+          }
+
+          if (existingIsMakeUp && attendance === 'none' && creditSnap?.exists()) {
+            const credit = creditSnap.data();
+            if (credit.status === 'completed') {
+              transaction.update(creditRef, {
+                status: 'scheduled',
+                completedAt: deleteField(),
+                updatedAt: now,
+              });
+            }
+          }
+
+          if (
+            !existingIsMakeUp &&
+            oldAttendance === 'absent' &&
+            attendance !== 'absent' &&
+            creditSnap?.exists()
+          ) {
+            const credit = creditSnap.data();
+            if (credit.status !== 'completed' && credit.status !== 'reversed') {
+              if (credit.status === 'scheduled' && credit.attendanceRecordId) {
+                const targetRef = doc(
+                  db,
+                  'users',
+                  userId,
+                  'paymentRecords',
+                  credit.attendanceRecordId
+                );
+                const targetSnap = await transaction.get(targetRef);
+                if (targetSnap.exists()) {
+                  const target = targetSnap.data() as PaymentRecord;
+                  transaction.update(targetRef, {
+                    dayPayments: (target.dayPayments || []).filter(
+                      (day) => day.makeUpCreditId !== creditId
+                    ),
+                    lastUpdated: now,
+                  });
+                }
+              }
+
+              transaction.update(creditRef, {
+                status: 'reversed',
+                targetMonth: deleteField(),
+                scheduledDate: deleteField(),
+                startTime: deleteField(),
+                endTime: deleteField(),
+                attendanceRecordId: deleteField(),
+                updatedAt: now,
+              });
+            }
+          }
+        } else if (attendance !== 'none') {
+          if (dayMakeUpCreditId) {
+            throw new Error('Scheduled make-up session was not found in this month.');
+          }
+          updatedDayPayments.push({
+            date,
+            amountDue: 0,
+            amountPaid: 0,
+            status: 'unpaid' as PaymentStatus,
+            attendance,
+            tuteeId,
+            tuteeName: record.tuteeName,
+          });
+        }
+
+        // If the source absence is marked again, revive the unused credit that
+        // was reversed when the mark was cleared. Completed credits stay used.
+        if (!existingIsMakeUp && attendance === 'absent' && creditSnap?.exists()) {
+          const credit = creditSnap.data();
+          if (credit.status === 'reversed') {
+            transaction.update(creditRef, {
+              status: 'pending',
+              updatedAt: now,
+            });
+          }
+        }
+
+        updatedDayPayments.sort((a, b) => a.date.localeCompare(b.date));
+
+        transaction.update(recordRef, {
+          dayPayments: updatedDayPayments,
+          lastUpdated: now,
+        });
+
+        result = {
+          ...record,
+          id: recordId,
+          dayPayments: updatedDayPayments,
+          lastUpdated: new Date().toISOString(),
+          createdAt:
+            (record as any).createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        } as PaymentRecord;
       });
 
-      return {
-        ...record,
-        dayPayments: updatedDayPayments,
-        lastUpdated: new Date().toISOString(),
-      };
+      return result as PaymentRecord;
     } catch (error) {
       console.error('Error setting day attendance:', error);
       throw error;
@@ -388,9 +558,16 @@ class DayPaymentService {
           .filter(day => scheduleDays.includes(format(day, 'EEEE')))
           .map(day => format(day, 'yyyy-MM-dd'));
 
+        const existingDays = (recordData.dayPayments || []) as DayPayment[];
         const existingMap = new Map<string, DayPayment>();
-        (recordData.dayPayments || []).forEach((dp: DayPayment) => {
-          existingMap.set(dp.date, dp);
+        const makeUpDays: DayPayment[] = [];
+
+        existingDays.forEach((dp) => {
+          if (isMakeUpDay(dp)) {
+            makeUpDays.push(dp);
+          } else {
+            existingMap.set(dp.date, dp);
+          }
         });
 
         const newDayPayments: DayPayment[] = expectedDates.map(date => {
@@ -407,8 +584,14 @@ class DayPaymentService {
           };
         });
 
+        // Make-up sessions are extra dates chosen by the tutor. Never drop them
+        // when the weekly schedule is rebuilt.
+        const mergedDayPayments = [...newDayPayments, ...makeUpDays].sort((a, b) =>
+          a.date.localeCompare(b.date)
+        );
+
         await updateDoc(docSnap.ref, {
-          dayPayments: newDayPayments,
+          dayPayments: mergedDayPayments,
           lastUpdated: Timestamp.fromDate(new Date()),
         });
       }
@@ -579,6 +762,35 @@ class DayPaymentService {
 
       // Read the record directly so removing a month never re-creates it.
       const recordSnap = await getDoc(recordDocRef);
+
+      // Return any make-up credits scheduled inside this month to the available pool.
+      // Completed sessions stay completed so their history is not silently reused.
+      if (recordSnap.exists()) {
+        const recordData = recordSnap.data();
+        const linkedCreditIds = Array.from(
+          new Set(
+            ((recordData.dayPayments || []) as DayPayment[])
+              .filter((day) => isMakeUpDay(day) && day.makeUpCreditId)
+              .map((day) => day.makeUpCreditId as string)
+          )
+        );
+
+        for (const creditId of linkedCreditIds) {
+          const creditRef = doc(db, 'users', userId, 'makeUpCredits', creditId);
+          const creditSnap = await getDoc(creditRef);
+          if (creditSnap.exists() && creditSnap.data().status === 'scheduled') {
+            await updateDoc(creditRef, {
+              status: 'pending',
+              targetMonth: deleteField(),
+              scheduledDate: deleteField(),
+              startTime: deleteField(),
+              endTime: deleteField(),
+              attendanceRecordId: deleteField(),
+              updatedAt: Timestamp.fromDate(new Date()),
+            });
+          }
+        }
+      }
 
       const payments = await paymentService.getByTuteeId(tuteeId, userId);
       const paymentsToDelete = payments.filter((payment: any) => payment.month === month);

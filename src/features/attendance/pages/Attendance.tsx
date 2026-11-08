@@ -3,8 +3,13 @@ import { useTutees } from '@/features/tutees/hooks/useTutees';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { logActivity } from '@/shared/utils/auditLogger';
 import { dayPaymentService } from '@/features/attendance/services/dayPaymentService';
-import { PaymentRecord, AttendanceMark, AttendanceStatus, getDayAttendance } from '@/features/attendance/types/dayPayment';
+import { makeUpService } from '@/features/attendance/services/makeUpService';
+import { MakeUpCreditPanel } from '@/features/attendance/components/MakeUpCreditPanel';
+import { MakeUpScheduleModal } from '@/features/attendance/components/MakeUpScheduleModal';
+import { PaymentRecord, AttendanceMark, AttendanceStatus, getDayAttendance, isMakeUpDay } from '@/features/attendance/types/dayPayment';
+import type { MakeUpCredit } from '@/features/attendance/types/makeUpCredit';
 import { Tutee, getTuteeScheduleForYear, normalizeScheduleItems } from '@/features/tutees/types/tutee';
+import { toMinutes } from '@/features/schedule/utils/scheduleConflicts';
 import {
   CheckCircle2,
   XCircle,
@@ -17,6 +22,7 @@ import {
   Calendar,
   CalendarX,
   Pencil,
+  CalendarClock,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
 import { toast } from 'sonner';
@@ -36,6 +42,16 @@ const MARK_LABELS: Record<AttendanceStatus, string> = {
   none: 'Unmarked',
 };
 
+interface ScheduledAttendanceDay {
+  date: string;
+  status: AttendanceStatus;
+  isMakeUp?: boolean;
+  makeUpCreditId?: string;
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
+}
+
 export const Attendance = () => {
   const { tutees, isLoading } = useTutees();
   const { user } = useAuth();
@@ -46,6 +62,15 @@ export const Attendance = () => {
   const [loadingRecords, setLoadingRecords] = useState<Record<string, boolean>>({});
   const [togglingDay, setTogglingDay] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<AttendanceMark | 'none'>('present');
+  const [credits, setCredits] = useState<MakeUpCredit[]>([]);
+  const [scheduleCredit, setScheduleCredit] = useState<MakeUpCredit | null>(null);
+  const [busyCreditId, setBusyCreditId] = useState<string | null>(null);
+  const [grantingDate, setGrantingDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    return makeUpService.subscribeAll(setCredits, user.id);
+  }, [user?.id]);
 
   // Align selectedMonth when selectedYear or startMonth changes if it falls outside the active school year
   useEffect(() => {
@@ -113,11 +138,26 @@ export const Attendance = () => {
     return () => unsubscribe();
   }, [tutees, monthKey, user?.id, selectedYear]);
 
-  const getScheduledDays = (tutee: Tutee): { date: string; status: AttendanceStatus }[] => {
+  const getScheduledDays = (tutee: Tutee): ScheduledAttendanceDay[] => {
     const record = records[`${tutee.id}_${monthKey}`];
     if (!record) {
       return [];
     }
+
+    const allDayPayments = record.dayPayments || [];
+    const makeUpDays: ScheduledAttendanceDay[] = allDayPayments
+      .filter(isMakeUpDay)
+      .map((dp) => ({
+        date: dp.date,
+        status: getDayAttendance(dp),
+        isMakeUp: true,
+        makeUpCreditId: dp.makeUpCreditId,
+        startTime: dp.startTime,
+        endTime: dp.endTime,
+        durationMinutes: dp.durationMinutes,
+      }));
+
+    const regularDayPayments = allDayPayments.filter((dp) => !isMakeUpDay(dp));
 
     const tuteeSchedule = getTuteeScheduleForYear(tutee, selectedYear);
     const scheduleDays = Array.from(
@@ -125,10 +165,13 @@ export const Attendance = () => {
     );
 
     if (scheduleDays.length === 0) {
-      return (record.dayPayments || []).map(dp => ({
-        date: dp.date,
-        status: getDayAttendance(dp),
-      }));
+      return [
+        ...regularDayPayments.map((dp) => ({
+          date: dp.date,
+          status: getDayAttendance(dp),
+        })),
+        ...makeUpDays,
+      ].sort((a, b) => a.date.localeCompare(b.date));
     }
 
     const monthDate = parseISO(monthKey + '-01');
@@ -141,18 +184,99 @@ export const Attendance = () => {
       .map(day => format(day, 'yyyy-MM-dd'));
 
     const existingMap = new Map<string, AttendanceStatus>();
-    (record.dayPayments || []).forEach(dp => {
+    regularDayPayments.forEach(dp => {
       existingMap.set(dp.date, getDayAttendance(dp));
     });
 
-    return expectedDates.map(date => ({
+    const regularDays: ScheduledAttendanceDay[] = expectedDates.map(date => ({
       date,
       status: existingMap.get(date) || 'none',
     }));
+
+    return [...regularDays, ...makeUpDays].sort((a, b) => a.date.localeCompare(b.date));
   };
 
-  const handleApplyMark = async (tutee: Tutee, date: string, currentStatus: AttendanceStatus) => {
-    const key = `${tutee.id}_${date}`;
+  const getDefaultDuration = (tutee: Tutee, date: string): number => {
+    const weekday = format(parseISO(date), 'EEEE');
+    const slot = normalizeScheduleItems(getTuteeScheduleForYear(tutee, selectedYear)).find(
+      (item) => item.day === weekday
+    );
+    if (slot) {
+      const minutes = toMinutes(slot.endTime) - toMinutes(slot.startTime);
+      if (minutes > 0) return minutes;
+    }
+    return 60;
+  };
+
+  const getAbsentCreditOptions = (tutee: Tutee) => {
+    const coveredDates = new Set(
+      credits
+        .filter((credit) => credit.tuteeId === tutee.id && credit.status !== 'reversed')
+        .map((credit) => credit.sourceDate)
+    );
+
+    return getScheduledDays(tutee)
+      .filter(
+        (day) => day.status === 'absent' && !day.isMakeUp && !coveredDates.has(day.date)
+      )
+      .map((day) => ({
+        date: day.date,
+        durationMinutes: getDefaultDuration(tutee, day.date),
+      }));
+  };
+
+  const handleGrantCredit = async (tutee: Tutee, date: string, durationMinutes: number) => {
+    setGrantingDate(date);
+    try {
+      await makeUpService.grantCredit({
+        tuteeId: tutee.id,
+        tuteeName: `${tutee.firstName} ${tutee.surname}`,
+        sourceDate: date,
+        durationMinutes,
+        schoolYear: selectedYear,
+      });
+      toast.success('Make-up credit granted');
+      if (user) {
+        await logActivity(
+          user.id,
+          user.name,
+          user.role,
+          'Make-Up Credit Granted',
+          'Attendance',
+          `Granted a make-up credit to ${tutee.firstName} ${tutee.surname} for the absent session on ${date}`
+        );
+      }
+    } catch (error: any) {
+      console.error('Error granting make-up credit:', error);
+      toast.error(error?.message || 'Failed to grant make-up credit');
+    } finally {
+      setGrantingDate(null);
+    }
+  };
+
+  const handleCancelMakeUp = async (credit: MakeUpCredit) => {
+    if (!window.confirm('Cancel this scheduled make-up class? The credit will be available again.')) {
+      return;
+    }
+    setBusyCreditId(credit.id);
+    try {
+      await makeUpService.cancelScheduledCredit(credit.id);
+      toast.success('Make-up class cancelled — credit is available again');
+    } catch (error: any) {
+      console.error('Error cancelling make-up class:', error);
+      toast.error(error?.message || 'Failed to cancel make-up class');
+    } finally {
+      setBusyCreditId(null);
+    }
+  };
+
+  const handleApplyMark = async (
+    tutee: Tutee,
+    date: string,
+    currentStatus: AttendanceStatus,
+    dayMakeUpCreditId?: string
+  ) => {
+    const key = `${tutee.id}_${date}_${dayMakeUpCreditId || 'regular'}`;
     if (togglingDay === key) return;
     setTogglingDay(key);
 
@@ -160,7 +284,7 @@ export const Attendance = () => {
     const nextMark: AttendanceMark | 'none' = currentStatus === selectedMark ? 'none' : selectedMark;
 
     try {
-      await dayPaymentService.setDayAttendance(tutee.id, monthKey, date, nextMark);
+      await dayPaymentService.setDayAttendance(tutee.id, monthKey, date, nextMark, dayMakeUpCreditId);
       const label = nextMark === 'none'
         ? 'Mark cleared'
         : `Marked ${MARK_LABELS[nextMark]} ✓`;
@@ -341,6 +465,7 @@ export const Attendance = () => {
             const presentCount = days.filter(d => d.status === 'present').length;
             const absentCount = days.filter(d => d.status === 'absent').length;
             const totalDays = days.filter(d => d.status !== 'no-class').length;
+            const makeUpCount = days.filter(d => d.isMakeUp && d.status !== 'no-class').length;
             const isLoadingThis = loadingRecords[tutee.id];
 
             return (
@@ -397,6 +522,12 @@ export const Attendance = () => {
                       <Calendar size={14} className="text-gray-500" />
                       <span className="text-xs font-bold text-gray-600">{totalDays} Sessions</span>
                     </div>
+                    {makeUpCount > 0 && (
+                      <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5">
+                        <CalendarClock size={14} className="text-amber-600" />
+                        <span className="text-xs font-bold text-amber-700">{makeUpCount} Make-Up</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -416,7 +547,7 @@ export const Attendance = () => {
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-10 gap-2">
                       {days.map(day => {
-                        const dayKey = `${tutee.id}_${day.date}`;
+                        const dayKey = `${tutee.id}_${day.date}_${day.isMakeUp ? day.makeUpCreditId || 'make-up' : 'regular'}`;
                         const isToggling = togglingDay === dayKey;
 
                         const baseDate = parseISO(day.date);
@@ -442,12 +573,19 @@ export const Attendance = () => {
 
                         return (
                           <button
-                            key={day.date}
-                            onClick={() => handleApplyMark(tutee, day.date, day.status)}
+                            key={dayKey}
+                            onClick={() =>
+                              handleApplyMark(tutee, day.date, day.status, day.isMakeUp ? day.makeUpCreditId : undefined)
+                            }
                             disabled={isToggling}
-                            className={`relative flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl border-2 transition-all cursor-pointer active:scale-95 ${cardClass} ${isToday ? 'ring-2 ring-primary ring-offset-1' : ''} ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={`${format(baseDate, 'EEEE, MMM dd')} — Tap to apply "${selectedMark === 'none' ? 'Clear mark' : MARK_LABELS[selectedMark]}"`}
+                            className={`relative flex flex-col items-center justify-center gap-1 p-2.5 rounded-xl border-2 transition-all cursor-pointer active:scale-95 ${day.isMakeUp ? 'border-dashed border-amber-400' : ''} ${cardClass} ${isToday ? 'ring-2 ring-primary ring-offset-1' : ''} ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={`${format(baseDate, 'EEEE, MMM dd')}${day.startTime && day.endTime ? ` · ${day.startTime}–${day.endTime}` : ''}${day.isMakeUp ? ' · Make-up class' : ''} — Tap to apply "${selectedMark === 'none' ? 'Clear mark' : MARK_LABELS[selectedMark]}"`}
                           >
+                            {day.isMakeUp && (
+                              <span className="absolute top-0.5 right-0.5 rounded bg-amber-500 px-1 text-[7px] font-extrabold uppercase tracking-wide text-white">
+                                MU
+                              </span>
+                            )}
                             {isToggling ? (
                               <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                             ) : (
@@ -464,6 +602,18 @@ export const Attendance = () => {
                     </div>
                   )}
                 </div>
+
+                <MakeUpCreditPanel
+                  credits={credits.filter((credit) => credit.tuteeId === tutee.id)}
+                  absentDates={getAbsentCreditOptions(tutee)}
+                  busyCreditId={busyCreditId}
+                  grantingDate={grantingDate}
+                  onGrant={(date, durationMinutes) =>
+                    handleGrantCredit(tutee, date, durationMinutes)
+                  }
+                  onSchedule={setScheduleCredit}
+                  onCancel={handleCancelMakeUp}
+                />
 
                 {/* Progress Bar */}
                 {days.length > 0 && (
@@ -492,6 +642,13 @@ export const Attendance = () => {
             );
           })}
         </div>
+      )}
+
+      {scheduleCredit && (
+        <MakeUpScheduleModal
+          credit={scheduleCredit}
+          onClose={() => setScheduleCredit(null)}
+        />
       )}
     </div>
   );

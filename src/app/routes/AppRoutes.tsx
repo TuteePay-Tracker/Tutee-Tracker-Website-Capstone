@@ -21,6 +21,12 @@ import { ForgotPassword } from '@/features/auth/pages/ForgotPassword';
 import { ChangePassword } from '@/features/auth/pages/ChangePassword';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { LoadingScreen } from '@/shared/components/LoadingScreen';
+import { SuperAdminLayout } from '@/features/super-admin/layouts/SuperAdminLayout';
+import { SuperAdminDashboard } from '@/features/super-admin/pages/SuperAdminDashboard';
+import { SuperAdminTutors } from '@/features/super-admin/pages/SuperAdminTutors';
+import { SuperAdminActivityLogs } from '@/features/super-admin/pages/SuperAdminActivityLogs';
+import { SuperAdminReports } from '@/features/super-admin/pages/SuperAdminReports';
+import { TutorMonitoringDetail } from '@/features/super-admin/pages/TutorMonitoringDetail';
 import { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; tutorOnly?: boolean }) => {
@@ -31,6 +37,11 @@ const ProtectedRoute = ({ children, tutorOnly = false }: { children: ReactNode; 
   }
 
   if (!user) return <Navigate to="/login" replace />;
+
+  // Super Admin has a dedicated area.
+  if (user.role === 'super_admin') {
+    return <Navigate to="/super-admin" replace />;
+  }
 
   // Parent must change password before accessing the app
   if (user.mustChangePassword && user.role === 'parent') {
@@ -53,6 +64,9 @@ const PublicRoute = ({ children }: { children: ReactNode }) => {
   }
 
   if (user) {
+    if (user.role === 'super_admin') {
+      return <Navigate to="/super-admin" replace />;
+    }
     // Parent who must change password goes to change-password, not home
     if (user.mustChangePassword && user.role === 'parent') {
       return <Navigate to="/change-password" replace />;
@@ -73,8 +87,31 @@ const ChangePasswordRoute = ({ children }: { children: ReactNode }) => {
 
   if (!user) return <Navigate to="/login" replace />;
 
+  if (user.role === 'super_admin') {
+    return <Navigate to="/super-admin" replace />;
+  }
+
   // If password already changed, redirect to home
   if (!user.mustChangePassword) return <Navigate to="/" replace />;
+
+  return <>{children}</>;
+};
+
+const SuperAdminRoute = ({ children }: { children: ReactNode }) => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen message="Loading your account..." className="min-h-screen" />;
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (user.role !== 'super_admin') {
+    if (user.mustChangePassword && user.role === 'parent') {
+      return <Navigate to="/change-password" replace />;
+    }
+    return <Navigate to="/" replace />;
+  }
 
   return <>{children}</>;
 };
@@ -189,6 +226,21 @@ export const router = createBrowserRouter([
         <ChangePassword />
       </ChangePasswordRoute>
     ),
+  },
+  {
+    path: '/super-admin',
+    element: (
+      <SuperAdminRoute>
+        <SuperAdminLayout />
+      </SuperAdminRoute>
+    ),
+    children: [
+      { index: true, element: <SuperAdminDashboard /> },
+      { path: 'tutors', element: <SuperAdminTutors /> },
+      { path: 'activities', element: <SuperAdminActivityLogs /> },
+      { path: 'reports', element: <SuperAdminReports /> },
+      { path: 'tutors/:tutorId', element: <TutorMonitoringDetail /> },
+    ],
   },
   {
     path: '/',

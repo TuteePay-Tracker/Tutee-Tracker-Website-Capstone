@@ -202,40 +202,6 @@ export const Settings = () => {
     setLogsPage(1);
   }, [searchQuery, filterModule, filterRole, filterAction, dateFilter, startDate, endDate, sortOrder]);
 
-  // Retention Policy: Auto-archive/delete logs older than 2 years
-  useEffect(() => {
-    if (activeTab === 'logs' && user?.id && user?.role === 'tutor') {
-      const cleanupOldLogs = async () => {
-        try {
-          const twoYearsAgo = new Date();
-          twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-
-          const q = query(
-            collection(db, 'audit_logs'),
-            where('tutorId', '==', user.id)
-          );
-
-          const snapshot = await getDocs(q);
-          const oldDocs = snapshot.docs.filter((docSnap) => {
-            const data = docSnap.data();
-            const date = data.timestamp?.toDate ? data.timestamp.toDate() : (data.timestamp ? new Date(data.timestamp) : null);
-            return date && date < twoYearsAgo;
-          });
-
-          if (oldDocs.length > 0) {
-            const deletePromises = oldDocs.map(docSnap => deleteDoc(docSnap.ref));
-            await Promise.all(deletePromises);
-            console.log(`Auto-deleted ${oldDocs.length} audit logs older than 2 years.`);
-          }
-        } catch (error) {
-          console.error('Error cleaning up old audit logs:', error);
-        }
-      };
-
-      cleanupOldLogs();
-    }
-  }, [activeTab, user?.id, user?.role]);
-
   const handleSavePaymentSettings = async () => {
     setIsSavingPayments(true);
     try {

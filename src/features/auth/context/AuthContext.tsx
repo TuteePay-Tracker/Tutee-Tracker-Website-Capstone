@@ -7,12 +7,16 @@ import { logActivity } from '@/shared/utils/auditLogger';
 import { setLoggingOut } from '@/shared/utils/firestoreErrors';
 import { useInactivityTimeout } from '@/shared/hooks/useInactivityTimeout';
 import { InactivityWarning } from '@/shared/components/InactivityWarning';
+import { toast } from 'sonner';
 
-interface User {
+export type UserRole = 'tutor' | 'parent' | 'super_admin';
+
+export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'tutor' | 'parent';
+  role: UserRole;
+  status?: string;
   mustChangePassword?: boolean;
   linkedStudentIds?: string[];
   createdByTutorId?: string;
@@ -30,7 +34,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserRole>;
   signup: (email: string, password: string, name: string, role?: 'tutor' | 'parent') => Promise<void>;
   logout: () => void;
   resetPassword: (email: string) => Promise<void>;
@@ -38,6 +42,31 @@ interface AuthContextType {
   updateProfilePhoto: (photoUrl: string) => Promise<void>;
   updatePaymentMethods: (paymentMethods: User['paymentMethods']) => Promise<void>;
 }
+
+const resolveRole = (role: unknown): UserRole =>
+  role === 'parent' || role === 'super_admin' ? role : 'tutor';
+
+// Missing status is treated as active for legacy tutor/parent accounts.
+// Super Admin must be explicitly provisioned as active.
+const isAccountActive = (role: UserRole, status?: string): boolean =>
+  role === 'super_admin' ? status === 'active' : !status || status === 'active';
+
+const buildUser = (firebaseUser: FirebaseUser, data: Record<string, any>): User => {
+  const role = resolveRole(data.role);
+  return {
+    id: firebaseUser.uid,
+    email: firebaseUser.email || '',
+    name: data.name || firebaseUser.displayName || '',
+    role,
+    status: typeof data.status === 'string' ? data.status : undefined,
+    mustChangePassword: data.mustChangePassword || false,
+    linkedStudentIds: data.linkedStudentIds || [],
+    createdByTutorId: data.createdByTutorId,
+    contactNumber: data.contactNumber,
+    photoUrl: data.photoUrl || null,
+    paymentMethods: data.paymentMethods || {},
+  };
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -94,7 +123,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         if (firebaseUser) {
           let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
 
-          // If doc is not yet visible, retry briefly before falling back
+          // If doc is not yet visible, retry briefly before rejecting the session
           if (!userDoc.exists()) {
             for (let i = 0; i < 3 && !userDoc.exists(); i++) {
               await new Promise((res) => setTimeout(res, 200));
@@ -102,43 +131,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             }
           }
 
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUser({
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: userData.name || firebaseUser.displayName || '',
-              role: userData.role || 'tutor',
-              mustChangePassword: userData.mustChangePassword || false,
-              linkedStudentIds: userData.linkedStudentIds || [],
-              createdByTutorId: userData.createdByTutorId,
-              contactNumber: userData.contactNumber,
-              photoUrl: userData.photoUrl || null,
-              paymentMethods: userData.paymentMethods || {},
-            });
+          if (!userDoc.exists()) {
+            toast.error('Account not provisioned. Please contact your administrator.');
+            await logoutUser().catch(() => undefined);
+            setUser(null);
           } else {
-            const fallbackName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-            const userData: User = {
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: fallbackName,
-              role: 'tutor',
-              mustChangePassword: false,
-              linkedStudentIds: [],
-            };
-            try {
-              await setDoc(doc(db, 'users', firebaseUser.uid), {
-                name: fallbackName,
-                email: firebaseUser.email || '',
-                role: 'tutor',
-                mustChangePassword: false,
-                linkedStudentIds: [],
-                createdAt: new Date().toISOString(),
-              });
-            } catch (writeErr) {
-              console.warn('Fallback setDoc in onAuthStateChanged skipped or failed:', writeErr);
+            const userData = userDoc.data();
+            const role = resolveRole(userData.role);
+            const status = typeof userData.status === 'string' ? userData.status : undefined;
+
+            if (!isAccountActive(role, status)) {
+              toast.error('Your account is inactive. Please contact your administrator.');
+              await logoutUser().catch(() => undefined);
+              setUser(null);
+            } else {
+              setUser(buildUser(firebaseUser, userData));
             }
-            setUser(userData);
           }
         } else {
           // User is signed out
@@ -156,25 +164,50 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<UserRole> => {
     setIsLoading(true);
     try {
       const firebaseUser = await loginUser(email, password);
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        logActivity(
-          firebaseUser.uid,
-          userData.name || 'User',
-          userData.role || 'tutor',
-          'Login',
-          'Authentication',
-          `User ${userData.name || firebaseUser.email} logged in`
-        ).catch((err) => console.warn('Activity logging non-blocking error:', err));
+
+      let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      if (!userDoc.exists()) {
+        for (let i = 0; i < 3 && !userDoc.exists(); i++) {
+          await new Promise((res) => setTimeout(res, 200));
+          userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        }
       }
+
+      if (!userDoc.exists()) {
+        await logoutUser().catch(() => undefined);
+        throw new Error('Account not provisioned. Please contact your administrator.');
+      }
+
+      const userData = userDoc.data();
+      const role = resolveRole(userData.role);
+      const status = typeof userData.status === 'string' ? userData.status : undefined;
+
+      if (!isAccountActive(role, status)) {
+        await logoutUser().catch(() => undefined);
+        throw new Error('Your account is inactive. Please contact your administrator.');
+      }
+
+      setUser(buildUser(firebaseUser, userData));
+
+      logActivity(
+        firebaseUser.uid,
+        userData.name || 'User',
+        role,
+        'Login',
+        'Authentication',
+        `User ${userData.name || firebaseUser.email} logged in`
+      ).catch((err) => console.warn('Activity logging non-blocking error:', err));
+
+      return role;
     } catch (error: any) {
-      setIsLoading(false);
-      // Re-throw error with user-friendly message
+      // Preserve our own validation errors (they have no Firebase error code).
+      if (error?.message && !error?.code) {
+        throw error;
+      }
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         throw new Error('Invalid email or password');
       } else if (error.code === 'auth/user-not-found') {
@@ -186,6 +219,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } else {
         throw new Error('Login failed. Please try again');
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -201,6 +236,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         email: email,
         name: name,
         role: role,
+        status: 'active',
         mustChangePassword: false,
         linkedStudentIds: [],
       };
@@ -210,6 +246,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         name: name,
         email: email,
         role: role,
+        status: 'active',
         createdAt: new Date().toISOString(),
       });
 
@@ -236,21 +273,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const firebaseUser = auth.currentUser;
     if (!firebaseUser) return;
     const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      setUser({
-        id: firebaseUser.uid,
-        email: firebaseUser.email || '',
-        name: userData.name || '',
-        role: userData.role || 'tutor',
-        mustChangePassword: userData.mustChangePassword || false,
-        linkedStudentIds: userData.linkedStudentIds || [],
-        createdByTutorId: userData.createdByTutorId,
-        contactNumber: userData.contactNumber,
-        photoUrl: userData.photoUrl || null,
-        paymentMethods: userData.paymentMethods || {},
-      });
+    if (!userDoc.exists()) {
+      await logoutUser().catch(() => undefined);
+      setUser(null);
+      return;
     }
+
+    const userData = userDoc.data();
+    const role = resolveRole(userData.role);
+    const status = typeof userData.status === 'string' ? userData.status : undefined;
+
+    if (!isAccountActive(role, status)) {
+      toast.error('Your account is inactive. Please contact your administrator.');
+      await logoutUser().catch(() => undefined);
+      setUser(null);
+      return;
+    }
+
+    setUser(buildUser(firebaseUser, userData));
   };
 
   const updateProfilePhoto = async (photoUrl: string) => {

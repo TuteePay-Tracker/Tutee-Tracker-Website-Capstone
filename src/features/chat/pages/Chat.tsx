@@ -100,7 +100,7 @@ export const Chat = () => {
 
   // Subscribe to threads in real-time
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || user.role === 'super_admin') return;
 
     setLoadingThreads(true);
     const unsubscribe = chatService.subscribeToThreads(
