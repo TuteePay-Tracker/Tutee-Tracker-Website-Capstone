@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase/config';
 import { getDayAttendance, type PaymentRecord } from '@/features/attendance/types/dayPayment';
+import type { Payment } from '@/features/payments/types/payment';
 import type { Assessment } from '@/features/tutee-progress/types/assessment';
 import type { Tutee } from '@/features/tutees/types/tutee';
 import type {
@@ -217,11 +218,12 @@ const getTutorMonitoringDetail = async (
 
   const tutor = mapTutor(tutorSnap.id, tutorSnap.data());
 
-  const [tuteesSnap, allParents, recordsSnap, assessmentsSnap, recentActivities] =
+  const [tuteesSnap, allParents, recordsSnap, paymentsSnap, assessmentsSnap, recentActivities] =
     await Promise.all([
       getDocs(collection(db, 'users', tutorId, 'tutees')),
       getAllParents(),
       getDocs(collection(db, 'users', tutorId, 'paymentRecords')),
+      getDocs(collection(db, 'users', tutorId, 'payments')),
       getDocs(collection(db, 'users', tutorId, 'assessments')),
       getRecentActivityForTutor(tutorId, 20),
     ]);
@@ -231,6 +233,9 @@ const getTutorMonitoringDetail = async (
   );
   const records = recordsSnap.docs.map(
     (d) => ({ id: d.id, ...d.data() } as unknown as PaymentRecord)
+  );
+  const paymentsList = paymentsSnap.docs.map(
+    (d) => ({ id: d.id, ...d.data() } as unknown as Payment)
   );
   const assessments = assessmentsSnap.docs.map(
     (d) => ({ id: d.id, ...d.data() } as unknown as Assessment)
@@ -245,9 +250,6 @@ const getTutorMonitoringDetail = async (
     attendanceRate: 0,
   };
 
-  let totalDue = 0;
-  let totalPaid = 0;
-
   records.forEach((record) => {
     (record.dayPayments || []).forEach((day) => {
       attendance.totalDays += 1;
@@ -256,9 +258,6 @@ const getTutorMonitoringDetail = async (
       else if (status === 'absent') attendance.absent += 1;
       else if (status === 'no-class') attendance.noClass += 1;
       else attendance.unmarked += 1;
-
-      totalDue += day.amountDue || 0;
-      totalPaid += day.amountPaid || 0;
     });
   });
 
@@ -266,11 +265,70 @@ const getTutorMonitoringDetail = async (
   attendance.attendanceRate =
     markedDays > 0 ? (attendance.present / markedDays) * 100 : 0;
 
+  // Compute financial totals:
+  // 1. Total paid: sum of confirmed/verified payments from the payments collection
+  const confirmedPayments = paymentsList.filter(
+    (p) => p.status !== 'pending' && p.status !== 'rejected'
+  );
+  const totalPaidFromPayments = confirmedPayments.reduce(
+    (sum, p) => sum + (typeof p.amount === 'number' ? p.amount : 0),
+    0
+  );
+
+  // Fallback for totalPaid: sum of tutee.totalPaid or record.totalPaid
+  const totalPaidFromTutees = tutees.reduce(
+    (sum, t) => sum + (typeof t.totalPaid === 'number' ? t.totalPaid : 0),
+    0
+  );
+  const totalPaidFromRecords = records.reduce(
+    (sum, r) => sum + (typeof r.totalPaid === 'number' ? r.totalPaid : 0),
+    0
+  );
+  const totalPaid = totalPaidFromPayments > 0
+    ? totalPaidFromPayments
+    : Math.max(totalPaidFromTutees, totalPaidFromRecords);
+
+  // 2. Total due: compute from tutees rate & sessions, or monthly records
+  const totalDueFromRecords = records.reduce((sum, r) => {
+    if (typeof r.totalDue === 'number' && r.totalDue > 0) return sum + r.totalDue;
+    const daysDue = (r.dayPayments || []).reduce((dSum, d) => dSum + (d.amountDue || 0), 0);
+    return sum + daysDue;
+  }, 0);
+
+  const totalDueFromTutees = tutees.reduce((sum, t) => {
+    const rate = typeof t.ratePerSession === 'number' ? t.ratePerSession : 0;
+    const sessions = typeof t.totalSessions === 'number' ? t.totalSessions : 0;
+    const paid = typeof t.totalPaid === 'number' ? t.totalPaid : 0;
+    const balance = typeof t.balance === 'number' ? t.balance : 0;
+    // If rate and sessions are set:
+    if (rate > 0 && sessions > 0) {
+      return sum + (rate * sessions);
+    }
+    // Alternatively from paid + balance:
+    if (paid > 0 || balance > 0) {
+      return sum + (paid + balance);
+    }
+    return sum;
+  }, 0);
+
+  const totalDue = totalDueFromRecords > 0
+    ? totalDueFromRecords
+    : (totalDueFromTutees > 0 ? totalDueFromTutees : totalPaid);
+
+  // 3. Outstanding balance:
+  const totalBalanceFromTutees = tutees.reduce(
+    (sum, t) => sum + (typeof t.balance === 'number' ? t.balance : 0),
+    0
+  );
+  const totalBalance = totalBalanceFromTutees > 0
+    ? totalBalanceFromTutees
+    : Math.max(totalDue - totalPaid, 0);
+
   const payments: PaymentSummary = {
     totalDue,
     totalPaid,
-    totalBalance: Math.max(totalDue - totalPaid, 0),
-    collectionRate: totalDue > 0 ? (totalPaid / totalDue) * 100 : 0,
+    totalBalance,
+    collectionRate: totalDue > 0 ? (totalPaid / totalDue) * 100 : (totalPaid > 0 ? 100 : 0),
   };
 
   const scores = assessments
